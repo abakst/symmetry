@@ -66,7 +66,6 @@ module main(master, p, q, r) {
         }
         ps[p].inbox[q][REL] > 0 : 
         {
-          if (q = owner) -- Shouldn't need this
           {
             next(ps[p].st) := NUL;
             next(owner) := p;
@@ -99,34 +98,58 @@ module main(master, p, q, r) {
         {
           if (ps[p].inbox[q][GRANT] > 0)
           {
-            if (q = master) -- Shouldn't need this
-            {
-              dec(ps[p].inbox[q][GRANT]);
-              next(ps[p].st) := ACQ;
-            }
+            dec(ps[p].inbox[q][GRANT]);
+            next(ps[p].st) := ACQ;
           }
         }
       } 
     }
   }
-  
-  /* Noninterference Lemma */
-  forall (i in NPROCS)
-    nonint[i] : assert G ((ps[i].st = ACQ | ps[i].inbox[master][GRANT] > 0) -> ps[master].st = GRANTED);
-  forall (i in NPROCS) forall (j in NPROCS) forall (k in NPROCS) 
-  {
-    subcase nonint_sub[i][j][k] of nonint[i] for master = j & p = k;
-    using NMSGS->{0,1}, foo prove nonint_sub[i][j][k];
-  }
  
+  /* Noninterference Lemmas */
+  forall (i in NPROCS)
+    nonint1[i] : 
+      assert G (i ~= master & X ps[i].st = ACQ & ps[i].st = RECV -> 
+                q = master);
 
+  forall (i in NPROCS)
+    nonint2[i] : assert G (
+      (ps[master].st = GRANTED & owner = i & X ps[master].st = GRANTED ->
+        X owner = i) &
+      (ps[master].st = GRANTED & X ps[master].st = NUL ->
+        q = owner)
+    );
+    
+  forall (i in NPROCS)
+    nonint[i] : assert G ((ps[i].st = ACQ | ps[i].inbox[master][GRANT] > 0) -> 
+                           ps[master].st = GRANTED);
+                           
   /* Mutual Exclusion */
   forall (i in NPROCS) forall (j in NPROCS)
     mutex[i][j] : assert G (i = j | (ps[i].st ~= ACQ | ps[j].st ~= ACQ));
   
+  /* Proofs */
+  forall (i in NPROCS) forall (j in NPROCS) forall (k in NPROCS) 
+  {
+    subcase nonint1_sub[i][j][k] of nonint1[i] for master = j & q = k;
+    using NMSGS->{0}, (nonint1) prove nonint1_sub[i][j][k];
+  }
+  
+  forall (i in NPROCS) forall (j in NPROCS) forall (k in NPROCS)
+  {
+    subcase nonint2_sub[i][j][k] of nonint2[i] for master = j & q = k;
+    using NMSGS->{0,1}, (nonint2), nonint1 prove nonint2_sub[i][j][k];
+  }
+
+  forall (i in NPROCS) forall (j in NPROCS) forall (k in NPROCS) 
+  {
+    subcase nonint_sub[i][j][k] of nonint[i] for master = j & p = k;
+    using NMSGS->{0,1}, nonint2, nonint1 prove nonint_sub[i][j][k];
+  }
+
   forall (i in NPROCS) forall (j in NPROCS) forall (k in NPROCS)
   {
     subcase mutex[i][j][k] of mutex[i][j] for master = k;
-    using NMSGS->{0,1}, foo, nonint, (mutex) prove mutex[i][j][k];
+    using NMSGS->{0,1}, nonint2, nonint1, nonint, (mutex) prove mutex[i][j][k];
   }
 }
