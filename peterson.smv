@@ -1,0 +1,70 @@
+typedef NPROCS 0..1;
+typedef STATE { PRE1, PRE2, CHECK1, CHECK2, CRIT, NONCRIT };
+
+module main(p, r) {
+  abstract input p : NPROCS;       
+  abstract input r : boolean;
+
+  turn  : NPROCS;
+  flag  : array NPROCS of boolean;
+  state : array NPROCS of STATE;
+  
+  init(state[0]) := PRE1;
+  init(state[1]) := PRE1;
+
+  default 
+  {
+    next(turn)  := turn;
+    next(flag)  := flag;
+    next(state) := state;
+  } 
+  in case 
+  {
+    state[p] = PRE1 : 
+    {
+      next(flag[p]) := 1;
+      next(state[p]) := PRE2;
+    }
+    state[p] = PRE2 :
+    {
+      next(turn) := 1 - p;
+      next(state[p]) := CHECK1;
+    }
+    state[p] = CHECK1 : 
+    {
+      if (flag[1 - p]) 
+      {
+        next(state[p]) := CHECK1;
+      }
+      else
+      {
+        next(state[p]) := CHECK2;
+      } 
+    }
+    state[p] = CHECK2 :
+    {
+      if (turn = 1 - p)
+      {
+        next(state[p]) := CHECK1;
+      }
+      else
+      {
+        next(state[p]) := CRIT;
+      }
+    }
+    state[p] = CRIT :
+    {
+      if (r) {
+        next(flag[p])  := 0;
+        next(state[p]) := NONCRIT;
+      }
+    }
+    state[p] = NONCRIT :
+    {
+      if (r) {
+         next(state[p]) := PRE1;
+      }
+    }
+  } 
+  mutex : assert G ~ (state[0] = CRIT & state[1] = CRIT);
+}
