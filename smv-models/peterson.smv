@@ -33,24 +33,16 @@ module main(p, r) {
     state[p] = CHECK1 : 
     {
       if (flag[1 - p]) 
-      {
         next(state[p]) := CHECK1;
-      }
       else
-      {
         next(state[p]) := CHECK2;
-      } 
     }
     state[p] = CHECK2 :
     {
       if (turn = 1 - p)
-      {
         next(state[p]) := CHECK1;
-      }
       else
-      {
         next(state[p]) := CRIT;
-      }
     }
     state[p] = CRIT :
     {
