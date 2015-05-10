@@ -1,0 +1,155 @@
+/* Mutual exclusion simulation for an unbounded number of "message passing" processes */
+
+scalarset NPROCS undefined; 
+ordset NMSGS 0..;
+typedef STATE {NUL, RECV, ACQ, GRANTED};
+#define REQ 0
+#define REL 1
+#define GRANT 2
+#define ACKREL 3
+typedef NMSGT 0..3;
+#define inc(_x) next(_x) := (_x) + 1
+#define dec(_x) next(_x) := (_x) - 1
+
+module proc() 
+{
+  inbox : array NPROCS of array NMSGT of NMSGS;
+  me    : NPROCS;
+  st    : STATE;
+} 
+
+module main(master, p, q, r) {
+  /* Currently active process */
+  abstract input master : NPROCS;
+  next(master) := master;
+  abstract input p : NPROCS;
+  abstract input q : NPROCS;
+  abstract input r : boolean;
+  owner : NPROCS;
+  init(owner) := master;
+
+  /* Array of processes */
+  ps : array NPROCS of proc();
+  
+  forall (i in NPROCS) {
+    ps[i].me := i;
+    init(ps[i].st) := NUL;
+    forall (j in NPROCS) forall (k in NMSGT) 
+      init(ps[i].inbox[j][k])  := 0;
+  }
+
+#define msg(i) ps[i].inbox[ps[i].in_i]
+  default {
+    forall (i in NPROCS) 
+    {
+      next(ps[i].st)     := ps[i].st;
+      next(ps[i].inbox)  := ps[i].inbox;
+      next(owner)        := owner;
+    }
+  } in {
+    if (p = master)
+    {
+      case {
+        ps[p].inbox[q][REQ] > 0 : 
+        {
+          if (ps[p].st ~= GRANTED)
+          {
+            next(ps[p].st) := GRANTED;
+            next(owner) := q;
+
+            /* Send Grant Msg */
+            inc(ps[q].inbox[p][GRANT]);
+
+            /* Mark message received*/
+            dec(ps[p].inbox[q][REQ]);
+          }
+        }
+        ps[p].inbox[q][REL] > 0 : 
+        {
+          {
+            next(ps[p].st) := NUL;
+            next(owner) := p;
+            /* Mark message received*/
+            dec(ps[p].inbox[q][REL]);
+          }
+        }
+      }
+    } 
+    else 
+    {
+      case {
+        ps[p].st = NUL :
+        {
+          if (r) -- Flip coin 
+          {
+            inc(ps[master].inbox[p][REQ]);
+            next(ps[p].st) := RECV;
+          }
+        }
+        ps[p].st = ACQ :
+        {
+          if (r) -- Flip coin
+          {
+            inc(ps[master].inbox[p][REL]);
+            next(ps[p].st) := NUL;
+          }
+        }
+        ps[p].st = RECV :
+        {
+          if (ps[p].inbox[q][GRANT] > 0)
+          {
+            dec(ps[p].inbox[q][GRANT]);
+            next(ps[p].st) := ACQ;
+          }
+        }
+      } 
+    }
+  }
+ 
+  /* Noninterference Lemmas */
+  forall (i in NPROCS)
+    nonint1[i] : 
+      assert G (i ~= master & X ps[i].st = ACQ & ps[i].st = RECV -> 
+                q = master);
+
+  forall (i in NPROCS)
+    nonint2[i] : assert G (
+      (ps[master].st = GRANTED & owner = i & X ps[master].st = GRANTED ->
+        X owner = i) &
+      (ps[master].st = GRANTED & X ps[master].st = NUL ->
+        q = owner)
+    );
+    
+  forall (i in NPROCS)
+    nonint[i] : assert G ((ps[i].st = ACQ | ps[i].inbox[master][GRANT] > 0) -> 
+                           ps[master].st = GRANTED);
+                           
+  /* Mutual Exclusion */
+  forall (i in NPROCS) forall (j in NPROCS)
+    mutex[i][j] : assert G (i = j | (ps[i].st ~= ACQ | ps[j].st ~= ACQ));
+  
+  /* Proofs */
+  forall (i in NPROCS) forall (j in NPROCS) forall (k in NPROCS) 
+  {
+    subcase nonint1_sub[i][j][k] of nonint1[i] for master = j & q = k;
+    using NMSGS->{0}, (nonint1) prove nonint1_sub[i][j][k];
+  }
+  
+  forall (i in NPROCS) forall (j in NPROCS) forall (k in NPROCS)
+  {
+    subcase nonint2_sub[i][j][k] of nonint2[i] for master = j & q = k;
+    using NMSGS->{0,1}, (nonint2), nonint1 prove nonint2_sub[i][j][k];
+  }
+
+  forall (i in NPROCS) forall (j in NPROCS) forall (k in NPROCS) 
+  {
+    subcase nonint_sub[i][j][k] of nonint[i] for master = j & p = k;
+    using NMSGS->{0,1}, nonint2, nonint1 prove nonint_sub[i][j][k];
+  }
+
+  forall (i in NPROCS) forall (j in NPROCS) forall (k in NPROCS)
+  {
+    subcase mutex[i][j][k] of mutex[i][j] for master = k;
+    using NMSGS->{0,1}, nonint2, nonint1, nonint, (mutex) prove mutex[i][j][k];
+  }
+}

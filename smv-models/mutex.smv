@@ -1,0 +1,71 @@
+/* Mutual exclusion simulation for an unbounded number of processes */
+
+typedef STATE {NUL, REQ, ACQ, REL};
+
+module proc() {
+  st : STATE;
+} 
+
+scalarset INDEX undefined;
+
+module main(p) {
+  /* Currently active process */
+  input p : INDEX;
+  ps : array INDEX of proc;
+
+  /* owned -> ps[owned].st = { REL, ACQ } */
+  owned : boolean;
+  owner : INDEX;
+
+  init(owned) := 0;
+  
+  default 
+  {
+    forall (i in INDEX) 
+    {
+      init(ps[i].st) := NUL;
+      next(ps[i].st) := ps[i].st;
+    }
+    next(owned) := owned;
+    next(owner) := owner;
+  }
+  in
+  {
+    if (ps[p].st = NUL) 
+    {
+      next(ps[p].st) := {NUL, REQ};
+    }
+    else if (ps[p].st = REQ & ~owned) 
+    {
+      next(owned) := ~ owned;
+      next(ps[p].st) := ACQ;
+      next(owner) := p;
+    }
+    else if (ps[p].st = ACQ) 
+    {
+      next(owned) := owned;
+      next(ps[p].st) := {ACQ, REL};
+    }
+    else if (ps[p].st = REL) 
+    {
+      next(ps[p].st) := NUL;
+      next(owned) := ~ owned;
+    }
+  }
+
+  /* Noninterference Lemma */
+  nonint : assert G ((owned & p ~= owner) -> X owned);
+
+  forall (i in INDEX) 
+  {
+    subcase nonint_sub[i] of nonint for p = i;
+    using (nonint) prove 
+      nonint_sub[i];
+  }
+
+  /* Mutual Exclusion */
+  forall (i in INDEX) forall (j in INDEX) {
+    mutex[i][j] : assert G (i = j | ps[i].st ~= ACQ | ps[j].st ~= ACQ);
+    using nonint prove mutex[i][j];
+  }
+}
