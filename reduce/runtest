@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+Z3="z3 -smt2 -in"
+COMMON="reduce.smt2"
+
+TEST=$1
+
+cat $COMMON $TEST | ${Z3}
