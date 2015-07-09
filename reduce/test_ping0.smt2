@@ -7,15 +7,6 @@
 (declare-fun ping (Pid) U)
 (declare-fun pong (Pid) U)
 
-(assert (forall ((p Pid) (q Pid))
-                (=> (= (ping p) (ping q)) (= p q))))
-
-(assert (forall ((p Pid) (q Pid))
-                (=> (= (pong p) (pong q)) (= p q))))
-
-(assert (forall ((p Pid) (q Pid))
-                (not (= (ping p) (pong q)))))
-
 ;; Universe of PIDs:
 (assert
  (forall ((r Pid))
@@ -40,8 +31,8 @@
             skip)))
   
 (define-fun p_proc () Stmt
-  (bind q (seq (recv (ping q))
-               (seq (send q (pong p)) skip))))
+  (seq (recv (ping me))
+       (seq (send me (pong p)) skip)))
 
 (assert (not (= p q)))
 (assert (not (= me p)))
@@ -60,8 +51,6 @@
  (TP (Sing p)))
 (assert
  (TP (Sing me)))
-(assert
- (TV me))
 (assert
  (not (Rewrite c empty)))
 (check-sat)
