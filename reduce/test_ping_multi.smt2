@@ -2,7 +2,6 @@
 (push)
 (declare-const me Pid)
 (declare-const ps PidSet)
-(declare-const qs PidSet)
 (declare-const q Pid)
 (declare-const c Config)
 (declare-fun ping (Pid) U)
@@ -50,8 +49,6 @@
 (assert
  (TP (Multi ps)))
 (assert
- (TP (Multi qs)))
-(assert
  (TP (Sing q)))
 (assert
  (TV me))
@@ -59,8 +56,6 @@
  (TV (In ps)))
 (assert
  (OKPidSet ps))
-(assert
- (OKPidSet qs))
 
 (assert
  (not (Rewrite c empty)))
