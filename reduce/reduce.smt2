@@ -35,6 +35,12 @@
   (declare-fun seq(Stmt Stmt) Stmt)
   (declare-fun foreach(PidSet Stmt) Stmt)
   (declare-fun iter(Set Stmt) Stmt)
+  (declare-fun mu(Var Stmt) Stmt)
+  (declare-fun var(Var) Stmt)
+
+  ;; "Helper" statements
+  (declare-fun unroll-body(Var Stmt) Stmt)
+  (declare-fun unroll-end(Var Stmt) Stmt)
 
 ; Substitution "type class"
 (declare-fun apply-subst-u (Subst U) U)
@@ -59,6 +65,12 @@
                  (s2 Stmt))
                 (= (apply-subst s (seq s1 s2)) (seq (apply-subst s s1)
                                                     (apply-subst s s2)))))
+(assert (forall ((s Subst)
+                 (t Stmt)
+                 (x Var))
+                (= (apply-subst s (mu x t)) (mu x (apply-subst s t)))))
+(assert (forall ((s Subst) (x Var))
+                (= (apply-subst s (var x)) (var x))))
 
 ; Config is a collection of processes,
 ; i.e. PID => S
@@ -310,3 +322,22 @@
              (TC c)
              (TP q)
              (TS (seq (iter xs s) t))))))
+
+;; send/receive under mu...
+
+;; mu recursion splits into some number of iterations + an exit
+(assert
+ (forall ((p PidClass)
+          (c Config)
+          (x Var)
+          (s Stmt)
+          (t Stmt))
+         (! (=> (is-proc c p (seq (mu x s) t))
+                (rewrite-1-rule c p (seq (unroll-body x s)
+                                         (seq (unroll-end x s) t))))
+            :pattern
+            ((TP p) (TC c) (TS (seq (mu x s) t))))))
+
+;; Local Variables:
+;; smtlib-include: ""
+;; End:

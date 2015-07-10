@@ -31,7 +31,7 @@
                (bind q (seq (recv (pong q)) skip))) skip)))
                         
 (define-fun p_session () Stmt
-  (seq (recv (ping me)) (seq (send me (pong (In ps))) skip)))
+  (bind q (seq (recv (ping q)) (seq (send q (pong (In ps))) skip))))
 
 (assert (not (= me q)))
 
