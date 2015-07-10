@@ -40,8 +40,8 @@
             skip)))
   
 (define-fun p_proc () Stmt
-  (bind q (seq (recv (ping q))
-               (seq (send q (pong p)) skip))))
+  (seq (bind q (seq (recv (ping q))
+               (seq (send q (pong p)) skip))) skip))
 
 (assert (not (= p q)))
 (assert (not (= me p)))

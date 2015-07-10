@@ -179,24 +179,42 @@
             :pattern
             ((TC c) (TP p) (TV r) (TS (bind q s))))))
 
+;; Binder instantiation
 (assert
  (forall ((p PidClass)
-          (ps PidSet)
           (q Pid)
           (r Pid)
+          (xs PidSet)
           (c Config)
           (s Stmt)
           (t Stmt))
          (! (=>
-             (is-proc c p (seq (foreach ps (bind q s)) t))
+             (is-proc c p (seq (foreach xs (bind q s)) t))
              (rewrite-1-rule
               c
               p
-              (seq (foreach ps (apply-subst (subst1 q r) s)) t)))
+              (seq (foreach xs (apply-subst (subst1 q r) s)) t)))
             :pattern
-            ((OKPidSet ps) 
-             (TC c) (TP p) (TV r) 
-             (TS (seq (foreach ps (bind q s)) t))))))
+            ((TC c) (TP p) (TV r) (TS (seq (foreach xs (bind q s)) t))))))
+
+;; (assert
+;;  (forall ((p PidClass)
+;;           (ps PidSet)
+;;           (q Pid)
+;;           (r Pid)
+;;           (c Config)
+;;           (s Stmt)
+;;           (t Stmt))
+;;          (! (=>
+;;              (is-proc c p (seq (foreach ps (bind q s)) t))
+;;              (rewrite-1-rule
+;;               c
+;;               p
+;;               (seq (foreach ps (apply-subst (subst1 q r) s)) t)))
+;;             :pattern
+;;             ((OKPidSet ps) 
+;;              (TC c) (TP p) (TV r) 
+;;              (TS (seq (foreach ps (bind q s)) t))))))
 
 ;; Send/Recv
 (assert
@@ -208,7 +226,7 @@
           (m U))
          (! (=>
              (and
-              (not (= p1 p2))
+              ;; (not (= p1 p2))
               (is-proc c1 (Sing p1) (seq (send p2 m) s1))
               (is-proc c1 (Sing p2) (seq (recv m) s2)))
              (rewrite-2-rule
@@ -230,26 +248,31 @@
           (ys Set)
           (s1 Stmt)
           (s2 Stmt)
-          (m U)
+          (t1 Stmt)
+          (t2 Stmt)
           (c1 Config))
          (! (=>
              (and
-              (not (= p1 p2))
               (= (size xs) (size ys))
-              (is-proc c1 (Sing p1) (iter xs (seq (send p2 m) s1)))
-              (is-proc c1 (Sing p2) (iter ys (seq (recv m) s2))))
+              (not (= p1 p2))
+              (is-proc c1 (Sing p1) (iter xs (seq s1 t1)))
+              (is-proc c1 (Sing p2) (iter ys (seq s2 t2))))
+              (let ((c2 (two-procs empty (Sing p1) s1
+                                         (Sing p2) s2)))
+                (=> (and (TC c2) (TS (seq s1 skip)) (TS (seq s2 skip)))
+                    (Rewrite c2 empty)))
              (rewrite-2-rule
               c1
-              (Sing p1) (iter xs s1)
-              (Sing p2) (iter ys s2)))
+              (Sing p1) (iter xs t1)
+              (Sing p2) (iter ys t2)))
          :pattern 
          ((OKSet xs)
+          (OKSet ys)
           (TC c1)
-          (TS (iter xs (seq (send p2 m) s1)))
-          (TS (iter ys (seq (recv m) s2)))
+          (TS (iter xs (seq s1 t1)))
+          (TS (iter ys (seq s2 t2)))
           (TP (Sing p1))
           (TP (Sing p2))))))
-
 
 ;; Parallel/Sequential
 (assert
@@ -257,52 +280,58 @@
           (ps PidSet)
           (s1 Stmt)
           (s2 Stmt)
-          (t Stmt)
-          (m U)
+          (s3 Stmt)
+          (t1 Stmt)
+          (t2 Stmt)
           (c1 Config))
-         (! (=>
-             (and (is-proc c1 (Sing p1) 
-                           (seq (foreach ps (seq (send (In ps) m) s1)) s2))
-                  (is-proc c1 (Multi ps)
-                           (seq (recv m) t)))
-             (rewrite-2-rule
-              c1
-              (Sing p1) (seq (foreach ps s1) s2)
-              (Multi ps) t))
-         :pattern 
-         ((OKPidSet ps)
-          (TC c1)
-          (TP (Sing p1))
-          (TP (Multi ps))
-          (TS (seq (foreach ps (seq (send (In ps) m) s1)) s2))
-          (TS (seq (recv m) t))))))
+         (! (let ((p1_proc (seq (foreach ps (seq s1 s2)) s3))
+                   (p2_proc (seq t1 t2))
+                   (ps_p (Sing (In ps))))
+               (let ((c2 (two-procs empty (Sing p1) (seq s1 skip) ps_p (seq t1 skip))))
+                 (=>
+                  (and (is-proc c1 (Sing p1)  p1_proc)
+                       (is-proc c1 (Multi ps) p2_proc)
+                       (=> (and (TC c2) (TP ps_p) (TS (seq s1 skip)) (TS (seq t1 skip))
+                                (not (= p1 (In ps))))
+                           (Rewrite c2 empty)))
+                  (rewrite-2-rule
+                   c1
+                   (Sing p1) (ite (= s2 skip) s3 (seq (foreach ps s2) s3))
+                   (Multi ps) t2))))
+            :pattern 
+            ((OKPidSet ps)
+             (TC c1)
+             (TP (Sing p1))
+             (TP (Multi ps))
+             (TS (seq (foreach ps (seq s1 s2)) s3))
+             (TS (seq t1 t2))))))
 
-;; Parallel/Sequential 2
-(assert
- (forall ((p1 Pid)
-          (ps PidSet)
-          (s1 Stmt)
-          (s2 Stmt)
-          (t Stmt)
-          (m U)
-          (c1 Config))
-         (! (=>
-             (and (is-proc c1 
-                           (Sing p1)  
-                           (seq (foreach ps (seq (recv m) s1)) s2))
-                  (is-proc c1 
-                           (Multi ps) 
-                           (seq (send p1 m) t)))
-             (rewrite-2-rule c1 
-                             (Sing p1) (seq (foreach ps s1) s2)
-                             (Multi ps) t))
-         :pattern 
-         ((OKPidSet ps)
-          (TC c1)
-          (TP (Sing p1))
-          (TP (Multi ps))
-          (TS (seq (foreach ps (seq (recv m) s1)) s2))
-          (TS (seq (send p1 m) t))))))
+;; ;; Parallel/Sequential 2
+;; (assert
+;;  (forall ((p1 Pid)
+;;           (ps PidSet)
+;;           (s1 Stmt)
+;;           (s2 Stmt)
+;;           (t Stmt)
+;;           (m U)
+;;           (c1 Config))
+;;          (! (=>
+;;              (and (is-proc c1 
+;;                            (Sing p1)  
+;;                            (seq (foreach ps (seq (recv m) s1)) s2))
+;;                   (is-proc c1 
+;;                            (Multi ps) 
+;;                            (seq (send p1 m) t)))
+;;              (rewrite-2-rule c1 
+;;                              (Sing p1) (seq (foreach ps s1) s2)
+;;                              (Multi ps) t))
+;;          :pattern 
+;;          ((OKPidSet ps)
+;;           (TC c1)
+;;           (TP (Sing p1))
+;;           (TP (Multi ps))
+;;           (TS (seq (foreach ps (seq (recv m) s1)) s2))
+;;           (TS (seq (send p1 m) t))))))
 
 ;; Parallel/Iteration rewrite
 ;; but this needs some syntactic checks...
@@ -324,19 +353,22 @@
              (TS (seq (iter xs s) t))))))
 
 ;; send/receive under mu...
+;; (assert
+;;  (forall ((p PidClass)
+;;           (q PidClass)
 
 ;; mu recursion splits into some number of iterations + an exit
-(assert
- (forall ((p PidClass)
-          (c Config)
-          (x Var)
-          (s Stmt)
-          (t Stmt))
-         (! (=> (is-proc c p (seq (mu x s) t))
-                (rewrite-1-rule c p (seq (unroll-body x s)
-                                         (seq (unroll-end x s) t))))
-            :pattern
-            ((TP p) (TC c) (TS (seq (mu x s) t))))))
+;; (assert
+;;  (forall ((p PidClass)
+;;           (c Config)
+;;           (x Var)
+;;           (s Stmt)
+;;           (t Stmt))
+;;          (! (=> (is-proc c p (seq (mu x s) t))
+;;                 (rewrite-1-rule c p (seq (unroll-body x s)
+;;                                          (seq (unroll-end x s) t))))
+;;             :pattern
+;;             ((TP p) (TC c) (TS (seq (mu x s) t))))))
 
 ;; Local Variables:
 ;; smtlib-include: ""
