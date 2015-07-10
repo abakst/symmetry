@@ -197,25 +197,6 @@
             :pattern
             ((TC c) (TP p) (TV r) (TS (seq (foreach xs (bind q s)) t))))))
 
-;; (assert
-;;  (forall ((p PidClass)
-;;           (ps PidSet)
-;;           (q Pid)
-;;           (r Pid)
-;;           (c Config)
-;;           (s Stmt)
-;;           (t Stmt))
-;;          (! (=>
-;;              (is-proc c p (seq (foreach ps (bind q s)) t))
-;;              (rewrite-1-rule
-;;               c
-;;               p
-;;               (seq (foreach ps (apply-subst (subst1 q r) s)) t)))
-;;             :pattern
-;;             ((OKPidSet ps) 
-;;              (TC c) (TP p) (TV r) 
-;;              (TS (seq (foreach ps (bind q s)) t))))))
-
 ;; Send/Recv
 (assert
  (forall ((p1 Pid)
