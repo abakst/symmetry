@@ -37,6 +37,7 @@
   (declare-fun iter(Set Stmt) Stmt)
   (declare-fun mu(Var Stmt) Stmt)
   (declare-fun var(Var) Stmt)
+  (declare-fun offer(Stmt Stmt) Stmt)
 
   ;; "Helper" statements
   (declare-fun unroll-body(Var Stmt) Stmt)
@@ -71,6 +72,9 @@
                 (= (apply-subst s (mu x t)) (mu x (apply-subst s t)))))
 (assert (forall ((s Subst) (x Var))
                 (= (apply-subst s (var x)) (var x))))
+(assert (forall ((s Subst) (t Stmt) (u Stmt))
+                (= (apply-subst s (offer t u))
+                   (offer (apply-subst s t) (apply-subst s u)))))
 
 ; Config is a collection of processes,
 ; i.e. PID => S
@@ -88,7 +92,24 @@
                                      (Rewrite c1 c3)))
                    :pattern ((Rewrite c1 c2) (Rewrite c2 c3)))))
 
+
+;; Triggers/Dummies
+(declare-fun TC (Config) Bool)
+(declare-fun TV (Pid) Bool)
+(declare-fun TS (Stmt) Bool)
+(declare-fun TP (PidClass) Bool)
+(declare-fun OKSet(Set) Bool)
+(declare-fun OKPidSet(PidSet) Bool)
+
 ; Congruence
+(assert
+ (forall ((x Var) (s Stmt))
+         (= (seq (unroll-body x (seq (var x) skip)) s) s)))
+(assert 
+ (forall ((s Stmt) (t Stmt) (u Stmt))
+         (! (= (seq s (seq t u)) (seq (seq s t) u))
+            :pattern (TS (seq (seq s t) u)))))
+
 (assert
  (forall ((s Stmt))
          (= s (seq skip s))))
@@ -108,15 +129,6 @@
 (assert
  (forall ((p Pid) (ps PidSet))
          (not (= (Sing p) (Multi ps)))))
-
-
-;; Triggers/Dummies
-(declare-fun TC (Config) Bool)
-(declare-fun TV (Pid) Bool)
-(declare-fun TS (Stmt) Bool)
-(declare-fun TP (PidClass) Bool)
-(declare-fun OKSet(Set) Bool)
-(declare-fun OKPidSet(PidSet) Bool)
 
 ; Rewrite Rules
 (declare-const empty Config)
@@ -287,33 +299,6 @@
              (TS (seq (foreach ps (seq s1 s2)) s3))
              (TS (seq t1 t2))))))
 
-;; ;; Parallel/Sequential 2
-;; (assert
-;;  (forall ((p1 Pid)
-;;           (ps PidSet)
-;;           (s1 Stmt)
-;;           (s2 Stmt)
-;;           (t Stmt)
-;;           (m U)
-;;           (c1 Config))
-;;          (! (=>
-;;              (and (is-proc c1 
-;;                            (Sing p1)  
-;;                            (seq (foreach ps (seq (recv m) s1)) s2))
-;;                   (is-proc c1 
-;;                            (Multi ps) 
-;;                            (seq (send p1 m) t)))
-;;              (rewrite-2-rule c1 
-;;                              (Sing p1) (seq (foreach ps s1) s2)
-;;                              (Multi ps) t))
-;;          :pattern 
-;;          ((OKPidSet ps)
-;;           (TC c1)
-;;           (TP (Sing p1))
-;;           (TP (Multi ps))
-;;           (TS (seq (foreach ps (seq (recv m) s1)) s2))
-;;           (TS (seq (send p1 m) t))))))
-
 ;; Parallel/Iteration rewrite
 ;; but this needs some syntactic checks...
 (assert
@@ -333,23 +318,95 @@
              (TP q)
              (TS (seq (iter xs s) t))))))
 
-;; send/receive under mu...
-;; (assert
-;;  (forall ((p PidClass)
-;;           (q PidClass)
+;;mu recursion can split into some number of iterations + an exit
+(assert
+ (forall ((p PidClass)
+          (c Config)
+          (x Var)
+          (s Stmt)
+          (t Stmt))
+         (! (=> (is-proc c p (seq (mu x s) t))
+                (rewrite-1-rule c p (seq (unroll-body x s)
+                                         (seq (unroll-end x s) t))))
+            :pattern
+            ((TP p) (TC c) (TS (seq (mu x s) t))))))
 
-;; mu recursion splits into some number of iterations + an exit
-;; (assert
-;;  (forall ((p PidClass)
-;;           (c Config)
-;;           (x Var)
-;;           (s Stmt)
-;;           (t Stmt))
-;;          (! (=> (is-proc c p (seq (mu x s) t))
-;;                 (rewrite-1-rule c p (seq (unroll-body x s)
-;;                                          (seq (unroll-end x s) t))))
-;;             :pattern
-;;             ((TP p) (TC c) (TS (seq (mu x s) t))))))
+;;Behavior of unroll-body with loops (1)
+(assert
+ (forall ((p PidClass)
+          (c Config)
+          (q Pid)
+          (x Var)
+          (xs Set)
+          (s1 Stmt)
+          (t1 Stmt)
+          (u1 Stmt)
+          (s2 Stmt)
+          (t2 Stmt)
+          (u2 Stmt))
+         (! (let ((c2 (two-procs empty p (seq s1 skip) (Sing q) (seq s2 skip))))
+          (=> (and (is-proc c p (seq (unroll-body x (seq s1 t1)) u1))
+                   (is-proc c (Sing q) (seq (iter xs (seq s2 t2)) u2))
+                   (=> (and (TC c2) (TS (seq s1 skip)) (TS (seq s2 skip))
+                        (not (= p (Sing q))))
+                       (Rewrite c2 empty)))
+              (rewrite-2-rule c p       (seq (unroll-body x t1) u1)
+                               (Sing q) (ite (= t2 skip) u2 (seq (iter xs t2) u2)))))
+          :pattern
+          ((TC c) 
+           (TP p)
+           (TP (Sing q))
+           (TS (seq (unroll-body x (seq s1 t1)) u1))
+           (TS (seq (iter xs (seq s2 t2)) u2))))))
+
+;;Behavior of unroll-body with loops (2)
+(assert
+ (forall ((p PidClass)
+          (c Config)
+          (q PidClass)
+          (x Var)
+          (y Var)
+          (s1 Stmt)
+          (t1 Stmt)
+          (u1 Stmt)
+          (s2 Stmt)
+          (t2 Stmt)
+          (u2 Stmt))
+         (! (let ((c2 (two-procs empty p (seq s1 skip) q (seq s2 skip))))
+          (=> (and (is-proc c p (seq (unroll-body x (seq s1 t1)) u1))
+                   (is-proc c q (seq (unroll-body y (seq s2 t2)) u2))
+                   (=> (and (TC c2) (TS (seq s1 skip)) (TS (seq s2 skip))
+                        (not (= p q)))
+                       (Rewrite c2 empty)))
+              (rewrite-2-rule c p (ite (= t1 (var x)) skip (seq (unroll-body x t1) u1))
+                                q (ite (= t2 (var y)) skip (seq (unroll-body y t2) u2)))))
+          :pattern
+          ((TC c) 
+           (TP p)
+           (TP q)
+           (TS (seq (unroll-body x (seq s1 t1)) u1))
+           (TS (seq (unroll-body y (seq s2 t2)) u2))))))
+
+;; External choice
+(assert
+ (forall ((p PidClass)
+          (p1 Stmt)
+          (p2 Stmt)
+          (p3 Stmt)
+          (c Config))
+         (!
+          (let ((c1 (store c p (seq p1 p3)))
+                (c2 (store c p (seq p2 p3))))
+          (=> (is-proc c p (seq (offer p1 p2) p3))
+              (and (Rewrite c c1)
+                   (Rewrite c c2)
+                   (TC c1)
+                   (TC c2)
+                   (TS (seq p1 p3)) (TS (seq p2 p3)))))
+          :pattern
+          ((TC c)
+           (TP p)
+           (TS (seq (offer p1 p2) p3))))))
 
 ;; Local Variables:
 ;; smtlib-include: ""
