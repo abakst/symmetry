@@ -105,6 +105,11 @@
 (assert
  (forall ((x Var) (s Stmt))
          (= (seq (unroll-body x (seq (var x) skip)) s) s)))
+
+(assert
+ (forall ((x Var) (s Stmt))
+         (= (seq (unroll-end x skip) s) s)))
+
 (assert 
  (forall ((s Stmt) (t Stmt) (u Stmt))
          (! (= (seq s (seq t u)) (seq (seq s t) u))
@@ -327,7 +332,7 @@
           (t Stmt))
          (! (=> (is-proc c p (seq (mu x s) t))
                 (rewrite-1-rule c p (seq (unroll-body x s)
-                                         (seq (unroll-end x s) t))))
+                                    (seq (unroll-end x s) t))))
             :pattern
             ((TP p) (TC c) (TS (seq (mu x s) t))))))
 
@@ -386,6 +391,64 @@
            (TP q)
            (TS (seq (unroll-body x (seq s1 t1)) u1))
            (TS (seq (unroll-body y (seq s2 t2)) u2))))))
+
+;; Behavior of unroll-end with itself
+(assert
+ (forall ((p PidClass)
+          (c Config)
+          (q PidClass)
+          (x Var)
+          (y Var)
+          (s1 Stmt)
+          (t1 Stmt)
+          (u1 Stmt)
+          (s2 Stmt)
+          (t2 Stmt)
+          (u2 Stmt))
+         (! (let ((c2 (two-procs empty p (seq s1 skip) q (seq s2 skip))))
+          (=> (and (is-proc c p (seq (unroll-end x (seq s1 t1)) u1))
+                   (is-proc c q (seq (unroll-end y (seq s2 t2)) u2))
+                   (=> (and (TC c2) (TS (seq s1 skip)) (TS (seq s2 skip))
+                        (not (= p q)))
+                       (Rewrite c2 empty)))
+              (rewrite-2-rule c p (ite (= t1 skip) skip (seq (unroll-end x t1) u1))
+                                q (ite (= t2 skip) skip (seq (unroll-end y t2) u2)))))
+          :pattern
+          ((TC c) 
+           (TP p)
+           (TP q)
+           (TS (seq (unroll-end x (seq s1 t1)) u1))
+           (TS (seq (unroll-end y (seq s2 t2)) u2))))))
+
+;; Behavior of unroll-end with unroll-body
+(assert
+ (forall ((p PidClass)
+          (c Config)
+          (q PidClass)
+          (x Var)
+          (y Var)
+          (s1 Stmt)
+          (t1 Stmt)
+          (u1 Stmt)
+          (s2 Stmt)
+          (t2 Stmt)
+          (u2 Stmt))
+         (! (let ((c2 (two-procs empty p (seq s1 skip) q (seq s2 skip))))
+          (=> (and (is-proc c p (seq (unroll-end x (seq s1 t1)) u1))
+                   (is-proc c q (seq (unroll-body y (seq s2 t2)) u2))
+                   (=> (and (TC c2) (TS (seq s1 skip)) (TS (seq s2 skip))
+                        (not (= p q)))
+                       (Rewrite c2 empty)))
+              (rewrite-2-rule c p (ite (= t1 skip) skip (seq (unroll-end x t1) u1))
+                                q (ite (= t2 (var y)) skip (seq (unroll-body y t2) u2)))))
+          :pattern
+          ((TC c) 
+           (TP p)
+           (TP q)
+           (TS (seq (unroll-end x (seq s1 t1)) u1))
+           (TS (seq (unroll-body y (seq s2 t2)) u2))))))
+
+
 
 ;; External choice
 (assert
