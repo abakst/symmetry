@@ -9,21 +9,22 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 
 Section Process.
-  Definition pid := nat.
   Context {T : Type}.
-  Context {X : Type}. (** set vars **)
-  Context {L : Type}. (** Loop Variables **)
+  Definition pid := nat.
+  Inductive SetVar :=
+    | X : nat -> SetVar.
+  Inductive MuVar :=
+    | L : nat -> MuVar.
   Definition eq_dec_pid := PeanoNat.Nat.eq_dec. 
   (* : forall (x y : pid), {x = y}+{x<>y}}. *)
 
   Inductive PidClass : Type :=
   | p_none : PidClass
   | p_sng  : pid -> PidClass
-  | p_set  : X -> PidClass.
-  
-  (* Definition eq_dec_ *)
+  | p_set  : SetVar -> PidClass.
 
   Definition M := (T * PidClass)%type.
+
   Definition subst_pid_m (p1 : PidClass) (p2 : PidClass) (m : M) :=
     match (p1, m) with
       | (p_sng pid1, (t, p_sng pid2)) => 
@@ -39,8 +40,8 @@ Section Process.
   | s_send  : PidClass -> M -> Stmt
   | s_recv  : M -> Stmt
   | s_seq   : Stmt -> Stmt -> Stmt
-  | s_iter  : X -> Stmt -> Stmt
-  | s_loop  : L -> Stmt -> Stmt.
+  | s_iter  : SetVar -> Stmt -> Stmt
+  | s_loop  : MuVar -> Stmt -> Stmt.
   
   Inductive Config  : Type := 
   | cfg_emp : Config
@@ -95,8 +96,8 @@ Section Process.
   Defined.
    
   Inductive Context :=
-  | Mult : X -> Context
-  | Loop : L -> Context.
+  | Mult : SetVar -> Context
+  | Loop : MuVar -> Context.
 
   Fixpoint head_stmt' s stk :=
     match s with
@@ -234,15 +235,14 @@ End Process.
   Notation "P1 ; P2" := (s_seq P1 P2) (at level 90, left associativity).
   Notation "P [[ S ]]" := (cfg_sng (p_sng P) S) (at level 80).
   Notation "{ P } [[ S ]]" := (cfg_sng (p_set P) S) (at level 80).
-  Notation "C1 ===>N C2" := (RewriteRel (X:= nat) (L := nat) C1 C2) (at level 95).
-  Notation "C1 ===> C2" := (RewriteRel (X:= nat) (L := nat) C1 C2) (at level 95).
+  Notation "C1 ===> C2" := (RewriteRel C1 C2) (at level 95).
   Notation " X ~ S" := (s_bind (p_sng X) S) (at level 60).
   
-  Ltac next := rewrite_comm; rewrite_assoc.
+  Ltac next := rewrite_comm; try rewrite_assoc.
 
   Example SimpleProtocol :
     forall (p q r : nat),
-     RewriteRel (X := nat) (L := nat)
+     RewriteRel 
      (p [[ s_send (p_sng q) (tt, p_none) ]]
     | q [[ s_recv (tt, p_none); s_send (p_sng r) (tt, p_none) ]]
     | r [[ s_recv (tt, p_none) ]] )
@@ -257,8 +257,8 @@ End Process.
   Qed.
 
   Example SimpleProtocol2 :
-    forall (ps : nat) (q : nat),
-     RewriteRel (X := nat) (L := nat)
+    forall (ps : SetVar) (q : pid),
+     RewriteRel 
       ({ ps } [[ s_recv (tt, p_none) ]] | q [[ s_iter ps (s_send (p_set ps) (tt, p_none)) ]] )
       ({ ps } [[ s_skip ]] | q [[ s_skip ]]).
   Proof.
@@ -268,7 +268,7 @@ End Process.
 
   Ltac frame_to_top :=
     let t := match goal with
-               | |- @RewriteRel _ _ _ _ (cfg_sng _ _) => idtac
+               | |- RewriteRel (cfg_sng _ _) => idtac
                | _ => eapply rewrite_trans; [apply rewrite_frame | cbv ]
              end in repeat t.
 
@@ -290,13 +290,13 @@ End Process.
   
   Example SimpleProtocol3 : 
     forall (p q x : nat),
-     RewriteRel (X := nat) (L := nat)
+     RewriteRel
       (p [[ s_bind (p_sng x) (s_recv (tt, p_none)) ]]
       |q [[ s_send (p_sng p) (tt, p_none) ]])
       (p [[ s_skip ]] | q [[ s_skip ]]).
   Proof.
     intros.
-    rewrite_top (p_sng (X := nat) x).
+    rewrite_top (p_sng x).
     reduce_top_pair.
   Qed.
   
@@ -308,13 +308,13 @@ End Process.
       p [[ s_skip ]] | q [[ s_skip ]].
   Proof.
     intros.
-    rewrite_top (p_sng (X := nat) q).
+    rewrite_top (p_sng q).
     reduce_top_pair.
     reduce_top_pair.
   Qed.
   
   Example PingPong_many :
-    forall (q x : nat) (ps : nat),
+    forall (q x : nat) (ps : SetVar),
       q <> x ->
       { ps } [[ s_send (p_sng q) (Ping, p_set ps); x ~ (s_recv (Pong, p_sng x)) ]]
       |   q  [[ s_iter ps 
@@ -322,11 +322,72 @@ End Process.
       ===> { ps } [[ s_skip ]] | q [[ s_skip ]].
   Proof.
     intros.
-    rewrite_comm.
-    rewrite_top (p_set (X := nat) ps).
+    next.
+    rewrite_top (p_set ps).
     reduce_top_pair.
-    rewrite_comm.
-    rewrite_top (p_sng (X := nat) q).
+    next.
+    rewrite_top (p_sng q).
     reduce_top_pair.
   Qed.
+  
+  Ltac rewrite_frame :=
+    eapply rewrite_trans;
+      [apply rewrite_frame | idtac].
+  
+  Example Four :
+    forall (a b c d : nat),
+      a [[ s_send (p_sng b) (tt, p_none); s_recv (tt, p_none) ]]
+    | c [[ s_recv (tt, p_none); s_send (p_sng d) (tt, p_none) ]]
+    | b [[ s_recv (tt, p_none); s_send (p_sng c) (tt, p_none) ]]
+    | d [[ s_recv (tt, p_none); s_send (p_sng a) (tt, p_none) ]]
+      ===>
+      a [[ s_skip ]]
+    | c [[ s_skip ]]
+    | b [[ s_skip ]]
+    | d [[ s_skip ]].
+  Proof.
+    intros.
+    rewrite_frame.
+    next.
+    reduce_top_pair. simpl.
+    rewrite_frame.
+    next.
+    reduce_top_pair. simpl.
+    next.
+    rewrite_frame.
+    rewrite_assoc.
+    reduce_top_pair. simpl.
+    next. rewrite_frame. rewrite_assoc.
+    reduce_top_pair. simpl.
+    next.
+    next.
+    rewrite_frame.
+    rewrite_comm.
+    rewrite_assoc. apply rewrite_refl.
+    next.
+    next.
+    rewrite_frame.
+    next.
+    apply rewrite_refl.
+    next.
+    next.
+    
+    reduce_top_pair.
+    rewrite_comm.
+    apply rewrite_refl.
+    eapply rewrite_trans;
+      [apply rewrite_frame | idtac].
+
+    eapply rewrite_trans;
+      [apply rewrite_comm | idtac].
+    eapply rewrite_trans;
+      [ apply (rewrite_ass (T := unit)) | idtac].
+    eapply rewrite_trans;
+      [apply rewrite_comm | idtac].
+    eapply rewrite_trans;
+      [ apply (rewrite_ass (T := unit)) | idtac].
+    eapply rewrite_trans;
+      [apply rewrite_comm | idtac].
+    eapply rewrite_comm.
+
 
