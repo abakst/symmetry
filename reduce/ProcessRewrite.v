@@ -91,16 +91,54 @@ Section Process.
       | (S n, ps'::cs') => ps' :: update_nth cs' n ps
     end.
   
+  Fixpoint set_in (xs : SetVar) (s : Stmt) :=
+    match s with
+      | s_bind _ t => set_in xs t
+      | s_seq t u => set_in xs t \/ set_in xs u
+      | s_send (p_set xs') (_, p_set xs'') => xs = xs' \/ xs = xs''
+      | s_recv (_, p_set xs') => xs = xs'
+      | s_iter _ t => set_in xs t
+      | s_loop _ t => set_in xs t
+      | s_loop_body _ t => set_in xs t
+      | s_loop_end _ t => set_in xs t
+      | _ => False
+    end.
+  
+  Axiom measure : SetVar -> nat.
+
   Inductive EqStmt : Stmt -> Stmt -> Prop :=
-    | stmt_refl : forall (s : Stmt), EqStmt s s 
-    | stmt_sym : forall (s t : Stmt), 
+    | stmt_refl : 
+        forall (s : Stmt), EqStmt s s 
+    | stmt_sym : 
+        forall (s t : Stmt), 
       EqStmt s t -> EqStmt t s
-    | stmt_trans : forall (s t u : Stmt), 
+    | stmt_trans : 
+        forall (s t u : Stmt), 
       EqStmt s t -> EqStmt t u -> EqStmt s u
-    | stmt_skip1 : forall (s : Stmt),
+    | stmt_skip1 : 
+        forall (s : Stmt),
       EqStmt s (s_seq s s_skip)
-    | stmt_skip2 : forall (s : Stmt),
-      EqStmt s (s_seq s_skip s).
+    | stmt_skip2 : 
+        forall (s : Stmt),
+      EqStmt s (s_seq s_skip s)
+    | stmt_seq :
+        forall (s t s' t' : Stmt),
+          EqStmt s s' -> EqStmt t t' -> EqStmt (s_seq s t) (s_seq s' t')
+    | stmt_unfold_loop :
+        forall (s : Stmt) (X : MuVar),
+          EqStmt 
+            (s_loop X s)
+            (s_seq (s_loop_body X s) (s_loop X s))
+    | stmt_fold_loop :
+        forall (s : Stmt) (X : MuVar),
+          EqStmt 
+            (s_seq (s_loop_body X (s_var X)) (s_loop X s))
+            (s_loop X s)
+    | stmt_set : 
+        forall (s : Stmt) (xs xs' : SetVar),
+          ~ set_in xs s -> EqStmt (s_iter xs s) (s_iter xs' s).
+  
+  Hint Constructors EqStmt : eqstmt.
   
   Instance EqStmt_equiv : Equivalence EqStmt := _.
   Proof.
@@ -109,6 +147,12 @@ Section Process.
     eauto using stmt_sym.
     eauto using stmt_trans.
   Defined.
+  
+  Instance proper_eq_seq : Proper (EqStmt ==> EqStmt ==> EqStmt) s_seq.
+  Proof.
+    repeat (hnf; intros).
+    apply stmt_seq; assumption.
+  Qed.
    
   Inductive Context :=
   | Mult : SetVar -> Context
@@ -186,6 +230,9 @@ Section Process.
       | (p_sng p', p_sng q', c1, c2) => c1 = c2
       | (p_set ps, p_sng q', [], [Mult ps']) => ps = ps'
       | (p_sng p', p_set qs, [Mult qs'], []) => qs = qs'
+      | (_, _, [Loop x], [Loop x']) => x = x'
+      | (_, _, [Loop x], [Mult qs]) => True
+      | (_, _, [Mult qs],[Loop x]) => True
       | _ => False
     end.
   
@@ -219,12 +266,20 @@ Section Process.
     end.
         
   Inductive RewriteRel : Config -> Config -> Prop :=
-  | rewrite_refl : forall (c : Config), RewriteRel c c
+  | rewrite_refl : 
+      forall (c : Config), 
+        RewriteRel c c
 
   | rewrite_trans :
-    forall (c1 c2 c3 : Config),
-      RewriteRel c1 c2 -> RewriteRel c2 c3 ->
-      RewriteRel c1 c3
+      forall (c1 c2 c3 : Config),
+        RewriteRel c1 c2 -> RewriteRel c2 c3 ->
+        RewriteRel c1 c3
+                 
+  | rewrite_eq_stmt :
+      forall (c : Config) (i : nat) (p : PidClass) (s t : Stmt),
+        nth_config c i = Some (p, s) ->
+        EqStmt s t ->
+        RewriteRel c (update_nth c i (p, t))
 
   | rewrite_bind :
     forall (c : Config) (i : nat) (p x q : PidClass) (s t : Stmt),
@@ -232,18 +287,11 @@ Section Process.
       fst (head_stmt s) = s_bind x t ->
       RewriteRel c (update_nth c i (p, inst_stmt x q s))
                  
-  | rewrite_unroll_loop :
+  | rewrite_exit_loop :
     forall (c : Config) (i : nat) (p : PidClass) (s t : Stmt) (X : MuVar),
       nth_config c i = Some (p, s) ->
       fst (head_stmt s) = s_loop X t ->
-      RewriteRel c (update_nth c i (p, s_seq (s_loop_body X t) (s_loop X s)))
-                 
-  | rewrite_elim_unroll :
-    forall (c : Config) (i : nat) (p : PidClass) (s : Stmt) (X : MuVar),
-      nth_config c i = Some (p, s) ->
-      fst (head_stmt s) = s_var X ->
-      hd_error (snd (head_stmt s)) = Some (Loop X) ->
-      RewriteRel c (update_nth c i (p, rest_stmt s))
+      RewriteRel c (update_nth c i (p, s_loop_end X t))
 
   | rewrite_pair :
     forall (c : Config) (i1 i2 : nat) (p1 p2 : PidClass) (s1 s2 : Stmt),
@@ -252,9 +300,9 @@ Section Process.
       Elim (p1, head_stmt s1) (p2, head_stmt s2) ->
       MatchCtxt (p1, head_stmt s1) (p2, head_stmt s2) ->
       RewriteRel c (update_nth (update_nth c i1 (p1, rest_stmt s1)) i2 (p2, rest_stmt s2)).
-  Hint Constructors RewriteRel : rewrite.
-  
 End Process.
+
+Hint Constructors RewriteRel : rewrite.
 
 Notation "[ x ]" := (cons x nil).
 Notation "[ x | .. | y ]" := (cons x .. (cons y nil) ..).
