@@ -9,9 +9,12 @@ Example PingPong_many :
   forall (q x : nat) (ps : SetVar),
     q <> x ->
     [ { ps } [[ s_send (p_sng q) (Ping, p_set ps); x ~ (s_recv (Pong, p_sng x)) ]]
-    |   q  [[ s_iter ps
-              (x ~ (s_recv (Ping, p_sng x); s_send (p_sng x) (Pong, p_sng q)))]] ]
-    ===> [ { ps } [[ s_skip ]] | q [[ s_skip ]] ].
+    |   q    [[ s_iter ps
+                 (x ~ (s_recv (Ping, p_sng x); 
+                       s_send (p_sng x) (Pong, p_sng q)))]] 
+    ] ===> [ { ps } [[ s_skip ]] 
+           | q [[ s_skip ]] 
+           ].
 Proof.
   intros.
   inst_bind 1.

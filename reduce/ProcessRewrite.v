@@ -71,6 +71,7 @@ Section Process.
   | s_bind  : PidClass -> Stmt -> Stmt
   | s_send  : PidClass -> M -> Stmt
   | s_recv  : M -> Stmt
+  | s_recv_l: PidClass -> list (M * Stmt) -> Stmt
   | s_seq   : Stmt -> Stmt -> Stmt
   | s_iter  : SetVar -> Stmt -> Stmt
   | s_loop  : MuVar -> Stmt -> Stmt
@@ -93,6 +94,8 @@ Section Process.
   
   Fixpoint set_in (xs : SetVar) (s : Stmt) :=
     match s with
+      | s_int_ch s t => set_in xs s \/ set_in xs t
+      | s_ext_ch s t => set_in xs s \/ set_in xs t
       | s_bind _ t => set_in xs t
       | s_seq t u => set_in xs t \/ set_in xs u
       | s_send (p_set xs') (_, p_set xs'') => xs = xs' \/ xs = xs''
@@ -166,7 +169,7 @@ Section Process.
       | s_loop_end x s'  => head_stmt' s' stk
       | s'               => (s',stk)
     end.
-
+  
   Definition head_stmt s := head_stmt' s [].
   
   Fixpoint rest_stmt s :=
@@ -182,6 +185,15 @@ Section Process.
       | s_loop_body x t => s_loop_body x (rest_stmt t)
       (* | s_loop x t  => s_loop x (rest_stmt t) *)
       | _           => s_skip
+    end.
+  
+  Fixpoint update_head_stmt h s :=
+    match s with
+      | s_seq s' t       => s_seq (update_head_stmt h s') t
+      | s_iter xs s'     => s_iter xs (update_head_stmt h s')
+      | s_loop_body x s' => s_loop_body x (update_head_stmt h s')
+      | s_loop_end x s'  => s_loop_end x (update_head_stmt h s')
+      | s'               => h
     end.
   
   Definition get_pid  (x : PidClass * (Stmt * list Context)) := fst x.
@@ -292,6 +304,18 @@ Section Process.
       nth_config c i = Some (p, s) ->
       fst (head_stmt s) = s_loop X t ->
       RewriteRel c (update_nth c i (p, s_loop_end X t))
+                 
+  | rewrite_ext_choice_l :
+      forall (c : Config) (i : nat) (p : PidClass) (s t u : Stmt),
+        nth_config c i = Some (p, s) ->
+        fst (head_stmt s) = s_ext_ch t u ->
+        RewriteRel c (update_nth c i (p, update_head_stmt t s))
+
+  | rewrite_ext_choice_r :
+      forall (c : Config) (i : nat) (p : PidClass) (s t u : Stmt),
+        nth_config c i = Some (p, s) ->
+        fst (head_stmt s) = s_ext_ch t u ->
+        RewriteRel c (update_nth c i (p, update_head_stmt u s))
 
   | rewrite_pair :
     forall (c : Config) (i1 i2 : nat) (p1 p2 : PidClass) (s1 s2 : Stmt),
