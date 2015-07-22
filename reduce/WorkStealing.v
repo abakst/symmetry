@@ -28,15 +28,19 @@ Example WorkStealing0 :
     ].
 Proof.
   intros.
-  inst_bind 0.
+  eapply ex_intro.
+  split.
+  unfold worker_loop.
   rewrite_eq_stmt 1.
   apply stmt_unfold_loop.
-  reduce_pair 0 1.
+  inst_bind 1 0.
   reduce_pair 0 1.
   reduce_pair 1 2.
   rewrite_eq_stmt 1.
   apply stmt_fold_loop.
   skip.
+ 
+  trust_me_its_causal.
 Qed.
 
 Definition sendn {T:Type} p m := @s_send T p (m, p_none).
@@ -44,18 +48,20 @@ Definition recvn {T:Type} m := @s_recv T (m, p_none).
 
 Example choice0 :
   [ q [[ s_iter xs (sendn (p_sng me) int; sendn (p_sng me) tt) ]]
-  | me[[ s_iter xs (s_ext_ch (recvn int) (recvn tt);
-                    s_ext_ch (recvn int) (recvn tt)) ]]
+  | me[[ s_iter xs (s_recv_l [((int,p_none), s_skip); ((tt,p_none), s_skip)];
+                    s_recv_l (((int,p_none), s_skip) :: ((tt,p_none), s_skip) :: nil))]]
   ] ===>
   [ q [[ s_skip ]] 
   | me[[ s_skip ]]
   ].
 Proof.
-  choose_left 1.
-  reduce_pair 0 1.
-  choose_right 1.
-  reduce_pair 0 1.
+  (** Rewrite **)
+  begin.
+  reduce_choice 0 1 0.
+  reduce_choice 0 1 1.
   skip.
+  (** Causality **)
+  trust_me_its_causal.
 Qed.
 
 (** 
@@ -83,8 +89,9 @@ Example WorkStealing :
                           s_send (p_sng x) (tt, p_none);
                           s_var X)) ]]
   |{ps} [[ s_loop X (s_send (p_sng q) (id, p_set ps);
-                     s_ext_ch (s_recv (int, p_none); s_send (p_sng me) (int, p_none); s_var X)
-                              (s_recv (tt, p_none))) ]]
+                     s_recv_l ((int, p_none); s_send (p_sng me) (int, p_none); s_var X) ::
+                               (tt, p_none) ::
+                               nil)) ]]
   | me  [[ s_iter xs (s_recv (int, p_none)) ]] ] ===>
  [ q [[ s_skip ]] | { ps } [[ s_skip ]] | me [[ s_skip ]] ].
 Proof.
