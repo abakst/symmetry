@@ -1,12 +1,12 @@
 # Examples
 
-The programs we wish to consider live [here](../examples)
+The programs we wish to consider live [here](examples)
 
 
 
 # Process description language
 
-Taken directly from the Coq [source](../reduce/ProcessRewrite.v):
+Taken directly from the Coq [source](reduce/ProcessRewrite.v):
 
 ~~~~{.coq}
 Parameter T : Type.
