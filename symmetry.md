@@ -2,7 +2,7 @@
 
 ## Process description language
 
-Taken directly from the Coq [source](reduce/ProcessRewrite.v):
+Taken directly from the Coq [source](rewrite/ProcessRewrite.v):
 
 ~~~~{.coq}
 Parameter T : Type.
