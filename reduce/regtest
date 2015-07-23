@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-
-for x in test_*.smt2;
-  do name="${x%.smt2}";
-     echo -ne "${name##test_}: "; 
-     ./runtest $x
-done

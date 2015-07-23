@@ -22,4 +22,4 @@ main :: IO ()
 main = runSession $
   io newRendezvous >>>= \r ->
     (forkSession $ accept r pingSession) >>>= \_ ->
-    request r pongSession
+    request r pingSession

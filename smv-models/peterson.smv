@@ -16,7 +16,8 @@ module main(p, r) {
   {
     next(turn)  := turn;
     next(flag)  := flag;
-    next(state) := state;
+--    next(state) := state;
+    next(state) := CRIT;
   } 
   in case 
   {

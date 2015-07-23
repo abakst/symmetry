@@ -10,59 +10,93 @@ data DBMsg = Alloc Int Int
            | Lookup Int
            | Free
            | Allocated
-             
-{-
-Gᵢ = ∀ c:client. c -> server<DBMsg>; server -> c<DBMsg>
-G = μX. Gᵢ; X.
--}
- 
+
+-- | API
 main :: Int -> IO ()
-main n = do
-  Right t <- createTransport "127.0.0.1" "10501" defaultTCPParameters
-  node <- newLocalNode t initRemoteTable
-  forkProcess node $ do 
-    db <- spawnLocal (database [])
-    replicateM_ n (spawnLocal (client db))
-  terminate
+main n = execProc {- < μX. ∀p. p --> db<...>; db --> p; X > -} mainProc
+    where 
+      {- mainProc :: Process me [] < me ▹ ε
+                                   | db ▹ μX. (TDb p p p p); X 
+                                   | p  ▸ μX. (TClient db); X   
+                                   > 
+                                   ()
+       -}
+      mainProc = do
+        db <- spawnLocal (database [])
+        loop db n
+      {- loop :: Process me < me ▹ ε
+                            | p  ▸ ...μX. (TClient db); X... > -}
+      loop _ 0 = return ()
+      loop db n = do
+        spawnLocal (client db)
+        loop db (n - 1)
+        -- replicateM_ n (spawnLocal (client db))
+  -- do
+  -- Right t <- createTransport "127.0.0.1" "10501" defaultTCPParameters
+  -- node <- newLocalNode t initRemoteTable
+  -- forkProcess node $ do 
+  --   db <- spawnLocal (database [])
+  --   replicateM_ n (spawnLocal (client db))
+  -- terminate
 
 {-
-G|server = μX. Gᵢ|server; X. 
-         = μX. ∀ c:client. ?<c,DBMsg>.!<c,DBMsg>; X.
+Process me < me ▹ μX. ∀abcd. 
+                      { recv(a, (Alloc k v, b)); { send(b, Free)
+                                                 , send(b, Allocated)
+                                                 }
+                      , recv(c, (Lookup k, d)); send(d, Maybe Int)
+                      }; X > ()
 -}
 database db = do
-  receiveWait [\(Alloc k v, p) -> alloc k p
+  -- ?<p, {Alloc k v <p>, Lookup k<p>}>; !<c,{DBMsg, Maybe Int}>; X
+  receiveWait [\Alloc k v, p) -> alloc k p
               ,\(Lookup k, p) -> lkup k p
               ]
     where
-      alloc k p = case lookup k db of
-                    Nothing -> do 
-                      send p Free
-                      database ((k,v) :: db)
-                    _ -> do
-                      send p Allocated
-                      database db
+      alloc k p = 
+        -- !<p, {Free, Allocated}>
+        case lookup k db of
+          Nothing -> do 
+                -- !<p, Free>
+                send p Free
+                -- X
+                database ((k,v) : db)
+          _ -> do
+                -- !<p, Allocated>
+                send p Allocated
+                -- X
+                database db
+
       lkup k p = do 
+         -- !<p, Maybe Int>
          send p (lookup k db)
+         -- X
          database db
                   
 readCmd = undefined
 
 {-
-G↑z:client = T(z) 
-           = μX. (!<server, DBMSG>.?<server, DBMSG> | 
-                ∀ y:client∖z.y -> server<DBMSG>;server->y<DBMSG>↑z:client); X
-           = μX. (!<server, DBMSG>.?<server, DBMSG> | ε) ; X
-           = μX. (!<server, DBMSG>.?<server, DBMSG>) ; X
+db:Pid ->
+Process me [a, b, c] < me ▹ μX. { send(db, (Alloc k v, me)); { recv(a, Free)
+                                                             , recv(b, Allocated)
+                                                             }; X
+                                , send(db, (Lookup k, me)); recv(c, Maybe Int)
+                                }; X > ()
 -}
 client db = do
   cmd <- liftIO readCmd
+  self <- getSelfPid
   case cmd of
     ("i", k) ->
-      send db (Alloc k 0)
+      -- !<db, Alloc k v>
+      send db (Alloc k 0, self)
+      -- ?<db, {Free, Allocated}>
       receiveWait [\Free -> client db
                   ,\Allocated -> client db]
     ("l", k) ->
-      send db (Lookup k)
+      -- !<db, Lookup<self>>
+      send db (Lookup k, self)
+      -- ?<db, {Maybe|isNothing, Just|~isNothing}>
       receiveWait [\Nothing -> client db
                   ,\Just _ -> client db]
   

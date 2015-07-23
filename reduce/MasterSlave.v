@@ -12,7 +12,7 @@ Definition eq_dec_Message : forall (m1 m2 : Message), {m1=m2}+{m1<>m2}.
 Proof. decide equality. Qed.
 
 Example MasterSlave :
-  forall (p : pid) (xs : SetVar) (qs : SetVar),
+  forall (p : pid) (xs qs : Var),
     measure xs = measure qs ->
     [ p    @ [[ s_iter xs (s_recv (Integer, p_none)) ]]
     ; {qs} @ [[ s_send (p_sng p) (Integer, p_none) ]]

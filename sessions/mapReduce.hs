@@ -15,7 +15,12 @@ G = μX. ∀(c:client). s -> c<Map>; c -> s<Reduce>; X.
 
 main = execProc $ do
          self <- getSelfPid
-         spawnMany (client self)
+         -- corresponds to:
+         ps <- spawnMany n (client self)
+         -- c∀(x:client).
+         forM_ ps $ \p ->
+           send p Reduce
+         
  where
    n :: Int
    n = undefined
@@ -28,5 +33,5 @@ G↑p = μX. ((s -> p<Map>. p -> s<Reduce>) ↑ p
     = μX. ?s<Map>; !s<Reduce>; X
 -} 
 client server = 
-  Reduce <- expect
-  send server Map
+  Map <- expect
+  send server Reduce

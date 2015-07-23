@@ -9,22 +9,48 @@ import Bootstrap                        (execProc)
   
 data Message = (Ping ProcessId | Pong ProcessId)
              
-{-@  G ≐ μx.(0 -> 1 : Ping.1 -> 0 : Pong.x) @-}
-main :: IO ()
-main = execProc pingPong
-  where
-    pingPong = do
-      pong <- spawnLocal (pongProc)
-      ping <- spawnLocal (pingProc pong)
+{-@  G ≐ μx.(ping --Ping--> pong . pong -- Pong --> ping . x) @-}
 
-{-@ μx.!<1,Ping>.?<1,Pong>.x @-}
-pingProc pong = forever $ do
-  s <- getSelfPid
-  send pong (Ping s)
-  Pong p <- expect
+main :: IO ()
+main = execProc $ do
+         --  M me < p ▹ recv(q,<Ping q>); send(q,<Pong p>); 0 |
+         --         q ▹ send(p,<Ping q>); recv(p,<Pong p>); 0 |
+         --         me ▹ 0 >.
+         p <- spawnLocal pongProc
+         --  M me < q ▹ send(p,<Ping q>); recv(p,<Pong p>); 0 |
+         --         me ▹ 0 >.
+         q <- spawnLocal (pingProc p)
+         -- M me < 0 >.
+         return ()
            
-{-@ μx.?<0,Ping>.!<0,Pong>.x @-}
-pongProc = forever $ do
+{-
+M me < λxy. me ▹ recv(me,x,<Ping y>); send(me,y,<Pong me>); end >
+-}
+pongProc :: Process ()
+pongProc = do
   s <- getSelfPid
   Ping p <- expect
   send p (Pong s)
+  pongProc
+
+{-
+pong:ProcessId -> 
+M me < ∀xy. send(me,pong,<Ping me>); recv(me,x,<Pong y>)
+-}
+pingProc :: ProcessId -> Process ()
+pingProc pong = forever $ do
+  s <- getSelfPid
+  send pong (Ping s)
+  Pong _ <- expect
+
+
+{-@ pingProc :: pong:ProcessId -> μx. send(v, pong, Ping v) . recv(v, Pong _) . x  @-}
+{-@ μx. recv(v, Ping p) . send(v, p, Pong v) . x @-}
+{- 
+   μx. send(v, pong, Ping v) . recv(v, Pong _) . x
+
+   ||
+
+   μx. recv(v, Ping p)       . send(v, p, Pong v) . x 
+
+-}

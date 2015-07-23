@@ -146,11 +146,21 @@ Section Process.
           EqStmt 
             (s_loop X s)
             (s_seq (s_loop_body X s) (s_loop X s))
+    | stmt_unfold_exit :
+        forall (s : Stmt) (X : MuVar),
+          EqStmt 
+            (s_loop X s)
+            (s_seq (s_loop_end X s) (s_loop X s))
     | stmt_fold_loop :
         forall (s : Stmt) (X : MuVar),
           EqStmt 
             (s_seq (s_loop_body X (s_var X)) (s_loop X s))
             (s_loop X s)
+    | stmt_exit_loop :
+        forall (s : Stmt) (X : MuVar),
+          EqStmt 
+            (s_seq (s_loop_end X s_skip) (s_loop X s))
+            s_skip
     | stmt_set : 
         forall (s : Stmt) (xs xs' : Var),
           ~ set_in xs s -> EqStmt (s_iter xs s) (s_iter xs' s).
@@ -197,14 +207,31 @@ Section Process.
                          | t'     => s_iter xs t'
                        end
       | s_loop_body x t => s_loop_body x (rest_stmt t)
+      | s_loop_end x t  => s_loop_end x (rest_stmt t)
       (* | s_loop x t  => s_loop x (rest_stmt t) *)
       | _           => s_skip
     end.
+
+  Definition seq s1 s2 :=
+    match s2 with 
+      | s_skip => s1
+      | _ => s_seq s1 s2
+    end.
+  
+  (* Definition squish s := *)
+  (*   match s with *)
+  (*     | s_iter _ s_skip => s_skip  *)
+  (*     | s_seq s1 s2 => seq s1 s2 *)
+  (*   end. *)
   
   Fixpoint update_head_stmt h s :=
     match s with
       | s_seq s' t       => s_seq (update_head_stmt h s') t
-      | s_iter xs s'     => s_iter xs (update_head_stmt h s')
+      | s_iter xs s'     => 
+        match update_head_stmt h s' with 
+          | s_skip => s_skip 
+          | s''    => s_iter xs s''
+        end
       | s_loop_body x s' => s_loop_body x (update_head_stmt h s')
       | s_loop_end x s'  => s_loop_end x (update_head_stmt h s')
       | s'               => h
@@ -230,16 +257,23 @@ Section Process.
       | s_send p' m => s_send (subst_pid p q p') (subst_pid_m p q m)
       | s_recv m => s_recv (subst_pid_m p q m)
       | s_seq s' t' => s_seq (subst_stmt p q s') (subst_stmt p q t')
+      | s_loop_body x s' => s_loop_body x (subst_stmt p q s')
+      | s_loop_end x s' => s_loop_end x (subst_stmt p q s')
       | _ => s
     end.
   
   Fixpoint inst_stmt (x : Var) (c : list PidClass) (s : Stmt) :=
     match s with
       | s_recv_x (t,x') s' =>
-        s_recv_l (map (fun p => ((t,p), subst_stmt (p_var x) p s')) c)
+        if eqb_var x x' then
+          s_recv_l (map (fun p => ((t,p), subst_stmt (p_var x) p s')) c)
+        else
+          s_recv_x (t, x') (inst_stmt x c s')
       | s_seq t u => s_seq (inst_stmt x c t) (inst_stmt x c u)
       | s_iter xs s => s_iter xs (inst_stmt x c s)
-      | s_loop y s => s_loop y (inst_stmt x c s)
+      | s_loop_body y s => s_loop_body y (inst_stmt x c s)
+      | s_loop_end y s => s_loop_end y (inst_stmt x c s)
+      (* | s_loop y s => s_loop y (inst_stmt x c s) *)
       | _ => s
     end.
   
@@ -259,29 +293,14 @@ Section Process.
       | (s_recv m, s_send p m') => p = get_pid ps /\ m = m'
       | _ => False
     end.
-  
-  (* Lemma elim_Elim : *)
-  (*   forall ps qs : PidClass * (Stmt * list Context), *)
-  (*     elim ps qs = true -> Elim ps qs. *)
-  (* Proof. *)
-  (*   intros. *)
-  (*   destruct ps as [p [ps pc]]; destruct qs as [q [qs qc]].  *)
-  (*   induction ps; destruct qs; try inversion H. *)
-  (*   unfold elim in H1. *)
-  (*   unfold get_stmt in H1. *)
-  (*   simpl in H1. *)
-  (*   destruct (eq_dec_m m m0). apply eqb_pidclass_eq in H1. subst.   *)
-  (*   cbv. auto. congruence. *)
-  (*   unfold elim in H. unfold get_stmt in H. simpl in H. *)
-  (*   destruct (eq_dec_m m0 m). apply eqb_pidclass_eq in H. subst. *)
-  (*   cbv. auto. congruence. *)
-  (* Qed. *)
     
   Definition MatchCtxt ps qt :=
     match (get_pid ps, get_pid qt, get_ctx ps, get_ctx qt) with
       | (p_sng p', p_sng q', c1, c2) => c1 = c2
       | (p_set ps, p_sng q', [], [Mult ps']) => ps = ps'
       | (p_sng p', p_set qs, [Mult qs'], []) => qs = qs'
+      | (p_set ps, p_sng q, [], [Loop x]) => True
+      | (p_sng p, p_set qs, [Loop x], []) => True
       | (_, _, [Loop x], [Loop x']) => x = x'
       | (_, _, [Loop x], [Mult qs]) => True
       | (_, _, [Mult qs],[Loop x]) => True
@@ -332,34 +351,6 @@ Section Process.
       nth_config c i = Some (p, s) ->
       fst (head_stmt s) = s_recv_x (t, x) s' ->
       RewriteRel [] c (update_nth c i (p, inst_stmt x (dom c) s))
-                 
-  (* | rewrite_exit_loop : *)
-  (*   forall (c : Config) (i : nat) (p : PidClass) (s t : Stmt) (X : MuVar), *)
-  (*     nth_config c i = Some (p, s) -> *)
-  (*     fst (head_stmt s) = s_loop X t -> *)
-  (*     RewriteRel c (update_nth c i (p, s_loop_end X t)) *)
-                 
-  (* | rewrite_ext_choice_l : *)
-  (*     forall (c : Config) (i : nat) (p : PidClass) (s t u : Stmt), *)
-  (*       nth_config c i = Some (p, s) -> *)
-  (*       fst (head_stmt s) = s_ext_ch t u -> *)
-  (*       RewriteRel c (update_nth c i (p, update_head_stmt t s)) *)
-
-  (* | rewrite_ext_choice_r : *)
-  (*     forall (c : Config) (i : nat) (p : PidClass) (s t u : Stmt), *)
-  (*       nth_config c i = Some (p, s) -> *)
-  (*       fst (head_stmt s) = s_ext_ch t u -> *)
-  (*       RewriteRel c (update_nth c i (p, update_head_stmt u s)) *)
-
-  (* | rewrite_bind : *)
-  (*   forall (c : Config) (i j : nat) (p q x a : PidClass) (s t tt : Stmt), *)
-  (*     nth_config c i = Some (p, s) -> *)
-  (*     nth_config c j = Some (q, t) -> *)
-  (*     fst (head_stmt t) = s_bind x tt -> *)
-  (*     Elim (p, head_stmt s) (q, head_stmt (subst_stmt x a tt)) -> *)
-  (*     MatchCtxt (p, head_stmt s) (q, head_stmt t) -> *)
-  (*     RewriteRel [tr_choose p q] c (update_nth (update_nth c j (q, rest_stmt (inst_stmt x a t)))  *)
-  (*                                                          i (p, rest_stmt s)) *)
 
   | rewrite_choice :
     forall (c : Config) (i j k : nat) (p q : PidClass) (s t : Stmt) (mu : M * Stmt)
@@ -416,15 +407,31 @@ Section Process.
     end.
   
   Definition ClocksLt (cs cs' : ClockV) (i j : PidClass) :=
-    (forall x, cs i x <= cs' j x) /\ (exists x, cs i x < cs' j x).
+    (forall x, cs i x <= cs' j x) /\ 
+    (exists x, cs i (p_sng x) < cs' j (p_sng x)).
   
-  Definition Overlap (x y : list M) := False.
+  Definition Overlap (x y : list M) := 
+    exists i j, In i x /\ In i y /\ ~ In j x \/ ~ In j y.
+  
+  Definition SameProcs (p1 p2 : PidClass) :=
+    match p1, p2 with
+    | p_sng a, p_sng b   => a  = b
+    | p_set xs, p_set ys => xs = ys
+    | _, _ => True
+    end.
+  
+  Definition DistinctProcs (p1 p2 : PidClass) :=
+    match p1, p2 with
+    | p_sng a, p_sng b => a <> b
+    | p_set xs, p_set ys => xs <> ys
+    | _, _ => True
+    end.
   
   Definition NoRaces (e : (Event * ClockV)) (es : list (Event * ClockV)) :=
     Forall (fun e' => 
               match fst e, fst e' with
                 | tr_choose a b s, tr_choose a' b' s' =>
-                  a <> a' /\ b = b' /\
+                  DistinctProcs a a' /\ SameProcs b b' /\
                   map snd s <> map snd s' /\
                   Overlap (map fst s) (map fst s')
                   -> ClocksLt (snd e) (snd e') a a'
@@ -564,12 +571,6 @@ Fixpoint seq_stmts ss :=
     | s::nil => s
     | (s::ss) => s_seq s (seq_stmts ss)
   end.
-
-Definition seq s1 s2 :=
-  match s2 with 
-    | s_skip => s1
-    | _ => s_seq s1 s2
-  end.
 End Process.
 Hint Constructors RewriteRel : rewrite.
 
@@ -586,4 +587,4 @@ Notation "P @ S" := (p_sng P, S) (at level 80).
 Notation "{ P } @ S " := (p_set P, S) (at level 80).
 Notation "C1 ===> C2 + T " := (RewriteRel T C1 C2) (at level 95).
 Notation "C1 ===> C2 " := (exists T, RewriteRel T C1 C2 /\ Causal T) (at level 95).
-Notation "X ~ recv( T ) S" := (s_recv_x (X, T) S) (at level 60).
+Notation "X ~ recv( T ) S" := (s_recv_x (T, X) S) (at level 60).
