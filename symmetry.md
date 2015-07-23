@@ -54,6 +54,13 @@ runProcess :: Process a -> IO a
 -- | Block until a value of type a is available, and return it
 recv :: Process a
 
+-- | External choice between two processes
+offer :: Process a -> Process b -> Process ()
+
+-- probably not plausible, but ideal:
+match :: (a -> Process b) -> Match
+recvWait :: [Match] -> Process b
+
 -- | Send a message of type a to p
 send :: Pid -> a -> Process ()
 
