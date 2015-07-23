@@ -1,4 +1,6 @@
-# Process description language
+# Communicating Symmetric Processes
+
+## Process description language
 
 Taken directly from the Coq [source](reduce/ProcessRewrite.v):
 
@@ -33,13 +35,13 @@ The three receive forms are:
 
 - `s_recv_x`: receive a Pid. This corresponds to "∀x. recv(x)", for example
 
-# Examples
+## Examples
 
 The programs we wish to consider live [here](examples), and are
 mostly annotated with notes corresponding to plausible process
 descriptions that should match up with the above language.
 
-# Proposed basic API
+## Proposed basic API
 
 ~~~~{.haskell}
 
