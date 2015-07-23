@@ -58,6 +58,9 @@ send :: Pid -> a -> Process ()
 -- | Sequence two processes
 seq :: Process a -> (a -> Process b) -> Process b
 
+-- | Spawn a process
+spawn :: Process a -> Process Pid
+
 -- | Loop forever
 forever :: Process a -> Process ()
 
