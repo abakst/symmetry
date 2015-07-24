@@ -10,20 +10,41 @@ Parameter T : Type.
 Definition M := (T * PidClass).
 
 Inductive Stmt : Type :=
+(* ε *)
 | s_skip  : Stmt
+
+(* send(p, t) *)
 | s_send  : PidClass -> M -> Stmt
+
+(* recv(t) *)
 | s_recv  : M -> Stmt
+
+(* s1; s2 *)
 | s_seq   : Stmt -> Stmt -> Stmt
+
+(* { recv(t1); s1... , recv(t2); s2... } *)
 | s_recv_l: list (M * Stmt) -> Stmt
+
+(* ∀x. recv(t) *)
 | s_recv_x: (T * Var) -> Stmt -> Stmt
+
+(* foreach (x ∈ xs) *)
 | s_iter  : Var -> Stmt -> Stmt
+
+(* μX. s *)
 | s_loop  : MuVar -> Stmt -> Stmt
+
+(* X *)
 | s_var   : MuVar -> Stmt
-(* These statements below never appear in original programs *)
+
+(* These statements below never appear in "original" programs *)
 | s_loop_body : MuVar -> Stmt -> Stmt
 | s_loop_end  : MuVar -> Stmt -> Stmt.
 
+(* p ▹ s *)
 Definition Process := (PidClass * Stmt).
+
+(* p ▹ s | q ▹ r | ... *)
 Definition Config := list Process.
 ~~~~
 
