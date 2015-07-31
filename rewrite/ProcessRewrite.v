@@ -63,7 +63,7 @@ Section Process.
   Definition subst_pid_m (p1 : PidClass) (p2 : PidClass) (m : M) :=
     match (p1, m) with
       | (p_sng pid1, (t, p_sng pid2)) => 
-        if eq_dec_pid pid1 pid2 then
+        if Nat.eqb pid1 pid2 then
           (t, p2)
           else m
       | _ =>  m

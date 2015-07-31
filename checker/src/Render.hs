@@ -25,7 +25,7 @@ seqStmts ss = vcat . punctuate semi $ ss
 renderProcPrefix :: Pid -> Doc 
 renderProcPrefix (PConc _)      = text "Proc_"
 renderProcPrefix (PAbs _ (S s)) = text s
-renderProcPrefix (PVar _)       = text "Proc_"
+renderProcPrefix (PVar _)       = empty
 
 renderProcName :: Pid -> Doc
 renderProcName p@(PConc i)      = renderProcPrefix p <> int i
@@ -124,9 +124,11 @@ renderStmtConc f me (SSkip a)
   = text "skip"
     
 renderStmtConc f me (SIter (V v) (S s) ss _)
-  = text "int" <+> text v <> semi <$>
-    text "for" <+> parens (text v <+> text "in" <+> text s) <> text "{"
-    $$ (vcat $ map (renderStmt f me) ss)
+  = text "int" <+> text ("__" ++ v) <> semi <$>
+    text "int" <+> text v <> semi <$> 
+    text "for" <+> parens (text ("__" ++ v) <+> text "in" <+> text s) <> text "{"
+    $$ (text v <+> equals <+> renderProcName (PAbs (V ("__" ++ v)) (S s)) <> semi <$>
+       (seqStmts $ map (renderStmt f me) ss))
     <$> text "}"
         
 renderStmtConc f me (SLoop (V v) ss _)
@@ -169,16 +171,21 @@ renderMain pidmap (Config ts _ ps)
   = text "init" <+> block body
   where
     body              = declAbsVars ++
-                        [ atomic boardInits
+                        [ atomic pidInits
+                        , atomic boardInits
                         , atomic procInits
                         ]
     declAbsVars       = [ text "int" <+> text v | PAbs (V v) _ <- map fst ps ]
     boardInits        = do p <- ps
                            t <- ts
                            return $ initSwitchboard (length ts) (fst p) t
-    go (PConc _) _ x  = x + 1
-    go (PAbs _ _) _ x = x + setSize
-    procInits         = map (runProc . fst) ps
+    go p _ x  = x + sz p
+    procInits = map (runProc . fst) ps
+    pidInits  = fst $ foldl' (\(d,i) p -> 
+                                (renderProcVar p i : d, i + sz p)) 
+                             ([], 0) (map fst ps)
+    sz (PConc _) = 1
+    sz (PAbs _ _) = setSize
                         
 
 runProc p@(PConc _) 
@@ -195,10 +202,9 @@ runProc p@(PAbs (V v) (S s) )
 
 renderProcVar :: Pid -> Int -> Doc                  
 renderProcVar (PConc x) i
-  = renderProcAssn (renderProcName (PConc x)) (int i)
+  = (renderProcName (PConc x)) <+> equals <+> (int i)
 renderProcVar (PAbs v (S s)) i
-  = text "int" <+> text s <> brackets (text "__K__") <+> semi
-    <$> seqStmts (map (uncurry go) (zip [0..4] [i..]))
+  = seqStmts (map (uncurry go) (zip [0..setSize-1] [i..]))
   where
     go i j = text s <> brackets (int i) <+> equals <+> int j
 
@@ -261,53 +267,3 @@ render c@(Config ts ss ps)
     pidMap   = buildPidMap (map fst ps)
     mtype    = renderMTypes ts
     procs    = renderProcs c
-
----
-
-mPing v = MTApp (MTyCon "Ping") [v]
-mPong v = MTApp (MTyCon "Pong") [v]
-          
-tpid0 = PConc 0
-tpid1 = PConc 1
-tpid2 = PAbs (V "p") (S "ps")
-        
-pvar x = PVar (V x)
-         
-test0 = Config {
-  cTypes = [mPing (pvar "x"), mPong (pvar "x"), MTApp (MTyCon "Unit") []]
-  , cSets  = []
-  , cProcs = [(tpid0, [SSend tpid1 [(mPing tpid0, [SRecv [(mPong (pvar "x"), [])] ()])] ()])
-             ,(tpid1, [SRecv [(mPing (pvar "x"), [SSend (pvar "x") [(mPong tpid1, [])] ()])] ()])]
-}
-
-test0a = Config {
-  cTypes = [mPing (pvar "x"), mPong (pvar "x"), MTApp (MTyCon "Unit") []]
-  , cSets  = []
-  , cProcs = [(tpid0, 
-                    [SLoop (V "X")
-                      [SSend tpid1 [(mPing tpid0, [SRecv [(mPong (pvar "x"), [SVar (V "X") ()])] ()])] ()] ()])
-             ,(tpid1, 
-                    [SLoop (V "Y")
-                      [SRecv [(mPing (pvar "x"), [SSend (pvar "x") [(mPong tpid1, [SVar (V "Y") ()])] ()])] ()] ()])]
-}
-
-test1= Config {
-  cTypes = [mPing (pvar "x"), mPong (pvar "x"), MTApp (MTyCon "Unit") []]
-  , cSets  = []
-  , cProcs = [(tpid0, [
-                SIter (V "pi") (S "ps") 
-                        [SSend (PAbs (V "pi") (S "ps")) [(mPing tpid0, [SRecv [(mPong (pvar "x"), [])] ()])] ()] ()
-               ])
-             ,(tpid2, [SRecv [(mPing (pvar "x"), [SSend (pvar "x") [(mPong tpid2, [])] ()])] ()])]
-}
-
-test2= Config {
-  cTypes = [mPing (pvar "x"), mPong (pvar "x"), MTApp (MTyCon "Unit") []]
-  , cSets  = []
-  , cProcs = [(tpid0, [
-                SChoose (V "pi") (S "ps") 
-                        [SSend (pvar "pi") [(mPing tpid0, [SRecv [(mPong (pvar "x"), [])] ()])] ()] ()
-               ])
-             ,(tpid2, [SLoop (V "X")
-                        [SRecv [(mPing (pvar "x"), [SSend (pvar "x") [(mPong tpid2, [SVar (V "X") ()])] ()])] ()] ()])]
-}
