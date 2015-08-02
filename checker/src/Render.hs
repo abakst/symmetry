@@ -143,7 +143,7 @@ renderStmtConc f me (SChoose (V v) s ss _)
           , text "select" <+> 
             parens (text v <+> text ":" <+> int 0 <+> text ".." <+> 
                                    int (setSize-1))
-          , text "int" <+> renderProcName (PVar (V v)) <+> equals <+> renderProcName (PAbs (V v) s)
+          , renderProcName (PVar (V v)) <+> equals <+> renderProcName (PAbs (V v) s)
           , (block $ map (renderStmt f me) ss)
           ]
     
