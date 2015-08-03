@@ -11,46 +11,68 @@ import           Data.Functor
 import           Control.Applicative
 import           Control.Monad.State hiding (mapM)
 import           Data.Typeable
-import qualified Data.IntMap as M
+import           Data.Generics
   
 data Set = S String
-           deriving (Ord, Eq, Read, Show)
+           deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data Var = V String
-           deriving (Ord, Eq, Read, Show)
+           deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 newtype MTyCon = MTyCon { untycon :: String }
-  deriving (Ord, Eq, Read, Show)
+  deriving (Ord, Eq, Read, Show, Typeable, Data)
+  
+data Pid = PConc Int
+         | PAbs { absVar :: Var, absSet :: Set }
+         | PVar Var
+           deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data MType = MTApp { tycon :: MTyCon
                    , tyargs :: [Pid]
                    }
-           deriving (Ord, Eq, Read, Show)
-  
-data Pid = PConc Int
-         | PAbs Var Set
-         | PVar Var
-           deriving (Ord, Eq, Read, Show, Typeable)
+           deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data Stmt a = SSkip a
-            | SSend Pid [(MType, [Stmt a])] a
-            | SRecv [(MType, [Stmt a])] a
-            | SIter Var Set [Stmt a] a
-            | SLoop Var [Stmt a] a
-            | SChoose Var Set [Stmt a] a
+            | SBlock [Stmt a] a
+            | SSend Pid [(MType, Stmt a)] a
+            | SRecv [(MType, Stmt a)] a
+            | SIter Var Set (Stmt a) a
+            | SLoop Var (Stmt a) a
+            | SChoose Var Set (Stmt a) a
             | SVar Var a
             {- These do not appear in the source: -}
             | SVarDecl Var a
             | STest Var a
             | SNonDet [Stmt a]
-         deriving (Eq, Read, Show, Functor, Foldable, Traversable, Typeable)
+         deriving (Eq, Read, Show, Functor, Foldable, Data, Typeable)
                   
-type Process a = (Pid, [Stmt a])
+instance Traversable Stmt where
+  traverse f (SSkip a) 
+    = SSkip <$> f a
+  traverse f (SSend p ms a) 
+    = flip (SSend p) <$> f a <*> traverse (traverse (traverse f)) ms
+  traverse f (SRecv ms a)
+    = flip SRecv <$> f a <*> traverse (traverse (traverse f)) ms
+  traverse f (SIter v s ss a) 
+    = flip (SIter v s) <$> f a <*> (traverse f) ss
+  traverse f (SLoop v ss a) 
+    = flip (SLoop v) <$> f a <*> (traverse f) ss
+  traverse f (SChoose v s ss a) 
+    = flip (SChoose v s) <$> f a <*> (traverse f) ss
+  traverse f (SVar v a)
+    = SVar v <$> f a
+  traverse f (SBlock ss a)
+    = flip SBlock <$> f a <*> traverse (traverse f) ss
+  traverse _ _
+    = error "traverse undefined for non-source stmts"
+    
+type Process a = (Pid, Stmt a)
 
 data Config a = Config { 
-    cTypes :: [MType]
-  , cSets  :: [Set]
-  , cProcs :: [Process a]
+    cTypes  :: [MType]
+  , cSets   :: [Set]
+  , cUnfold :: [Pid]
+  , cProcs  :: [Process a]
   } deriving (Eq, Read, Show, Typeable)
 
 -- | Operations
@@ -61,26 +83,6 @@ freshId s
     fr = do n <- get
             put (n + 1)
             return n
-      
--- buildMap :: Stmt a -> Writer
-            
-
--- nextMap :: [Stmt Int] -> M.IntMap [Int]
--- nextMap ss
---   = mapM go ss
---   where
---     go s
-{-
-L0:
-send;
-L1:
-recv;
-L2:   
-for ...:
-  L3:
-  send; 
-  L4:
-  recv;
-L5:
-send;
--}
+                   
+freshIds :: Stmt a -> Stmt Int
+freshIds ss = evalState (freshId ss) 1
