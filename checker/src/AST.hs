@@ -4,14 +4,15 @@
 {-# LANGUAGE DeriveFunctor #-}
 module AST where
 
-import           Prelude hiding (mapM)  
-import           Data.Traversable
+import           Prelude hiding (concatMap, mapM, foldl, concat)  
+import           Data.Traversable 
 import           Data.Foldable
-import           Data.Functor
+import           Data.Functor 
 import           Control.Applicative
 import           Control.Monad.State hiding (mapM)
 import           Data.Typeable
 import           Data.Generics
+import qualified Data.Map.Strict as M
   
 data Set = S String
            deriving (Ord, Eq, Read, Show, Typeable, Data)
@@ -24,8 +25,16 @@ newtype MTyCon = MTyCon { untycon :: String }
   
 data Pid = PConc Int
          | PAbs { absVar :: Var, absSet :: Set }
+         {- These do not appear in configurations: -}
+         | PUnfold Var Set Int
          | PVar Var
            deriving (Ord, Eq, Read, Show, Typeable, Data)
+
+isUnfold (PUnfold _ _ _)  = True
+isUnfold _                = False
+
+isAbs (PAbs _ _)        = True
+isAbs _                 = False
 
 data MType = MTApp { tycon :: MTyCon
                    , tyargs :: [Pid]
@@ -46,6 +55,53 @@ data Stmt a = SSkip a
             | SNonDet [Stmt a]
          deriving (Eq, Read, Show, Functor, Foldable, Data, Typeable)
                   
+-- | Unfold
+unfold :: Config a -> Config a
+unfold c@(Config { cUnfold = us, cProcs = ps })
+  = c { cProcs = ps ++ ufprocs }
+  where
+    mkUnfold v s stmt i = (PUnfold v s i, stmt)
+    ufprocs = [ (mkUnfold v s stmt j) | Conc s i <- us
+                                      , ((PAbs v s'), stmt) <- ps
+                                      , s == s'
+                                      , j <- [0..i-1]]
+              
+-- | Substitution of PidVars for Pids
+type Subst = [(Var, Pid)]
+  
+restrict :: Var -> Subst -> Subst
+restrict x s = [(v, q) | (v, q) <- s, v /= x]
+  
+subst :: Subst -> Stmt a -> Stmt a
+subst s (SBlock ss a)    = SBlock (map (subst s) ss) a
+subst s (SSend p ms a)   = SSend (substPid s p) (map (substMS s) ms) a
+subst s (SRecv ms a)     = SRecv (map (substMS s) ms) a
+subst s (SIter v xs t a) = SIter v xs (subst s' t) a
+  where s'               = restrict v s
+subst s (SLoop v t a)    = SLoop v (subst s t) a
+subst _ stmt             = stmt
+       
+substMS :: Subst -> (MType, Stmt a) -> (MType, Stmt a)        
+substMS s (MTApp tc as, t) 
+  = (MTApp tc (map (substPid s) as), subst s t)
+   
+substPid :: Subst -> Pid -> Pid 
+substPid s p@(PVar v) = maybe p id $ lookup v s 
+substPid _ p          = p
+                  
+
+-- | Statement Annotations
+annot :: Show a => Stmt a -> a
+annot (SSkip a)         = a
+annot (SBlock _ a)      = a
+annot (SSend _ _ a)     = a
+annot (SRecv _ a)       = a
+annot (SIter _ _ _ a)   = a
+annot (SChoose _ _ _ a) = a
+annot (SVar _ a)        = a
+annot x                 = error ("annot: TBD " ++ show x)
+                          
+-- | Typeclass tomfoolery
 instance Traversable Stmt where
   traverse f (SSkip a) 
     = SSkip <$> f a
@@ -67,13 +123,50 @@ instance Traversable Stmt where
     = error "traverse undefined for non-source stmts"
     
 type Process a = (Pid, Stmt a)
+data Unfold = Conc Set Int deriving (Eq, Read, Show, Data, Typeable)
 
+joinMaps :: M.Map Int [a] -> M.Map Int [a] -> M.Map Int [a]       
+joinMaps = M.unionWith (++)     
+           
+addNext :: Int -> [a] -> M.Map Int [a] -> M.Map Int [a]
+addNext i is = M.alter (fmap (++is)) i
+               
+lastStmts :: Stmt a -> [Stmt a]
+lastStmts s@(SSkip _)       = [s]
+lastStmts s@(SVar _ _)      = [s]
+lastStmts (SBlock ss _)     = [last ss]
+lastStmts (SSend _ ms _)    = concatMap (lastStmts . snd) ms
+lastStmts (SRecv ms _)      = concatMap (lastStmts . snd) ms
+lastStmts (SChoose _ _ s _) = lastStmts s
+lastStmts (SIter _ _ s _)   = lastStmts s
+lastStmts (SLoop _ s _)     = lastStmts s
+
+nextStmts :: Stmt Int -> M.Map Int [Int]
+nextStmts (SSend _ ms i)
+  = foldl (\m -> joinMaps m . nextStmts) (M.fromList [(i, map (annot . snd) ms)])$ map snd ms
+nextStmts (SRecv ms i)
+  = foldl (\m -> joinMaps m . nextStmts) (M.fromList [(i, map (annot . snd) ms)])$ map snd ms
+nextStmts (SIter _ _ s i) 
+  = M.fromList ((i, [annot s]):[(annot j, [i]) | j <- lastStmts s])  `joinMaps` nextStmts s
+nextStmts (SLoop v s i)
+  = M.fromList ((i, [annot s]):[(j, [i]) | j <- js ]) `joinMaps` nextStmts s
+  where
+    js = [ j | SVar v' j <- listify (const True) s, v' == v]
+nextStmts (SChoose _ _ s i)
+  = addNext i [annot s] $ nextStmts s
+nextStmts _
+  = M.empty
+    
 data Config a = Config { 
     cTypes  :: [MType]
   , cSets   :: [Set]
-  , cUnfold :: [Pid]
+  , cUnfold :: [Unfold]
   , cProcs  :: [Process a]
   } deriving (Eq, Read, Show, Typeable)
+              
+substConfig :: Subst -> Config a -> Config a
+substConfig s c
+  = c { cProcs = map (fmap (subst s)) $ cProcs c }
 
 -- | Operations
 freshId :: Stmt a -> State Int (Stmt Int)
