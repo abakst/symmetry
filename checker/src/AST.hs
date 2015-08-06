@@ -19,6 +19,9 @@ data Set = S String
 
 data Var = V String
            deriving (Ord, Eq, Read, Show, Typeable, Data)
+                    
+data LVar = LV String
+           deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 newtype MTyCon = MTyCon { untycon :: String }
   deriving (Ord, Eq, Read, Show, Typeable, Data)
@@ -30,9 +33,11 @@ data Pid = PConc Int
          | PVar Var
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
+isUnfold :: Pid -> Bool
 isUnfold (PUnfold _ _ _)  = True
 isUnfold _                = False
 
+isAbs :: Pid -> Bool
 isAbs (PAbs _ _)        = True
 isAbs _                 = False
 
@@ -46,9 +51,9 @@ data Stmt a = SSkip a
             | SSend Pid [(MType, Stmt a)] a
             | SRecv [(MType, Stmt a)] a
             | SIter Var Set (Stmt a) a
-            | SLoop Var (Stmt a) a
+            | SLoop LVar (Stmt a) a
             | SChoose Var Set (Stmt a) a
-            | SVar Var a
+            | SVar LVar a
             {- These do not appear in the source: -}
             | SVarDecl Var a
             | STest Var a
@@ -61,10 +66,48 @@ unfold c@(Config { cUnfold = us, cProcs = ps })
   = c { cProcs = ps ++ ufprocs }
   where
     mkUnfold v s stmt i = (PUnfold v s i, stmt)
-    ufprocs = [ (mkUnfold v s stmt j) | Conc s i <- us
-                                      , ((PAbs v s'), stmt) <- ps
-                                      , s == s'
-                                      , j <- [0..i-1]]
+    ufprocs             = [ (mkUnfold v s stmt j) | Conc s i <- us
+                                                  , ((PAbs v s'), stmt) <- ps
+                                                  , s == s'
+                                                  , j <- [0..i-1]]
+      
+instStmt :: [Pid] -> Stmt a -> Stmt a 
+-- Interesting Cases
+instStmt dom (SRecv mts a) 
+  = SRecv (concatMap (instMS dom) mts) a
+instStmt dom (SSend p mts a) 
+  = SSend p (concatMap (instMS dom) mts) a
+-- Not so interesting cases:
+instStmt _ (SSkip a) 
+  = SSkip a
+instStmt dom (SBlock ss a) 
+  = SBlock (map (instStmt dom) ss) a
+instStmt dom (SIter v s t a)
+  = SIter v s (instStmt dom t) a
+instStmt dom (SLoop v s a)
+  = SLoop v (instStmt dom s) a
+instStmt dom (SChoose v s t a)
+  = SChoose v s (instStmt dom t) a
+instStmt _ (SVar v a)
+  = SVar v a
+         
+instMS :: [Pid] -> (MType, Stmt a) -> [(MType, Stmt a)]
+instMS dom (m@(MTApp _ xs), s) 
+  = foldl' doAllSubs [(m,s)] [ v | PVar v <- xs ]
+  where
+    doAllSubs :: [(MType, Stmt a)] -> Var -> [(MType, Stmt a)]
+    doAllSubs ms x = concat [ map (substMS i) ms | i <- subs x ]
+    subs :: Var -> [Subst]
+    subs x = [ [(x, q)] | q <- dom ]
+  
+instAbs :: Config a -> Config a       
+instAbs c@(Config { cProcs = ps })
+  = c { cProcs = map (inst1Abs dom) ps }
+  where
+    dom                          = map fst ps
+    inst1Abs d (p@(PAbs _ _), s) = (p, instStmt d s)
+    inst1Abs _ p                 = p
+
               
 -- | Substitution of PidVars for Pids
 type Subst = [(Var, Pid)]
@@ -164,10 +207,6 @@ data Config a = Config {
   , cProcs  :: [Process a]
   } deriving (Eq, Read, Show, Typeable)
               
-substConfig :: Subst -> Config a -> Config a
-substConfig s c
-  = c { cProcs = map (fmap (subst s)) $ cProcs c }
-
 -- | Operations
 freshId :: Stmt a -> State Int (Stmt Int)
 freshId s

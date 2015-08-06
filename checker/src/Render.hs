@@ -9,6 +9,7 @@ import qualified Data.Map.Strict as M
 import           Data.List (groupBy, nub, partition)
 import           Data.Generics hiding (empty)
 import           Control.Exception
+import           System.IO
 
 import           AST  
 
@@ -73,6 +74,17 @@ renderProcTypeArgs :: Pid -> Doc
 renderProcTypeArgs (PConc _)          = parens empty
 renderProcTypeArgs (PUnfold (V v) _ _) = parens (text "int" <+> text v)
 renderProcTypeArgs (PAbs (V v) _)     = parens (text "int" <+> text v)
+                                        
+evalExp :: Doc -> Doc
+evalExp e = text "eval" <> parens e
+
+renderEvalPids  :: MType -> [Doc]
+renderEvalPids
+  = map go . tyargs
+  where 
+    go p@(PVar _) = renderProcName p
+    go p@(PUnfold _ _ i) = evalExp (renderProcPrefix p <> brackets (int (i+setSize)))
+    go p = evalExp (renderProcName p)
 
 renderPids  :: MType -> [Doc]
 renderPids
@@ -82,10 +94,14 @@ renderPids
 renderMType :: MType -> Doc
 renderMType 
   = text . untycon . tycon
-             
-renderMsg :: MType -> Doc 
-renderMsg m 
+    
+renderSendMsg :: MType -> Doc
+renderSendMsg m
   = hcat $ punctuate comma (renderMType m : renderPids m)
+             
+renderRecvMsg :: MType -> Doc 
+renderRecvMsg m 
+  = hcat $ punctuate comma (renderMType m : renderEvalPids m)
 
 renderMTypes :: [MType] -> Doc
 renderMTypes ts
@@ -149,11 +165,11 @@ renderStmt f pm p s                   = renderStmtAbs  f pm cfg p s
         
 sendMsg :: ChanMap -> Pid -> MType -> Doc 
 sendMsg f p m
-  = f p m <> text "!" <> renderMsg m
+  = f p m <> text "!" <> renderSendMsg m
 
 recvMsg :: ChanMap -> Pid -> MType -> Doc 
 recvMsg f p m
-  = f p m <> text "?" <> renderMsg m
+  = f p m <> text "?" <> renderRecvMsg m
                    
 renderStmtConc :: ChanMap -> SetMap -> Pid -> Stmt Int -> Doc
 renderStmtConc f pm me (SSend p [(m,s)] _)
@@ -193,10 +209,10 @@ renderStmtConc f pm me (SIter (V v) (S s) ss _)
             (text v <+> equals <+> renderProcName (PAbs (V ("__" ++ v)) (S s)) <> semi <$>
              renderStmt f pm me ss)
         
-renderStmtConc f pm me (SLoop (V v) ss _)
+renderStmtConc f pm me (SLoop (LV v) ss _)
   = text v <> text ":" <$> renderStmt f pm me ss
      
-renderStmtConc _ _ _ (SVar (V v) _)
+renderStmtConc _ _ _ (SVar (LV v) _)
   = text "goto" <+> text v 
     
 renderStmtConc f pm me (SChoose (V v) s ss _)
@@ -265,7 +281,7 @@ renderStmtAbs f pm cfg me (SRecv ms i)
   where
     outms = assert (length ms == length outcs) $ zip ms outcs
     outcs = outCounters cfg i
-    render1 m oc = recvGuard f me [m] <+> text "->" <$>
+    render1 m oc = {- recvGuard f me [m] <+> text "->" <$> -}
                       block ((renderStmtConc f pm me $ SRecv [m] i) : [decrCounter i, oc])
                             
 renderStmtAbs _ _ cfg _ (SVar _ i)
@@ -388,17 +404,12 @@ runProc _ p@(PConc _)
     renderProcTypeName p <>
     parens empty
 
-runProc m p@(PAbs (V v) (S s) )
-  = text "run" <+> renderProcTypeName p <> parens (int i)
+runProc _ p@(PAbs _ _)
+  = text "run" <+> renderProcTypeName p <> parens (int 0)
   where
-    (i, _) = maybe err id $ M.lookup p m
-    err     = error ("Unknown pid (runProc): " ++ show p)
               
-runProc m p@(PUnfold _ _ i)
-  = text "run" <+> renderProcTypeName p <> parens (int (v + i))
-    where
-    (v, _) = maybe err id $ M.lookup p m
-    err    = error ("Unknown pid (runProc): " ++ show p)
+runProc _ p@(PUnfold _ _ i)
+  = text "run" <+> renderProcTypeName p <> parens (int i)
 
 renderProcVar :: Pid -> (Int, Int) -> Doc                  
 renderProcVar (PConc x) (i, _)
@@ -420,7 +431,7 @@ declProcVar p@(PConc _) _
   = renderProcDecl (renderProcName p) <> semi
 declProcVar p@(PAbs (V _) (S _)) (_, sz)
   = renderProcDecl (renderProcPrefix  p) <> brackets (int sz) <> semi
-declProcVar p@(PUnfold (V _) (S _) i) (_, sz)
+declProcVar p@(PUnfold (V _) (S _) _) _
   = renderProcDecl (unfoldProcVar p) <> semi 
              
 declProcVars :: PidMap -> Doc
@@ -467,13 +478,7 @@ updUnfold (m, i) p@(PUnfold v s _)
       upd (a,b) (_,d) = (a, b+d)
       j               = maybe err (succ . fst) $ M.lookup (PAbs v s) m
       err             = error ("Unknown pid (updUnfold): " ++ show p)
-{-
-(5, 4)
-5 
-5 
-6 
-7 
--}
+
 declSwitchboard :: PidMap -> [MType] -> Doc
 declSwitchboard pm ts
   = renderSwitchboard nprocs (length ts)
@@ -498,7 +503,11 @@ render c@(Config { cTypes = ts })
     unfolded                 = unfold c
     pidMap                   = buildPidMap unfolded
     mtype                    = renderMTypes ts
-    procs                    = renderProcs unfolded setMap
+    procs                    = renderProcs (instAbs unfolded) setMap
     setMap                   = M.foldrWithKey goKey M.empty pidMap
     goKey (PAbs _ s) (_,n) m = M.insert s n m
     goKey _          _     m = m
+
+renderToFile :: Show a => FilePath -> Config a -> IO ()
+renderToFile fn c
+  = withFile fn WriteMode $ flip hPutDoc (render c)
