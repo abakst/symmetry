@@ -12,6 +12,7 @@ import           Control.Applicative
 import           Control.Monad.State hiding (mapM)
 import           Data.Typeable
 import           Data.Generics
+import           Data.List (nub, isPrefixOf)
 import qualified Data.Map.Strict as M
   
 data Set = S String
@@ -20,7 +21,7 @@ data Set = S String
 data Var = V String
            deriving (Ord, Eq, Read, Show, Typeable, Data)
                     
-data LVar = LV String
+data LVar = LV { unlv :: String }
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 newtype MTyCon = MTyCon { untycon :: String }
@@ -59,6 +60,25 @@ data Stmt a = SSkip a
             | STest Var a
             | SNonDet [Stmt a]
          deriving (Eq, Read, Show, Functor, Foldable, Data, Typeable)
+                 
+endLabels :: (Data a, Typeable a) => Stmt a -> [LVar] 
+endLabels = nub . listify (isPrefixOf "end" . unlv)
+                  
+-- | Mark End
+-- apLast :: (a -> a) -> [a] -> [a]
+-- apLast f [x]    = [f x]
+-- apLast f (x:xs) = x : apLast f xs
+
+-- markEnd :: Stmt a -> Stmt a
+-- markEnd (SBlock ss a)
+--   = SBlock (apLast markEnd ss) a
+-- markEnd (SSend p mts a)
+--   = SSend p ((markEnd <$>) <$> mts) a
+-- markEnd (SRecv mts a)
+--   = SRecv ((markEnd <$>) <$> mts) a
+-- markEnd (SIter v i s a)
+--   = SIter v i (markEnd s) a
+-- markEnd (SLoop 
                   
 -- | Unfold
 unfold :: Config a -> Config a
@@ -216,5 +236,6 @@ freshId s
             put (n + 1)
             return n
                    
-freshIds :: Stmt a -> Stmt Int
-freshIds ss = evalState (freshId ss) 1
+freshIds :: Config a -> Config Int
+freshIds (c @ Config { cProcs = ps })
+  = c { cProcs = evalState (mapM (mapM freshId) ps) 0 }
