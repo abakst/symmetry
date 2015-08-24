@@ -1,5 +1,5 @@
-data Message = Ping ProcessId
-             | Pong ProcessId
+data Message = Ping { pid :: ProcessId }
+             | Pong { pid :: ProcessId }
   deriving (Typeable, Generic)
 
 
@@ -7,7 +7,7 @@ instance Binary Message
 
 
 -- simple eg of receive a ping and then reply with a pong
--- \ex x : T .{ v: Process () |  { stmt v = sseq ((srecv (Ping x)) (ssend x Message))}  where T = ?}
+-- \ex x :: Message .{ v: Process () |  stmt v = sseq ((srecv x) (ssend (pid x) Message))}
 f1 = do 
        Ping from <- expect
        mypid <- getSelfPid
