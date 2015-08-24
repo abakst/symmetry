@@ -70,7 +70,7 @@ test1unfold = Config {
               , cUnfold = [Conc (S "ps") 1]
               , cProcs = [(tpid0, 
                                 SIter (V "pi") (S "ps") 
-                                        (SBlock [SSend (PVar (V "pi")) [(mPing tpid0, SRecv [(mPong (pvar "x"), SSkip ())] ())] ()] ()) ())
+                                        (SSend (PVar (V "pi")) [(mPing tpid0, SRecv [(mPong (pvar "x"), SSkip ())] ())] ()) ())
                          ,(tpid2, SRecv [(mPing (pvar "x"), SSend (pvar "x") [(mPong tpid2, SSkip ())] ())] ())]
 }
 
@@ -115,8 +115,8 @@ proc_0, proc_1, proc_2 :: Stmt ()
          
 proc_0 = SBlock [ SIter (V "pi") (S "ps") 
                           (SRecv [(mPid (pvar "x"), SSend (pvar "x") [(mInt, SSkip ())] ())] ()) ()
-                , SLoop (LV "X") 
-                          (SRecv [(mPid (pvar "y"), SSend (pvar "y") [(mTT, SVar (LV "X") ())] ())] ()) ()
+                , SLoop (LV "end_X") 
+                          (SRecv [(mPid (pvar "y"), SSend (pvar "y") [(mTT, SVar (LV "end_X") ())] ())] ()) ()
                 ] 
          ()
 

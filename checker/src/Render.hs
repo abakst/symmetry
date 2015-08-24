@@ -6,12 +6,16 @@ import           Text.PrettyPrint.Leijen
 import           Data.Function
 import           Data.Foldable
 import qualified Data.Map.Strict as M
-import           Data.List (groupBy, nub, partition)
+import           Data.List (intercalate, groupBy, nub, partition)
 import           Data.Generics hiding (empty)
 import           Control.Exception
 import           System.IO
+import           Debug.Trace
 
 import           AST  
+  
+debug msg x = 
+  trace (msg ++ show x) x
 
 -- | Some useful combinators
 byte :: Doc                          
@@ -131,7 +135,7 @@ switchboard np nt from p m =
   -- text "switchboard" <+> brackets (
                           (renderProcVar from <> text "*" <> int (np*nt))
                           <+> text "+"
-                          <+> (renderProcVar p <> text "*" <> int np)
+                          <+> (renderProcVar p <> text "*" <> int nt)
                           <+> text "+"
                           <+> parens (renderMType m <> text "-" <> int 1)
                          -- )
@@ -168,7 +172,6 @@ renderProcAssn :: Doc -> Doc -> Doc
 renderProcAssn n rhs 
   = renderProcDecl n <+> equals <+> rhs
     
-type PidMap  = M.Map Pid (Int, Int)
 type SetMap  = M.Map Set Int
 type ChanMap = Pid -> Pid -> MType -> Doc
 
@@ -295,11 +298,11 @@ renderStmtAbs :: ChanMap
 renderStmtAbs f pm sm cfg me (SSend p ms i)
   = block (recv : ctrs)
   where
-    recv = renderStmtConc f pm sm me (SSend p [(mt, SSkip i) | (mt,_) <- ms] i)
+    recv = renderStmtConc f pm sm me (SSend p [(mt, SNull) | (mt,_) <- ms] i)
     ctrs = inOutCounters cfg i
     
 renderStmtAbs f pm sm cfg me (SRecv ms i)
-  = ifs ( {- text "skip" : -} [ render1 (mt, SSkip i) oc | ((mt,_), oc) <- outms] )
+  = ifs ( {- text "skip" : -} [ render1 (mt, SNull) oc | ((mt,_), oc) <- outms] )
   where
     outms = assert (length ms == length outcs) $ zip ms outcs
     outcs = outCounters cfg i
@@ -309,11 +312,14 @@ renderStmtAbs f pm sm cfg me (SRecv ms i)
 renderStmtAbs _ _ _ cfg _ (SVar _ i)
   = block (inOutCounters cfg i)
        
-renderStmtAbs _ _ _ _ _ (SSkip _)
-  = text "skip"
+renderStmtAbs _ _ _ cfg _ (SSkip i)
+  = block (inOutCounters cfg i) 
    
 renderStmtAbs _ _ _ cfg _ (SLoop _ _ i)
   = block (inOutCounters cfg i)
+
+renderStmtAbs _ _ _ _ _ (SNull)
+  = text "skip"
 
 renderStmtAbs _ _ _ _ _ s
   = text $ "assert(0 == 1) /* TBD:" ++ show s
@@ -373,7 +379,7 @@ renderProcStmts f pm m (p, ss)
          (text "to" <+> equals <+> int 0 <> semi <$>) .
          selectStmt $ foldl' (flip (:)) [] ss) <$>
       (label (text "end") $ text "0" <> semi) <$>
-      (seqStmts . map do1Abs $ listify notSkip ss)
+      (seqStmts . map do1Abs $ listify notNull ss)
       -- label (text "end") $
       --   doLoop $ 
       --     map (atomic . return . renderStmt f m p) $ listify notSkip ss
@@ -383,8 +389,8 @@ renderProcStmts f pm m (p, ss)
   where
     do1Abs s = labelStmt (annot s) $ 
                   atomic [renderStmt f pm m p s, gotoStmt 0]
-    notSkip (SSkip _)       = True
-    notSkip _               = True
+    notNull SNull       = False
+    notNull _           = True
     recvVars                = filter (not . isProcVar p) . nub
     isProcVar (PAbs v _) v'    = v == v'
     isProcVar (PUnfold v _ _) v' = v == v'
@@ -413,7 +419,7 @@ renderProc f pm m p
                                   text "__K__" <> semi <$>
                                 vcat [ byte <+> 
                                        stmtCounter c <> 
-                                       semi | c <- tail cs ]
+                                       semi | c <- nub $ tail cs ]
                               else
                                 empty
 
@@ -512,7 +518,7 @@ declChannels pm ts
     product ps = [ (p,q) | p <- ps, q <- ps ]
     go t (p,q)           = text "chan" <+> renderChanName p q t
                                <+> equals
-                               <+> text "[1] of"
+                               <+> text "[__K__] of"
                                <+> chanMsgType t
                                <> semi
     -- go t p@(PConc _)  = text "chan" <+> renderChanName p q t
@@ -556,13 +562,40 @@ declSwitchboard pm ts
       count (PAbs _ _) (_, n) = n - setSize + 1
       count (PConc _) (_,n) = n
       count _ _          = 0
+
+macrify = intercalate " \\\n"
+decMacro = macrify [ "#define __DEC(_x) atomic { assert (_x > 0);"
+                   , "if"
+                   , ":: (_x < __K__) ->  _x = _x - 1"
+                   , ":: else; {"
+                   , "if"
+                   , ":: _x = _x - 1"
+                   , ":: skip" 
+                   , "fi }"
+                   , "fi }"
+                   ]
+recvMacro =
+  macrify [ "#define __RECV(_i, _as) atomic {"
+          , "switchboard[_i]?[_as];"
+          , "if"
+          , "  :: len(switchboard[_i]) < __K__ ->"
+          , "     switchboard[_i]?_as"
+          , "  :: else ->"
+          , "  if"
+          , "  :: switchboard[_i]?_as"
+          , "  :: switchboard[_i]?<_as>"
+          , "  fi"
+          , "fi }"
+          ]
                            
 macros :: [Doc]
 macros = 
   [ text "#define __K__" <+> int infty
   , text "#define __INC(_x) _x = (_x < __K__ -> _x + 1 : _x)"
-  , text "#define __DEC(_x) assert (_x > 0); if :: _x < __K__ -> _x = _x - 1 :: else -> if :: _x = _x - 1 :: skip fi fi"
-  , text "#define __RECV(_i, _args) if :: len(switchboard[_i]) < __K__ -> switchboard[_i]?_args :: else -> if :: switchboard[_i]?<_args> :: switchboard[_i]?_args fi fi"
+  , text decMacro
+  , text recvMacro
+  -- , text "#define __DEC(_x) assert (_x > 0); if :: _x < __K__ -> _x = _x - 1 :: else -> if :: _x = _x - 1 :: skip fi fi"
+  -- , text "#define __RECV(_i, _args) if :: len(switchboard[_i]) < __K__ -> switchboard[_i]?_args :: else -> if :: switchboard[_i]?<_args> :: switchboard[_i]?_args fi fi"
   ]
   
 render :: Show a => Config a -> Doc
@@ -577,10 +610,10 @@ render c@(Config { cTypes = ts })
     <$$> procs
     <$$> renderMain pidMap unfolded
   where
-    unfolded                 = freshIds $ unfold c
+    unfolded                 = freshIds . instAbs $ unfold c
     pidMap                   = buildPidMap unfolded
     mtype                    = renderMTypes ts
-    procs                    = renderProcs (instAbs unfolded) pidMap setMap
+    procs                    = renderProcs (unfolded) pidMap setMap
     setMap                   = M.foldrWithKey goKey M.empty pidMap
     goKey (PAbs _ s) (_,n) m = M.insert s n m
     goKey _          _     m = m
@@ -588,6 +621,11 @@ render c@(Config { cTypes = ts })
 renderToFile :: Show a => FilePath -> Config a -> IO ()
 renderToFile fn c
   = withFile fn WriteMode $ flip hPutDoc (render c)
+    
+renderToFileVC :: Show a => FilePath -> Config a -> IO ()
+renderToFileVC fn c
+  = do renderToFile fn c
+       withFile (fn ++ ".ltl") WriteMode $ flip hPutDoc (vcGen c)
 
 always, eventually, lneg :: Doc -> Doc
 always x     = text "[]" <+> parens x
@@ -597,9 +635,10 @@ lneg x       = text "!" <+> parens x
 impl :: Doc -> Doc -> Doc
 impl x y     = parens x <+> text "->" <+> parens y
                
-vcGen :: Config Int -> Doc
+vcGen :: Config a -> Doc
 vcGen c
-  = lneg $ impl (fairness c) (eventually $ endCondition c)
+  = lneg $ impl (fairness c') (eventually $ endCondition c')
+  where c' = freshIds $ unfold c
                
 endCondition :: Config Int -> Doc
 endCondition c
@@ -615,11 +654,25 @@ endCondition c
                
 fairness :: Config Int -> Doc
 fairness c
-  = vcat $ punctuate (text "&&") (js ++ cs ++ sync)
+  = vcat $ punctuate (text "&&") (js ++ cs)
   where
-    sync = []
     js = concat [ stmtJustice s | (PAbs _ _, s) <- cProcs c ]
     cs = concat [ stmtCompassion s | (PAbs _ _, s) <- cProcs c ]
+         
+syncPairs c
+  = (concRWs, absWRs)
+  where
+    -- foo     = map (syncMatch concRWs) absWRs
+    absWRs  = [ (p, wrPairs s) | (p@(PAbs _ _), s) <- cProcs c ]
+    concRWs = [ (p, rwPairs s) | (p, s) <- cProcs c, not $ isAbs p ]
+              
+-- syncMatch rws (p, wrs)
+--   = undefined
+--     where
+--       rwList     = snd rws
+--       matchWRRW (t1,p1,u1) (t2,p2,u2) = tycon t1 == tycon t2 &&
+                                        
+--       candidates = [ (q, (t1, p, t2)) | (q, tpts) <- rws, (t1,p',t2) <- 
 
 stmtJustice :: Stmt Int -> [Doc]
 stmtJustice s 
