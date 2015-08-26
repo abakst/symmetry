@@ -25,7 +25,9 @@ executable checker
                      , directory >= 1.2.1.0
                      , filepath >= 1.3.0.2
                      , mtl
+                     , parsec >= 3.1.5
                      , plugins
+                     , process >= 1.2.0.0
                      , syb >= 0.4.1
                      , wl-pprint >=1.2 && <1.3
   hs-source-dirs:      src

@@ -41,5 +41,6 @@ master peers = do
     when (not (null l)) $ do
       r <- get db l
       liftIO $ putStrLn ("response: " ++ show r)
+             
 
   return ()

@@ -276,4 +276,4 @@ freshId s
                    
 freshIds :: Config a -> Config Int
 freshIds (c @ Config { cProcs = ps })
-  = c { cProcs = evalState (mapM (mapM freshId) ps) 0 }
+  = c { cProcs = evalState (mapM (mapM freshId) ps) 1 }

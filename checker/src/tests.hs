@@ -76,31 +76,47 @@ test1unfold = Config {
 
 -- ---
 
--- pingMany = Config { 
---              cTypes = [mPing (pvar "x"), mPong (pvar "x")]
---            , cSets = []
---            , cProcs = [( tpid0
---                        , [ SIter (V "pi") (S "ps")
---                                    [SSend (pvar "pi") [(mPing tpid0, [])] ()] ()
---                          , SIter (V "pii") (S "ps")
---                                    [SRecv [(mPong (pvar "x"), [])] ()] ()])
---                       ,( tpid2
---                        , [SRecv [(mPing (pvar "x"), [SSend (pvar "x") [(mPong (pvar "p"), [])] ()])] ()])
---                       ]
---            }
+pingMany = Config { 
+             cTypes = [mPing (pvar "x"), mPong (pvar "x")]
+           , cSets = []
+           , cUnfold = [Conc (S "ps") 1]
+           , cProcs = [( tpid0
+                       , SBlock [ SIter (V "pi") (S "ps")
+                                          (SSend (pvar "pi") [(mPing tpid0, SSkip ())] ()) ()
+                                , SIter (V "pii") (S "ps")
+                                          (SRecv [(mPong (pvar "x"), SSkip ())] ()) ()] ())
+                      ,( tpid2
+                       , SRecv [(mPing (pvar "x"), SSend (pvar "x") [(mPong (pvar "p"), SSkip ())] ())] ())
+                      ]
+           }
+            
+-- ---
+
+pingManyBad = Config { 
+             cTypes = [mPing (pvar "x"), mPong (pvar "x")]
+           , cSets = []
+           , cUnfold = [Conc (S "ps") 1]
+           , cProcs = [( tpid0
+                       , SBlock [ SIter (V "pi") (S "ps")
+                                          (SSend (pvar "pi") [(mPing tpid0, SSkip ())] ()) ()
+                                , SIter (V "pii") (S "ps")
+                                          (SRecv [(mPong (pvar "x"), SSkip ())] ()) ()] ())
+                      ,( tpid2
+                       , SRecv [(mPing (pvar "x"), SSkip ())] ())
+                      ]
+           }
             
 -- ---
 mInt :: MType
 mInt = MTApp (MTyCon "Int") []
--- masterSlave = Config {
---                 cTypes = [mInt]
---               , cSets  = []
---               , cProcs = [(tpid0,
---                           [SIter (V "pi") (S "ps")
---                                   [SRecv [(mInt, [])] ()] ()])
---                          ,(tpid2,
---                            [SSend tpid0 [(mInt, [])] ()])]
---               }
+masterSlave = Config {
+                cTypes = [mInt]
+              , cSets  = []
+              , cUnfold = [Conc (S "ps") 1]
+              , cProcs = [(tpid0, SIter (V "pi") (S "ps")
+                                  (SRecv [(mInt, SSkip ())] ()) ())
+                         ,(tpid2, SSend tpid0 [(mInt, SSkip ())] ())]
+              }
 -- --- 
 mPid :: Pid -> MType
 mPid x = MTApp (MTyCon "Pid") [x]
@@ -137,23 +153,24 @@ workStealing = Config {
                }
 -- ----
 
--- ssend p m r = SSend p [(m, r)] ()
--- srecv m r   = SRecv [(m, r)] ()
--- sloop x y   = SLoop x y ()
--- siter x y z = SIter x y z ()
--- schoice x y z = SChoose x y z ()
+ssend p m r = SSend p [(m, r)] ()
+srecv m r   = SRecv [(m, r)] ()
+sloop x y   = SLoop x y ()
+siter x y z = SIter x y z ()
+schoice x y z = SChoose x y z ()
             
--- workPushing = Config {
---                 cTypes = [mInt]
---               , cSets  = []
---               , cProcs = [  (tpid0, [ siter (V "p") (S "ps")
---                                             [schoice (V "x") (S "ps") [ssend (pvar "x") mInt []]]
---                                     , siter (V "pp") (S "ps")
---                                             [srecv mInt []]
---                                   ])
---                           , (tpid2, [ sloop (V "X: end") [srecv mInt [ssend tpid0 mInt []], SVar (V "X") ()] ])
---                           ]
---               }
+workPushing = Config {
+                cTypes = [mInt]
+              , cSets  = []
+              , cUnfold = [Conc (S "ps") 1]
+              , cProcs = [  (tpid0, SBlock [ siter (V "p") (S "ps")
+                                                     (schoice (V "x") (S "ps") (ssend (pvar "x") mInt (SSkip ())))
+                                           , siter (V "pp") (S "ps")
+                                                     (srecv mInt (SSkip ()))
+                                           ] ())
+                          , (tpid2, sloop (LV "end_X") (srecv mInt (ssend tpid0 mInt (SVar (LV "end_X") ()))))
+                          ]
+              }
 
 --
 
@@ -222,3 +239,44 @@ choiceBad
       choiceSlave = SRecv [ (mTT, SRecv [ (mTT, SSkip ()) ] ())
                           , (mOK, SRecv [ (mOK, SSkip ()) ] ())
                           ] ()
+                    
+---
+database :: Config ()
+database = Config {
+       cTypes = [ makeType0 "Set"
+                , makeType0 "Value"
+                , makeType1 "Get"
+                ]
+     , cSets = []
+     , cUnfold = [Conc (S "ps") 1]
+     , cProcs = [ (db, dbProc)
+                , (ps, psProc)
+                , (me, meProc)
+                ]
+     }
+  where
+    ps = PAbs (V "p") (S "ps")
+    db = PConc 0
+    me = PConc 1 
+    makeType0 t = MTApp (MTyCon t) []
+    makeType1 t = MTApp (MTyCon t) [PVar (V "x")]
+    val1 t v    = MTApp (MTyCon t) [v]
+                  
+    psProc = SLoop (LV "endX")
+               (SRecv [ (makeType0 "Set", SVar (LV "endX") ())
+                      , (makeType1 "Get", SSend (PVar (V "x")) [(makeType0 "Value", SVar (LV "endX") ())] ())
+                      ] ())
+               ()
+               
+    dbProc = SLoop (LV "endX")
+               (SRecv [ (makeType0 "Set", SChoose (V "y") (S "ps") (SSend (PVar (V "y")) [(makeType0 "Set", SVar (LV "endX") ())] ()) ())
+                      , (makeType1 "Get", SChoose (V "y") (S "ps") (SSend (PVar (V "y")) [(makeType1 "Get", SVar (LV "endX") ())] ()) ())
+                      ] ())
+               ()
+               
+    meProc = SLoop (LV "endX")
+               (SSend db [ (makeType0 "Set", SVar (LV "endX") ())
+                         , (val1 "Get" me, SRecv [ (makeType0 "Value", SVar (LV "endX") ()) ] ())
+                         ] ())
+               ()
+
