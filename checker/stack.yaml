@@ -1,0 +1,8 @@
+flags: {}
+packages:
+- '.'
+extra-deps: [
+    plugins-1.5.4.0,
+    wl-pprint-1.2
+]
+resolver: lts-2.22
