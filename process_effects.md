@@ -13,8 +13,8 @@ Where:
 - `x:a` denotes that the returned value of the process is bound to `x` and has type `a`,
 - `i` is a channel (type `ch`) (for the current process),
 - `E` is the effect of the current process, which is a program in a process calculus whose
-terms are denoted by the metavariable `p`. In this language, communication between processes
-is over a set of named *chnnels* (`c`):
+terms are denoted by the metavariable `p`. In this language, messages are sent to named channels `c`.
+Messages are always received on the (implicit) channel associated with the receiving process.
 
 ~~~~
 p ::= 0
@@ -27,6 +27,11 @@ p ::= 0
 
 E = 0 | i ~> p * E
 ~~~~
+
+That is, `j ~> SEND(i, Int) * i ~> RECV(x:Int)` denotes two processes.
+One, associated with channel `j`, sends an `Int` to channel `i`. The
+process associated with channel `i` waits for an `Int` on `i`, binds
+it to `x`, and terminates.
 
 ## API
 
