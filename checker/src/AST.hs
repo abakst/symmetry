@@ -65,7 +65,7 @@ data Stmt a = SSkip a
             | SVarDecl Var a
             | STest Var a
             | SNonDet [Stmt a]
-         deriving (Eq, Read, Show, Functor, Foldable, Data, Typeable)
+            deriving (Eq, Read, Show, Functor, Foldable, Data, Typeable)
                  
 endLabels :: (Data a, Typeable a) => Stmt a -> [LVar] 
 endLabels = nub . listify (isPrefixOf "end" . unlv)
@@ -127,7 +127,7 @@ unfold c@(Config { cUnfold = us, cProcs = ps })
                                                   , ((PAbs v s'), stmt) <- ps
                                                   , s == s'
                                                   , j <- [0..i-1]]
-      
+
 instStmt :: [Pid] -> Stmt a -> Stmt a 
 -- Interesting Cases
 instStmt dom (SRecv mts a) 

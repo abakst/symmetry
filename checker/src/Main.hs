@@ -10,9 +10,9 @@ import Text.PrettyPrint.Leijen hiding ((</>))
 
 import Render
 import AST
-  
+
 opts = [Option "f" ["file"] (ReqArg id "FILE") "Input File"]
-  
+
 main :: IO ()
 main = do
   args <- getArgs
@@ -22,9 +22,9 @@ main = do
          case read s :: Config () of
            c -> putDoc $ render c
            _ -> return ()
-                
+
 {-
-: 
-:619.559.8000 
+:
+:619.559.8000
 :
 -}
