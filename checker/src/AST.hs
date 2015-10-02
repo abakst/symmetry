@@ -54,12 +54,12 @@ data Stmt a = SSkip a
             {- A Block should probably only be a sequence of
                SIters, SChoose ... -}
             | SBlock [Stmt a] a
-            | SSend Pid [(MType, Stmt a)] a
-            | SRecv [(MType, Stmt a)] a
+            | SSend Pid [(MType, Stmt a)] a {-nondeterministically send one-}
+            | SRecv [(MType, Stmt a)] a     {-do action after getting the message-}
             | SIter Var Set (Stmt a) a
-            | SLoop LVar (Stmt a) a
+            | SLoop LVar (Stmt a) a         {-used to create a loop with the given label-}
             | SChoose Var Set (Stmt a) a
-            | SVar LVar a
+            | SVar LVar a                   {-jump to the label-}
             {- These do not appear in the source: -}
             | SNull
             | SVarDecl Var a

@@ -21,16 +21,19 @@ executable checker
   other-modules:       AST, Render
   -- other-extensions:
   build-depends:       base >=4.7 && <4.8
+                     , binary >= 0.7.1.0
                      , containers >= 0.5.5.1
                      , directory >= 1.2.1.0
+                     , distributed-process
                      , filepath >= 1.3.0.2
                      , mtl
+                     , network-transport >= 0.4.2.0
+                     , network-transport-tcp
                      , parsec >= 3.1.5
                      , plugins
                      , process >= 1.2.0.0
+                     , random >= 1.1
                      , syb >= 0.4.1
                      , wl-pprint >=1.2 && <1.3
-                     , distributed-process
-                     , network-transport-tcp
   hs-source-dirs:      src src/cloud-haskell-tests
   default-language:    Haskell2010

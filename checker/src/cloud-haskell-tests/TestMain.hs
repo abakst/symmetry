@@ -5,19 +5,25 @@ import Control.Monad (forever)
 import Control.Distributed.Process
 import Control.Distributed.Process.Node
 import Network.Transport.TCP (createTransport, defaultTCPParameters)
+import Network.Transport hiding (send)
 
-import Parikh
+mainDelay = 3
 
-mytest :: IO ()
-mytest = do
-  Right t <- createTransport "127.0.0.1" "10501" defaultTCPParameters
-  node    <- newLocalNode t initRemoteTable
-  forkProcess node parikh
-  -- A 1 second wait. Otherwise the main thread can terminate before
-  -- our messages reach the logging process or get flushed to stdio
-  liftIO $ threadDelay (1*1000000)
-  return ()
+mytest :: Process () -> IO ()
+mytest s = do
+  res <- createTransport "127.0.0.1" "10501" defaultTCPParameters
+  case res of
+    Left exp -> print "Transport already exists!"
+    Right t  -> do node <- newLocalNode t initRemoteTable
+                   p    <- forkProcess node s
+                   -- A 1 second wait. Otherwise the main thread can terminate before
+                   -- our messages reach the logging process or get flushed to stdio
+                   liftIO $ threadDelay (mainDelay*1000000)
+                   closeTransport t
+                   return ()
 
+wait  :: Int -> Process ()
+wait n = liftIO $ threadDelay (n*1000000)
 -- ######################################################################
 
 replyBack :: (ProcessId, String) -> Process ()
