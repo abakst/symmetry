@@ -4,7 +4,6 @@
 module Helper where
 
 import Data.Binary
-import Data.Typeable
 import Data.Generics
 import System.Random
 import Control.Distributed.Process
@@ -52,3 +51,4 @@ instance Binary PeanoN where
 getRandPInRange b e    = getRandInRange b e >>= return . toPeano
 getRandPLInRange b e n = do l <- getRandLInRange b e n
                             return (map toPeano l)
+
