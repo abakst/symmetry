@@ -18,7 +18,7 @@ import GHC.Int
 test_ring :: IO ()
 test_ring =  mytest ring
 
-data MsgType = Peek [PeanoN] ProcessId
+data MsgType = Peek PeanoN ProcessId
              | Ans [PeanoN]
              | Forward [PeanoN]
              deriving (Ord, Eq, Show, Typeable, Data)
@@ -30,8 +30,8 @@ ring  = do xs <- getRandPLInRange 1 10 5
 
 probe_ring  :: ProcessId -> Process ()
 probe_ring p = do self <- getSelfPid
-                  send p (Peek [Zero] self)
-                  receiveWait [match (\(Ans n) -> say "hurray")]
+                  send p (Peek Zero self)
+                  receiveWait [match (\(Ans _) -> say "hurray")]
                   probe_ring p
 
 init_ring       :: (ProcessId -> PeanoN -> Process ()) -> [PeanoN] -> Process ProcessId
@@ -55,8 +55,8 @@ bootstrap_ring3 fun prev (x:xs) = do nxt <- spawnLocal $ fun prev x
 slave       :: ProcessId -> PeanoN -> Process ()
 slave nxt me = receiveWait [
                  match (\(Forward xs) -> send nxt (Forward (me:xs))),
-                 match (\(Peek xs from) ->
-                          do send nxt (Forward (me:xs))
+                 match (\(Peek x from) ->
+                          do send nxt (Forward [me,x])
                              receiveWait [
                                match (\(Forward ys) -> send from (Ans ys))]) ]
 
@@ -70,15 +70,15 @@ ring_config =  Config {
 
 
 instance Binary MsgType where
-  put (Peek ns pid) = put "Peek" >> put ns >> put pid
-  put (Ans ns)      = put "Ans" >> put ns
-  put (Forward ns)  = put "Forward" >> put ns
-  get               = do t <- get :: Get String
+  put (Peek ns pid) = put (0::Word8) >> put ns >> put pid
+  put (Ans ns)      = put (1::Word8) >> put ns
+  put (Forward ns)  = put (2::Word8) >> put ns
+  get               = do t <- get :: Get Word8
                          case t of
-                           "Peek"    -> do n <- get
-                                           pid <- get
-                                           return (Peek n pid)
-                           "Ans"     -> do ns <- get
-                                           return (Ans ns)
-                           "Forward" -> do ns <- get
-                                           return (Forward ns)
+                           0 -> do n <- get
+                                   pid <- get
+                                   return (Peek n pid)
+                           1 -> do ns <- get
+                                   return (Ans ns)
+                           2 -> do ns <- get
+                                   return (Forward ns)
