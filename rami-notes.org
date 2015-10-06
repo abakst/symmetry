@@ -21,17 +21,21 @@ RC : recursive thread creation
 
 
 * Questions
-** DONE How to show the failure cases?
-   recv(A) ==> recv(ERR); SKIP
+** old
+*** DONE How to show the failure cases?
+    recv(A) ==> recv(ERR); SKIP
 
-** DONE Functions that call each other?
-   f1: loop L_f1. ___________ goto L_fa;
-   f2: loop L_f1. ___________ goto L_fb;
-   ...
-   fn: loop L_f1. ___________ goto L_fz;
+*** DONE Functions that call each other?
+    f1: loop L_f1. ___________ goto L_fa;
+    f2: loop L_f1. ___________ goto L_fb;
+    ...
+    fn: loop L_f1. ___________ goto L_fz;
 
-** TODO Statement for spawning a new thread?
-   Coming up...
+*** TODO Statement for spawning a new thread?
+    Coming up...
+
+** new
+*** ...
 
 
 * Notes
