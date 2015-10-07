@@ -59,7 +59,9 @@ do_serve x  = do say $ "server: serving " ++ (show x)
 
 {- ############################# CONFIGURATION ############################# -}
 
-{-
+parikh_config = getPoorConfig "/src/cloud-haskell-tests/Parikh.hs"
+
+{- CONFIG START
 def pid0   = (PConc 0)
 def pid1   = (PConc 1)
 def p_x    = (PVar (V "x"))
@@ -94,4 +96,4 @@ cTypes = [ {InitType, p_x}
 cSets  = []
 cProcs = [ (pid0, proc0)
          , (pid1, proc1) ]
--}
+CONFIG END -}

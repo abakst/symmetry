@@ -8,6 +8,7 @@ import Data.Binary
 import GHC.Generics (Generic)
 import System.Random
 import Control.Distributed.Process
+import System.Directory
 
 getRandInRange    :: Int -> Int -> Process Int
 getRandInRange b e = liftIO $ do n <- randomIO
@@ -34,4 +35,3 @@ fromPeano hn = case hn of
 getRandPInRange b e    = getRandInRange b e >>= return . toPeano
 getRandPLInRange b e n = do l <- getRandLInRange b e n
                             return (map toPeano l)
-

@@ -1,22 +1,24 @@
 {-# LANGUAGE FlexibleContexts, TypeSynonymInstances, FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module ConfigParser where
 
 import AST
 
-import           Prelude hiding (lookup)
+import           Prelude
 import           Text.Parsec
 import           Text.Parsec.Combinator
 import           Text.Parsec.Char
+import           Text.Parsec.Error
 import           Text.Parsec.String
 import           Text.Parsec.Language
 import qualified Text.Parsec.Token as Token
 import           Control.Applicative hiding ((<|>), many)
 import           Data.Functor.Identity
-import           Data.Map
-
-type StmtE   = Stmt ()
-type ConfigE = Config ()
+import           Data.Map hiding (foldl')
+import           Data.List hiding (insert)
+import qualified Data.Text as T
+import           System.Directory
 
 -- ####################################################################
 -- ### MAIN FUNCTION
@@ -25,7 +27,14 @@ type ConfigE = Config ()
 readConfig    :: String -> Config ()
 readConfig str =
   case runParser configParser Data.Map.empty "" str of
-    Left  err -> error (show err)
+    Left  err -> let pos     = errorPos err
+                     lineNo  = sourceLine pos
+                     colNo   = sourceColumn pos
+                     line    = (T.splitOn "\n" (T.pack str)) !! (lineNo - 1)
+                     cursor  = (replicate (colNo - 1) ' ') ++ "^"
+                     newMsg  = Message ((T.unpack line) ++ "\n" ++ cursor)
+                     newErr  = addErrorMessage newMsg err
+                 in error (show newErr)
     Right exp -> exp
 
 -- ####################################################################
@@ -69,7 +78,6 @@ comma         = Token.comma         stmtLexer
 -- ### PARSER
 -- ####################################################################
 
-configParser :: ParsecT String StmtState Identity ConfigE
 configParser  = do whiteSpace
                    many s_macroP -- parse all the macros
                                  -- and collect them in the parser state
@@ -147,16 +155,16 @@ s_tupP p1 p2 = parens $ liftA2 (,) (p1 <* comma) p2
 -- ### MACRO
 -- ####################################################################
 
-data Macro  = MStmt   StmtE
-            | MMType  MType
-            | MMTyCon MTyCon
-            | MPid    Pid
-            | MVar    Var
-            | MSet    Set
-            | MUnfold Unfold
-            | MArr    [Macro]
-            | MTup    (Macro,Macro)
-            deriving (Eq, Show)
+data Macro = MStmt   (Stmt ())
+           | MMType  MType
+           | MMTyCon MTyCon
+           | MPid    Pid
+           | MVar    Var
+           | MSet    Set
+           | MUnfold Unfold
+           | MArr    [Macro]
+           | MTup    (Macro,Macro)
+           deriving (Eq, Show)
 
 type StmtState = Map String Macro
 
@@ -164,7 +172,7 @@ class MacroTransformer a where
   fromMacro :: Macro -> (Maybe a)
   toMacro   :: a -> Macro
 
-instance MacroTransformer StmtE where
+instance MacroTransformer (Stmt ()) where
   fromMacro (MStmt s) = Just s
   fromMacro _         = Nothing
   toMacro   s         = MStmt s
@@ -238,7 +246,7 @@ s_macroP = do reserved "def"
               return r
 
 lookupMacro name = do st <- getState
-                      case lookup name st of
+                      case Data.Map.lookup name st of
                         (Just m) -> return m
                         Nothing  -> unexpected $ name ++ " not bound to anything"
 
@@ -247,7 +255,7 @@ getMacro name = do m <-lookupMacro name
                      (Just a) -> return a
                      Nothing  -> unexpected $ name ++ "is not bound to the right type"
 
-fillMacro :: (MacroTransformer a) => ParsecT String (Map String Macro) Identity a
+fillMacro :: (MacroTransformer a) => ParsecT String StmtState Identity a
 fillMacro  = Token.identifier stmtLexer >>= getMacro
 
 withMacro p = p <|> fillMacro
@@ -270,4 +278,21 @@ s_testerF parser fname =
 
 s_test = s_testerF configParser "/home/gokhan/Desktop/stmt"
 
-x = [p*3 | p <- [1,2,3,4]]
+{- poor man's here document -}
+
+here tag file env =
+  do txt <- readFile file
+     let (_,_:rest) = span (/="{- "++tag++" START") (lines txt)
+         (doc,_)    = span (/=tag++" END -}") rest
+     return $ unlines $ Prelude.map subst doc
+     where
+       subst ('$':'(':cs) = case span (/=')') cs of
+         (var,')':cs) -> maybe ("$("++var++")") id (Prelude.lookup var env) ++ subst cs
+         _ -> '$':'(':subst cs
+       subst (c:cs) = c:subst cs
+       subst "" = ""
+
+getPoorConfig     :: String -> IO (Config ())
+getPoorConfig file = do checker_path <- getCurrentDirectory
+                        conf_str <- here "CONFIG" (checker_path ++ file) []
+                        return (readConfig conf_str)
