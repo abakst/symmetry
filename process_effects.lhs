@@ -58,18 +58,13 @@ spawn   :: \forall i j : Role,
            Process j () [0 | p] 
         -> Process i x:Pid [let j = new p; j -> {v | elems v = {x}}| 0]
 
-(>>=)      :: \forall (i : role) (a b : u),
-              Process i x:a [G | p]
-           -> (x:a -> Process i y:b [H | q])
-           -> Process i y:b (join(G,H) | seq(p, q))
-
-dom(-) = \empty
-dom(l -> P@{x | p} | G) = {l} \cup dom(G)
-
-join(-,H)                = H
-join(l->P@{x | p} | G,H) 
-  | l -> P@{y | q} \in H = l -> P@{z | elems z = elems x \cup elems y}; join(G, H)
-  | l \not\in dom(H)     = l -> P@{x | p}; join(G, H) 
+(>>=)      :: \forall (i : role) (G1 G2 H : env) (p q r : proc),
+              { join(G1, G2) < H 
+              , join(G1, G2); x:a => seq(p, q) < r
+              }
+           => Process i x:a [G1 | p]
+           -> (x:a -> Process i y:b [G2 | q])
+           -> Process i y:b (H | r)
 
 ex1 :: \forall i:Role, 
        Process i () [ - | recv(p:Pid);send({v:Pid | v = p}, ()) ]
@@ -146,3 +141,91 @@ foo n = (>>=)
         --Process () [ - | foreach (p \in ps): send(p, Ping) ]
         (fix messageLoop ps)
 \end{code}
+
+Core Calculus
+
+Types & Effects
+t = Pid | Int | Bool | t -> t | t & [ H | p ]
+p = send(t, t) | recv(x:t) | foreach (e : e): p | p; p 
+  | case x of { Pattern -> f }
+H = - | l -> p@t * H  
+
+
+Expressions
+
+e = c | x | \x -> e | e e | do m
+m = return i e | receive i t | send i x e | spawn i j e | self i | x <- m; m
+  
+Type Checking
+
+G = - | x:t; G
+
+Pure:
+
+G(x) = t & [ H | p ]_i
+----------------------
+G |- x :: t & [ H | p ]_i
+  
+G; x:t1 |- e :: t2
+------------------------
+G |- \x -> e :: t1 -> t2
+  
+G |- e1 :: t2 -> t
+G |- e2 :: t2
+------------------
+G |- e1 e2 :: t
+
+Impure:
+        
+G |- i :: role
+-----------------------------------
+G |- self :: Pid(i) t & [ - | 0 ]_i
+
+G |- i :: role 
+G |- e :: t
+----------------------------------
+G |- return i e :: t & [ - | 0 ]_i
+  
+G |- i :: role
+G |- t
+G |- receive i t :: t_0 & r. [ - | recv(r:t)
+ 
+G |- i :: role 
+G |- x :: tx 
+G |- tx <: Pid
+G |- e :: te
+---------------------------------------------
+G |- send i x e :: t & [ - | send(tx, te) ]_i
+  
+G |- i :: role 
+G |- j :: role 
+G |- i != j
+G |- e :: unit & [ - | p ]_j
+------------------------------------------------------------------
+G |- spawn i j e :: Pid(j) & r. [ j -> {v | elems v = {r}} | 0 ]_i
+  
+G |- m :: t1 & [ H1 | P1 ]_i
+G |- x:t1 -> n :: t2 & [ H2 | P2 ]_i
+G |- H1 cup H2 <= H
+G;x:t1, H |- P1; P2 <= P
+----------------------------------
+G |- x <- m; n :: t2 & [ H | P ]_i
+  
+Simulation:
+
+G |- xs : t
+H(l) = {v | elems v = xs}
+-----------------------------------------------
+G, H |- foreach(x : xs): p <= foreach(x : l): p
+
+G |- xs : t
+H(l) = {v | elems v = (x : xs)}
+-----------------------------------------------
+G, H |- p; foreach(x : xs'): p <= foreach(x : xs): p
+
+Join:
+
+G;x:{v | a};y:{v | a'} |- {v | v = x \cup y} <: {v | a''}
+G |- H1 cup H2 <= H
+----------------------------------------------------------------
+G |- l -> P@{v | a} cup l -> P{v | a'}*H1 <= l -> P@{v | a''}*H2
