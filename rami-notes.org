@@ -19,7 +19,6 @@
 
 RC : recursive thread creation
 
-
 * Questions
 ** old
 *** DONE How to show the failure cases?
@@ -31,12 +30,8 @@ RC : recursive thread creation
     ...
     fn: loop L_f1. ___________ goto L_fz;
 
-*** TODO Statement for spawning a new thread?
-    Coming up...
-
-** new
-*** ...
-
+*** DONE Statement for spawning a new thread?
+    look at [[file:process_effects.lhs][process effects]]
 
 * Notes
 ** check coreSyn

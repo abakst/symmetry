@@ -108,12 +108,12 @@ s_sendP = do reserved "send"
              pid   <- s_pidP
              pairs <- braces (semiSep pp)
              return (SSend pid pairs ())
-          where pp = liftA3 (\m _ s -> (m,s)) s_msgP (reservedOp "=>") s_stmtP
+          where pp = (,) <$> s_msgP <* reservedOp "=>" <*> s_stmtP
 
 s_recvP = do reserved "receive"
              pairs <- braces (semiSep pp)
              return (SRecv pairs ())
-          where pp = liftA3 (\m _ s -> (m,s)) s_msgP (reservedOp "=>") s_stmtP
+          where pp = (,) <$> s_msgP <* reservedOp "=>" <*> s_stmtP
 
 s_loopP = do reserved "loop"
              lv <- s_lvarP
@@ -126,19 +126,19 @@ s_svarP = do reserved "jump"
 
 s_msgP  = try s_msgP1 <|> try s_msgPN
 
-s_msgP1 = let csv2 p1 p2 = liftA2 (,) (p1 <* comma) p2
+s_msgP1 = let csv2 p1 p2 = (,) <$> (p1 <* comma) <*> p2
               prsr   = (\(n,p)-> (MTApp (MTyCon n) [p])) <$> (csv2 identifier s_pidP)
           in withMacro $ braces prsr
 
 s_msgPN = let pidArr = s_arrP s_pidP
-              csv2 p1 p2 = liftA2 (,) (p1 <* comma) p2
-              prsr   = (\(n,ps)-> (MTApp (MTyCon n) ps)) <$> (csv2 identifier pidArr)
+              csv2 p1 p2 = (,) <$> p1 <* comma <*> p2
+              prsr   = (\(n,ps)-> (MTApp (MTyCon n) ps)) <$> csv2 identifier pidArr
           in withMacro $ braces prsr
 
 s_mtyconP = withMacro $ parens $ reserved "MTyCon" *> (MTyCon <$> stringLiteral)
 
 s_pidP = withMacro $ parens $ (reserved "PConc" *> (PConc <$> int)) <|>
-                              (reserved "PAbs"  *> (liftA2 PAbs s_varP s_setP)) <|>
+                              (reserved "PAbs"  *> (PAbs <$> s_varP <*> s_setP)) <|>
                               (reserved "PVar"  *> (PVar <$> s_varP))
 
 s_varP  = withMacro $ parens $ reserved "V"  *> (V <$> stringLiteral)
@@ -146,10 +146,10 @@ s_setP  = withMacro $ parens $ reserved "S"  *> (S <$> stringLiteral)
 
 s_lvarP = LV <$> identifier
 
-s_unfoldP = withMacro $ parens $ reserved "Conc" *> (liftA2 Conc s_setP int)
+s_unfoldP = withMacro $ parens $ reserved "Conc" *> (Conc <$> s_setP <*> int)
 
 s_arrP p     = brackets $ commaSep p
-s_tupP p1 p2 = parens $ liftA2 (,) (p1 <* comma) p2
+s_tupP p1 p2 = parens $ (,) <$> p1 <* comma <*> p2
 
 -- ####################################################################
 -- ### MACRO
