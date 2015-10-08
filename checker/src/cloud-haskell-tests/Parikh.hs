@@ -8,7 +8,7 @@ import Helper
 import AST hiding (Process)
 import Render
 import TestMain
-import ConfigParser
+import ConfigParser2
 
 import Control.Distributed.Process
 import Control.Distributed.Process.Serializable
@@ -62,31 +62,32 @@ do_serve x  = do say $ "server: serving " ++ (show x)
 parikh_config = getPoorConfig "/src/cloud-haskell-tests/Parikh.hs"
 
 {- CONFIG START
-def pid0   = (PConc 0)
-def pid1   = (PConc 1)
-def p_x    = (PVar (V "x"))
-def p_y    = (PVar (V "y"))
+#define pid(n) (PConc n)
+#define pid0 pid(0)
+#define pid1 pid(1)
+#define p_x  (PVar (V "x"))
+#define p_y  (PVar (V "y"))
 
-def proc0 =
-send pid1 {
-  {InitType,pid0} => receive {
-    {SuccType,pid0} => send pid0 {
-      {SetType,pid0} => skip
-    }
-  }
+#define proc0                      \
+send pid1 {                        \
+  {InitType,pid0} => receive {     \
+    {SuccType,pid0} => send pid0 { \
+      {SetType,pid0} => skip       \
+    }                              \
+  }                                \
 }
 
-def proc1 =
-receive {
-  {InitType,p_x} => send p_x {
-    {SuccType,pid1} => loop X {
-      receive {
-        {InitType,p_y} => skip;
-        {SetType,p_y}  => jump X;
-        {GetType,p_y}  => send p_y {{ValType,pid1} => jump X}
-      }
-    }
-  }
+#define proc1                                                 \
+receive {                                                     \
+  {InitType,p_x} => send p_x {                                \
+    {SuccType,pid1} => loop X {                               \
+      receive {                                               \
+        {InitType,p_y} => skip;                               \
+        {SetType,p_y}  => jump X;                             \
+        {GetType,p_y}  => send p_y {{ValType,pid1} => jump X} \
+      }                                                       \
+    }                                                         \
+  }                                                           \
 }
 
 cTypes = [ {InitType, p_x}

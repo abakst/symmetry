@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts, TypeSynonymInstances, FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module ConfigParser where
+module ConfigParser (readConfig) where
 
 import AST
 
