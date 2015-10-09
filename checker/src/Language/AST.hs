@@ -50,13 +50,13 @@ class Symantics repr where
   ret :: repr a -> repr (m a)
   bind :: repr (m a) -> repr (a -> m b) -> repr (m b)
 
-  spawn :: repr RSing -> repr (Process ()) -> repr (Process (Pid RSing))
-  spawnMany :: repr RMulti -> repr (Process ()) -> repr (Process (Pid RMulti))
-
   send ::  repr (Pid RSing) -> repr a -> repr (Process ())
   recv ::  repr (Process a)
 
+  spawn :: repr RSing -> repr (Process ()) -> repr (Process (Pid RSing))
+  spawnMany :: repr RMulti -> repr Int -> repr (Process ()) -> repr (Process (Pid RMulti))
   doMany :: repr (Pid RMulti) -> repr (Pid RSing -> Process ()) -> repr (Process ())
 
-foo :: Symantics repr => repr RSing -> repr (Process ()) -> repr (Process ())
-foo r bob = spawn r bob `bind` lam (\p -> send p tt)
+foo :: Symantics repr => repr (RMulti -> Int -> Process () -> Process ())
+foo = lam (\r -> lam (\n -> lam (\bob ->
+    spawnMany r n bob `bind` lam (\p -> doMany p (lam (\psing -> send psing tt))))))
