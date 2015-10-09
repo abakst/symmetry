@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 module MyPreprocessor where
 
 import           AST
@@ -29,14 +30,6 @@ import           Text.Printf
 -- ### Usage
 -- #Func(Arg1,Arg2,...,ArgN)
 
-data Macro = M { mname :: String
-               , margs :: [String]
-               , mbody :: String
-               }
-             deriving (Eq, Show)
-
-type MacroState = Map.Map String Macro
-
 macroDef =
   emptyDef { Token.commentLine     = "--"
            , Token.identStart      = letter
@@ -64,30 +57,26 @@ comma         = Token.comma         macroLexer
 -- ### PARSER
 -- ####################################################################
 
-macroDefP :: ParsecT String u Identity Macro
-macroDefP  = do reserved "def"
-                name <- identifier
-                args <- parens $ commaSep identifier
-                reservedOp "="
-                body <- manyTill anyChar (reservedOp ";;")
-                return (M name args body)
+-- macroDefP :: ParsecT String u Identity Macro
+-- macroDefP  = do reserved "def"
+--                 name <- identifier
+--                 args <- parens $ commaSep identifier
+--                 reservedOp "="
+--                 body <- manyTill anyChar (reservedOp ";;")
+--                 return (M name args body)
 
--- first pass over the text to find the macro definitions
-firstPass :: ParsecT String MacroState Identity String
-firstPass =
-  do ss <- many1 $ do macros <- many macroDefP
-                      mapM (\m -> modifyState (upd m)) macros
-                      manyTill1 anyChar end
-     return (concat ss)
-   where end     = lookAhead $ (reserved "def" >> return ()) <|> eof
-         upd m s = let name = mname m
-                   in case Map.lookup name s of
-                        Nothing -> Map.insert name m s
-                        _       -> error $ "2nd definition of macro " ++ name
-
--- macroUseP :: ParsecT String MacroState Identity String
--- macroUseP  = do char '#'
---                 name <-
+-- -- first pass over the text to find the macro definitions
+-- firstPass :: ParsecT String MacroState Identity String
+-- firstPass =
+--   do ss <- many1 $ do macros <- many macroDefP
+--                       mapM (\m -> modifyState (upd m)) macros
+--                       manyTill1 anyChar end
+--      return (concat ss)
+--    where end     = lookAhead $ (reserved "def" >> return ()) <|> eof
+--          upd m s = let name = mname m
+--                    in case Map.lookup name s of
+--                         Nothing -> Map.insert name m s
+--                         _       -> error $ "2nd definition of macro " ++ name
 
 -- ####################################################################
 -- ### TESTING
