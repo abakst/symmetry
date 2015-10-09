@@ -1,38 +1,62 @@
 {-# Language GADTs #-}
+{-# Language FlexibleInstances #-}
+{-# Language UndecidableInstances #-}
 module AST where
 
-data RoleSing  = RS String
-data RoleMulti = RM String
+import Control.Monad.Free
+
+data RSing  = RS String 
+data RMulti = RM String
+
+data Pid r = Pid r
+
 data Process a
+
+instance Functor Process where
+  fmap  = undefined
+instance Applicative Process where
+  pure  = undefined
+  (<*>) = undefined
+
+instance Monad Process where
+  return = undefined
+  (>>=)  = undefined
 
 data Var = V String
 
 data Type t where
+  TUnit :: Type ()
   TInt :: Type Int
   TArrow :: Type a -> Type b -> Type (a -> b)
-  TRoleSing :: Type RoleSing
-  TRoleMulti :: Type RoleMulti
-  
-class TypeOf t where
-  typeOf :: t -> Type t
-
-instance TypeOf Int where
-  typeOf = const TInt
-
-instance TypeOf RoleSing where
-  typeOf = const TRoleSing
-
-instance TypeOf RoleMulti where
-  typeOf = const TRoleMulti
+  TProc :: Type a -> Type (Process a)
 
 data Expr t where
-  ELit   :: TypeOf t => t -> Expr t
-  EVar   :: Var -> Type a -> Expr a
-  EAbs   :: Var -> Type a -> Expr b -> Expr (a -> b)
-  ESpawn :: Expr RoleSing -> Expr (Process a) -> Expr (Process RoleSing)
-  ESpawnMany :: Expr RoleMulti -> Expr (Process a) -> Expr (Process RoleMulti)
-  EDoMany :: Expr RoleMulti -> Expr (RoleSing -> Process a) -> Expr (Process [a])
-  ESend :: Expr RoleSing -> Expr a -> Expr (Process ()) 
-  ERecv :: Expr (Process a)
-  EBind :: Expr (Process a) -> Expr (a -> Process b) -> Expr (Process b)
-  ERet ::  Expr a -> Expr (Process a)
+  ELit       :: t -> Expr t 
+  EVar       :: Var -> Expr a
+  EAbs       :: Var -> Expr b -> Expr (a -> b)
+  ESpawn     :: Expr RSing -> Expr (Process a) -> Expr (Process (Pid RSing))
+  ESpawnMany :: Expr RMulti -> Expr (Process a) -> Expr (Process (Pid RMulti))
+  EDoMany    :: Expr (Pid RMulti) -> Expr (Pid RSing -> Process a) -> Expr (Process [a])
+  ESend      :: Expr (Pid RSing) -> Expr a -> Expr (Process ()) 
+  ERecv      :: Expr (Process a)
+  EBind      :: Expr (Process a) -> Expr (a -> Process b) -> Expr (Process b)
+  ERet       ::  Expr a -> Expr (Process a)
+
+class Symantics repr where
+  tt :: repr ()
+  rep :: Int -> repr Int
+  lam :: (repr a -> repr b) -> repr (a -> b)
+  app :: repr (a -> b) -> repr a -> repr b
+  ret :: repr a -> repr (m a)
+  bind :: repr (m a) -> repr (a -> m b) -> repr (m b)
+
+  spawn :: repr RSing -> repr (Process ()) -> repr (Process (Pid RSing))
+  spawnMany :: repr RMulti -> repr (Process ()) -> repr (Process (Pid RMulti))
+
+  send ::  repr (Pid RSing) -> repr a -> repr (Process ())
+  recv ::  repr (Process a)
+
+  doMany :: repr (Pid RMulti) -> repr (Pid RSing -> Process ()) -> repr (Process ())
+
+foo :: Symantics repr => repr RSing -> repr (Process ()) -> repr (Process ())
+foo r bob = spawn r bob `bind` lam (\p -> send p tt)
