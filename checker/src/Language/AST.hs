@@ -44,14 +44,26 @@ data Expr t where
   ERet       ::  Expr a -> Expr (Process a)
 
 class Symantics repr where
+  -- Value Injection
   tt   :: repr ()
   rep  :: Int -> repr Int
   repS :: String -> repr String
+
+  -- Lambda Calculus
+  inl  :: repr a -> repr (Either a b)
+  inr  :: repr b -> repr (Either a b)
+  pair :: repr a -> repr b -> repr (a, b)
+  proj1 :: repr (a, b) -> repr a
+  proj2 :: repr (a, b) -> repr b
+  match :: repr (Either a b) -> repr (a -> c) -> repr (b -> c) -> repr (Either a b -> c)
   lam  :: (repr a -> repr b) -> repr (a -> b)
   app  :: repr (a -> b) -> repr a -> repr b
+
+  -- Monads
   ret  :: Monad m => repr a -> repr (m a)
   bind :: Monad m => repr (m a) -> repr (a -> m b) -> repr (m b)
 
+  -- Primitives:        
   self :: repr (Process (Pid RSing))
   send :: repr (Pid RSing) -> repr a -> repr (Process ())
   recv :: repr (Process a)
