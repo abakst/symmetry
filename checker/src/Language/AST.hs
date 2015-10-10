@@ -1,9 +1,9 @@
 {-# Language GADTs #-}
 {-# Language FlexibleInstances #-}
 {-# Language UndecidableInstances #-}
-module AST where
+module Language.AST where
 
-import Control.Monad.Free
+import Data.Typeable
 
 data RSing  = RS String 
 data RMulti = RM String
@@ -11,6 +11,7 @@ data RMulti = RM String
 data Pid r = Pid r
 
 data Process a
+  deriving (Typeable)
 
 instance Functor Process where
   fmap  = undefined
@@ -43,20 +44,23 @@ data Expr t where
   ERet       ::  Expr a -> Expr (Process a)
 
 class Symantics repr where
-  tt :: repr ()
-  rep :: Int -> repr Int
-  lam :: (repr a -> repr b) -> repr (a -> b)
-  app :: repr (a -> b) -> repr a -> repr b
-  ret :: repr a -> repr (m a)
-  bind :: repr (m a) -> repr (a -> m b) -> repr (m b)
+  tt   :: repr ()
+  rep  :: Int -> repr Int
+  repS :: String -> repr String
+  lam  :: (repr a -> repr b) -> repr (a -> b)
+  app  :: repr (a -> b) -> repr a -> repr b
+  ret  :: Monad m => repr a -> repr (m a)
+  bind :: Monad m => repr (m a) -> repr (a -> m b) -> repr (m b)
 
-  send ::  repr (Pid RSing) -> repr a -> repr (Process ())
-  recv ::  repr (Process a)
+  self :: repr (Process (Pid RSing))
+  send :: repr (Pid RSing) -> repr a -> repr (Process ())
+  recv :: repr (Process a)
 
-  spawn :: repr RSing -> repr (Process ()) -> repr (Process (Pid RSing))
+  spawn     :: repr RSing -> repr (Process ()) -> repr (Process (Pid RSing))
   spawnMany :: repr RMulti -> repr Int -> repr (Process ()) -> repr (Process (Pid RMulti))
-  doMany :: repr (Pid RMulti) -> repr (Pid RSing -> Process ()) -> repr (Process ())
+  doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process ()) -> repr (Process ())
 
-foo :: Symantics repr => repr (RMulti -> Int -> Process () -> Process ())
-foo = lam (\r -> lam (\n -> lam (\bob ->
-    spawnMany r n bob `bind` lam (\p -> doMany p (lam (\psing -> send psing tt))))))
+  newRSing  :: repr String -> repr (Process RSing)
+  newRMulti :: repr String -> repr (Process RMulti)
+
+  exec      :: repr String -> repr (Process a) -> repr a 
