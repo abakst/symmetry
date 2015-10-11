@@ -1,9 +1,9 @@
 {-# Language GADTs #-}
 {-# Language FlexibleInstances #-}
 {-# Language UndecidableInstances #-}
-module AST where
+module Language.AST where
 
-import Control.Monad.Free
+import Data.Typeable
 
 data RSing  = RS String 
 data RMulti = RM String
@@ -11,6 +11,7 @@ data RMulti = RM String
 data Pid r = Pid r
 
 data Process a
+  deriving (Typeable)
 
 instance Functor Process where
   fmap  = undefined
@@ -43,20 +44,35 @@ data Expr t where
   ERet       ::  Expr a -> Expr (Process a)
 
 class Symantics repr where
-  tt :: repr ()
-  rep :: Int -> repr Int
-  lam :: (repr a -> repr b) -> repr (a -> b)
-  app :: repr (a -> b) -> repr a -> repr b
-  ret :: repr a -> repr (m a)
-  bind :: repr (m a) -> repr (a -> m b) -> repr (m b)
+  -- Value Injection
+  tt   :: repr ()
+  rep  :: Int -> repr Int
+  repS :: String -> repr String
 
-  send ::  repr (Pid RSing) -> repr a -> repr (Process ())
-  recv ::  repr (Process a)
+  -- Lambda Calculus
+  inl  :: repr a -> repr (Either a b)
+  inr  :: repr b -> repr (Either a b)
+  pair :: repr a -> repr b -> repr (a, b)
+  proj1 :: repr (a, b) -> repr a
+  proj2 :: repr (a, b) -> repr b
+  match :: repr (Either a b) -> repr (a -> c) -> repr (b -> c) -> repr (Either a b -> c)
+  lam  :: (repr a -> repr b) -> repr (a -> b)
+  app  :: repr (a -> b) -> repr a -> repr b
 
-  spawn :: repr RSing -> repr (Process ()) -> repr (Process (Pid RSing))
+  -- Monads
+  ret  :: Monad m => repr a -> repr (m a)
+  bind :: Monad m => repr (m a) -> repr (a -> m b) -> repr (m b)
+
+  -- Primitives:        
+  self :: repr (Process (Pid RSing))
+  send :: repr (Pid RSing) -> repr a -> repr (Process ())
+  recv :: repr (Process a)
+
+  spawn     :: repr RSing -> repr (Process ()) -> repr (Process (Pid RSing))
   spawnMany :: repr RMulti -> repr Int -> repr (Process ()) -> repr (Process (Pid RMulti))
-  doMany :: repr (Pid RMulti) -> repr (Pid RSing -> Process ()) -> repr (Process ())
+  doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process ()) -> repr (Process ())
 
-foo :: Symantics repr => repr (RMulti -> Int -> Process () -> Process ())
-foo = lam (\r -> lam (\n -> lam (\bob ->
-    spawnMany r n bob `bind` lam (\p -> doMany p (lam (\psing -> send psing tt))))))
+  newRSing  :: repr String -> repr (Process RSing)
+  newRMulti :: repr String -> repr (Process RMulti)
+
+  exec      :: repr String -> repr (Process a) -> repr a 
