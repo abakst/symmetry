@@ -10,9 +10,9 @@
 | howait        | hs: ✓  config: RC     |
 | state_factory |                       |
 | firewall      | hs: ✓  config: ?      |
-| ring          |                       |
+| ring          | hs: ✓  config: ?      |
 | stutter       | hs: ✓  config: ?      |
-| pipe          | - (RC)                |
+| pipe          | hs: ✓  config: RC     |
 | unsafe_send   | - (failure case)      |
 | parikh        | ✓                     |
 | safe_send     | - (similar to parikh) |

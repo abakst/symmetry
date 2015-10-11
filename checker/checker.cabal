@@ -38,6 +38,7 @@ executable checker
                      , wl-pprint >=1.2 && <1.3
                      , parsec >= 3.1.5
                      , cpphs
+                     , free
   hs-source-dirs:      src
                        src/cloud-haskell-tests
                        src/simple-parser

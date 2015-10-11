@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs #-}
+
 module MyPreprocessor where
 
 import           AST
@@ -56,6 +57,12 @@ comma         = Token.comma         macroLexer
 -- ####################################################################
 -- ### PARSER
 -- ####################################################################
+
+data Macro t where
+  MSub  :: String -> Macro String
+  MFun1 :: a -> Macro (a -> String)
+  MFun2 :: a -> b -> Macro (a -> b -> String)
+  MFun3 :: a -> b -> c -> Macro (a -> b -> c -> String)
 
 -- macroDefP :: ParsecT String u Identity Macro
 -- macroDefP  = do reserved "def"

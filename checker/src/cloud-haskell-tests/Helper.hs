@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -9,6 +10,7 @@ import GHC.Generics (Generic)
 import System.Random
 import Control.Distributed.Process
 import System.Directory
+import Data.Typeable.Internal
 
 getRandInRange    :: Int -> Int -> Process Int
 getRandInRange b e = liftIO $ do n <- randomIO
@@ -22,7 +24,7 @@ getRandLInRange b e n = if n == 0
                                    return (x:l)
 
 data PeanoN = Zero | Succ PeanoN
-             deriving (Ord, Eq, Read, Show, Generic)
+             deriving (Ord, Eq, Read, Show, Typeable, Generic)
 instance Binary PeanoN
 
 toPeano n = if n == 0
