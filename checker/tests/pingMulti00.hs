@@ -7,6 +7,7 @@ module PingMulti00 where
 import Prelude hiding ((>>=), (>>), fail, return) 
 import Language.AST  
 import Language.Syntax  
+import SymbEx
 
 pingServer :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
            => repr (Process ())
@@ -30,3 +31,5 @@ main :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
      -> repr ()
 main n = exec $ do r <- newRMulti
                    master r n
+
+res = renv $ runSymb (main (repI 10))

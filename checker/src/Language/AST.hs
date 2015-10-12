@@ -50,7 +50,7 @@ class Symantics repr where
   -- Monads
   ret  :: repr a -> repr (Process a)
   bind :: repr (Process a) -> repr (a -> Process b) -> repr (Process b)
-  fixM :: repr ((a -> Process b) -> a -> Process b) -> repr (a -> Process b)
+  fixM :: repr ((a -> Process a) -> a -> Process a) -> repr (a -> Process a)
 
   -- Primitives:        
   self :: repr (Process (Pid RSing))
