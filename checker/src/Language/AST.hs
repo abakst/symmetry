@@ -1,12 +1,20 @@
 {-# Language GADTs #-}
 {-# Language FlexibleInstances #-}
 {-# Language UndecidableInstances #-}
+{-# Language MultiParamTypeClasses #-}
 module Language.AST where
 
+import Data.Hashable
 import Data.Typeable
 
-data RSing  = RS String 
-data RMulti = RM String
+data RSing  = RS Int deriving (Eq, Show)
+data RMulti = RM Int deriving (Eq, Show)
+
+instance Hashable RSing where
+  hashWithSalt s (RS i) = hashWithSalt s i
+
+instance Hashable RMulti where
+  hashWithSalt s (RM i) = hashWithSalt s i
 
 data Pid r = Pid r
 
@@ -23,30 +31,10 @@ instance Monad Process where
   return = undefined
   (>>=)  = undefined
 
-data Var = V String
-
-data Type t where
-  TUnit :: Type ()
-  TInt :: Type Int
-  TArrow :: Type a -> Type b -> Type (a -> b)
-  TProc :: Type a -> Type (Process a)
-
-data Expr t where
-  ELit       :: t -> Expr t 
-  EVar       :: Var -> Expr a
-  EAbs       :: Var -> Expr b -> Expr (a -> b)
-  ESpawn     :: Expr RSing -> Expr (Process a) -> Expr (Process (Pid RSing))
-  ESpawnMany :: Expr RMulti -> Expr (Process a) -> Expr (Process (Pid RMulti))
-  EDoMany    :: Expr (Pid RMulti) -> Expr (Pid RSing -> Process a) -> Expr (Process [a])
-  ESend      :: Expr (Pid RSing) -> Expr a -> Expr (Process ()) 
-  ERecv      :: Expr (Process a)
-  EBind      :: Expr (Process a) -> Expr (a -> Process b) -> Expr (Process b)
-  ERet       ::  Expr a -> Expr (Process a)
-
 class Symantics repr where
   -- Value Injection
   tt   :: repr ()
-  rep  :: Int -> repr Int
+  repI :: Int -> repr Int
   repS :: String -> repr String
 
   -- Lambda Calculus
@@ -59,20 +47,22 @@ class Symantics repr where
   lam  :: (repr a -> repr b) -> repr (a -> b)
   app  :: repr (a -> b) -> repr a -> repr b
 
-  -- Monads
-  ret  :: Monad m => repr a -> repr (m a)
-  bind :: Monad m => repr (m a) -> repr (a -> m b) -> repr (m b)
+  -- -- Monads
+  ret  :: repr a -> repr (Process a)
+  bind :: repr (Process a) -> repr (a -> Process b) -> repr (Process b)
 
-  -- Primitives:        
+  -- -- Primitives:        
   self :: repr (Process (Pid RSing))
   send :: repr (Pid RSing) -> repr a -> repr (Process ())
-  recv :: repr (Process a)
 
   spawn     :: repr RSing -> repr (Process ()) -> repr (Process (Pid RSing))
   spawnMany :: repr RMulti -> repr Int -> repr (Process ()) -> repr (Process (Pid RMulti))
   doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process ()) -> repr (Process ())
 
-  newRSing  :: repr String -> repr (Process RSing)
-  newRMulti :: repr String -> repr (Process RMulti)
+  newRSing  :: repr (Process RSing)
+  newRMulti :: repr (Process RMulti)
 
   exec      :: repr String -> repr (Process a) -> repr a 
+
+class Symantics repr => SymRecv repr a where
+  recv :: repr (Process a)
