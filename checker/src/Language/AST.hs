@@ -53,11 +53,10 @@ class Symantics repr where
 
   -- Primitives:        
   self :: repr (Process (Pid RSing))
-  send :: repr (Pid RSing) -> repr a -> repr (Process ())
 
   spawn     :: repr RSing -> repr (Process ()) -> repr (Process (Pid RSing))
   spawnMany :: repr RMulti -> repr Int -> repr (Process ()) -> repr (Process (Pid RMulti))
-  doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process ()) -> repr (Process ())
+  doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process a) -> repr (Process ())
 
   newRSing  :: repr (Process RSing)
   newRMulti :: repr (Process RMulti)
@@ -67,3 +66,6 @@ class Symantics repr where
 
 class Symantics repr => SymRecv repr a where
   recv :: repr (Process a)
+
+class Symantics repr => SymSend repr a where
+  send :: repr (Pid RSing) -> repr a -> repr (Process ())

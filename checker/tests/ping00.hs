@@ -4,7 +4,7 @@ module Ping00 where
 import Prelude (($)) 
 import Language.AST  
 import Language.Syntax  
-import Convert
+import SymbEx
 
 pingServer :: SymbEx (Process ())
 pingServer = do myPid <- self
