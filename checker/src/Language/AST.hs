@@ -47,11 +47,11 @@ class Symantics repr where
   lam  :: (repr a -> repr b) -> repr (a -> b)
   app  :: repr (a -> b) -> repr a -> repr b
 
-  -- -- Monads
+  -- Monads
   ret  :: repr a -> repr (Process a)
   bind :: repr (Process a) -> repr (a -> Process b) -> repr (Process b)
 
-  -- -- Primitives:        
+  -- Primitives:        
   self :: repr (Process (Pid RSing))
   send :: repr (Pid RSing) -> repr a -> repr (Process ())
 
@@ -62,7 +62,8 @@ class Symantics repr where
   newRSing  :: repr (Process RSing)
   newRMulti :: repr (Process RMulti)
 
-  exec      :: repr String -> repr (Process a) -> repr a 
+  -- "Run" a process             
+  exec      :: repr (Process a) -> repr a 
 
 class Symantics repr => SymRecv repr a where
   recv :: repr (Process a)
