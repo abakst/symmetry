@@ -70,36 +70,36 @@ data Stmt a = SSkip a
 endLabels :: (Data a, Typeable a) => Stmt a -> [LVar] 
 endLabels = nub . listify (isPrefixOf "end" . unlv)
             
-unifyWRRW (t1,p1,u1) (t2,p2,u2)
-  = do s <- unifyMType t1 t2
-       return ()
+-- unifyWRRW (t1,p1,u1) (t2,p2,u2)
+--   = do s <- unifyMType t1 t2
+--        return ()
               
-unifyMType (MTApp tc1 as) (MTApp tc2 as')
-  | tc1 == tc2  && length as == length as' 
-    = foldM extendSub [] (zip as' as)
-  where
-    extendSub s (PVar v,p)
-      = maybe (return $ (v,p):s) (const Nothing) $ lookup v s
+-- unifyMType (MTApp tc1 as) (MTApp tc2 as')
+--   | tc1 == tc2  && length as == length as' 
+--     = foldM extendSub [] (zip as' as)
+--   where
+--     extendSub s (PVar v,p)
+--       = maybe (return $ (v,p):s) (const Nothing) $ lookup v s
            
-rwPairs :: Stmt Int -> [(MType, Pid, MType)] 
-rwPairs s
-  = everything (++) (mkQ [] rwPair) s
+-- rwPairs :: Stmt Int -> [(MType, Pid, MType)] 
+-- rwPairs s
+--   = everything (++) (mkQ [] rwPair) s
 
-wrPairs :: Stmt Int -> [(MType, Pid, MType)] 
-wrPairs s
-  = everything (++) (mkQ [] wrPair) s
+-- wrPairs :: Stmt Int -> [(MType, Pid, MType)] 
+-- wrPairs s
+--   = everything (++) (mkQ [] wrPair) s
             
-rwPair :: Stmt Int -> [(MType, Pid, MType)]
-rwPair (SRecv mts _)
-  = [(m, p, m') | (m, (SSend p mts' _)) <- mts, (m',_) <- mts']
-rwPair _
-  = []
+-- rwPair :: Stmt Int -> [(MType, Pid, MType)]
+-- rwPair (SRecv mts _)
+--   = [(m, p, m') | (m, (SSend p mts' _)) <- mts, (m',_) <- mts']
+-- rwPair _
+--   = []
     
-wrPair :: Stmt Int -> [(MType, Pid, MType)]
-wrPair (SSend p mts _)
-  = [(m, p, m') | (m, (SRecv mts' _)) <- mts, (m', _) <- mts']
-wrPair _
-  = []
+-- wrPair :: Stmt Int -> [(MType, Pid, MType)]
+-- wrPair (SSend p mts _)
+--   = [(m, p, m') | (m, (SRecv mts' _)) <- mts, (m', _) <- mts']
+-- wrPair _
+--   = []
                   
 -- | Mark End
 -- apLast :: (a -> a) -> [a] -> [a]

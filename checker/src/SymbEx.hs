@@ -5,14 +5,12 @@ module SymbEx where
 import           Data.Hashable  
 import qualified Data.HashMap.Strict as M
 import           Control.Monad.State
-import           Control.Monad.Identity
 import           Language.AST as L
 import qualified AST          as IL
 
 data Var   = V Int deriving Show
-v (V i) = "x" ++ show i
 
-type Env  = M.HashMap Var AbsVal
+-- type Env  = M.HashMap Var AbsVal
 type REnv = M.HashMap Role (Maybe (IL.Stmt ()))
 data Role = S RSing
           | M RMulti
@@ -22,8 +20,7 @@ instance Hashable Role where
   hashWithSalt s (S r) = hashWithSalt s r
   hashWithSalt s (M r) = hashWithSalt s r
 
-data SymbState = SymbState { env  :: Env
-                           , renv :: REnv
+data SymbState = SymbState { renv :: REnv
                            , stmt :: IL.Stmt ()
                            , ctr  :: Int
                            , me   :: Role
@@ -38,33 +35,32 @@ freshInt = do n <- gets ctr
 freshVar :: SymbExM Var              
 freshVar = V <$> freshInt
             
-data SymbEx a = SE { runSE :: SymbExM (Abs a) } -- StateT SymbState Identity (Abs a) }
+data SymbEx a = SE { runSE :: SymbExM (Abs a) } 
 
 data Abs t where
   TUnit :: Maybe Var -> Abs ()
   TInt :: Maybe Var -> Abs Int
   TPid :: Maybe Var -> L.Pid (Maybe RSing) -> Abs (Pid RSing)
+  TPidMulti :: Maybe Var -> L.Pid (Maybe RMulti) -> Abs (Pid RMulti)
   TRoleSing :: Maybe Var -> RSing -> Abs RSing
+  TRoleMulti :: Maybe Var -> RMulti -> Abs RMulti
   TString :: Maybe Var -> Abs String
   TArrow :: Maybe Var -> (Abs a -> SymbEx b) -> Abs (a -> b)
   TProc :: Maybe Var -> Abs a -> Abs (L.Process a)
 
-data AbsVal = AUnit (Abs ())
-            | AInt (Abs Int)
-            | APid (Abs (Pid RSing))
-            | ARoleSing (Abs RSing)
-            | AString (Abs String)
-            | AFun AbsVal AbsVal
-            | AProc AbsVal
-
+-------------------------------------------------
+-- | Recv t tells us how to create a default abstraction of type t
+-------------------------------------------------
 class Recv t where
   recvTy :: Maybe Var -> Abs t
 
-class Send t where
-  -- This line intentionally left blank
-
 instance Recv (Pid RSing) where
   recvTy v = TPid v (Pid Nothing)
+-------------------------------------------------
+-- | An instance of Send t means that t can be sent in a message
+-------------------------------------------------
+class Send t where
+  -- This line intentionally left blank
 
 instance Send (Pid RSing) where
   -- This line intentionally left blank
@@ -72,6 +68,10 @@ instance Send (Pid RSing) where
 instance Send (()) where
   -- This line intentionally left blank
 
+-------------------------------------------------
+-- | Helpers for generating IL from Abstractions
+-------------------------------------------------
+varToIL :: Var -> IL.Var
 varToIL (V x) = IL.V ("x" ++ show x)
 
 pidAbsToIL :: Abs (Pid RSing) -> IL.Pid
@@ -125,25 +125,39 @@ seqStmtM t = modify $ \s -> s { stmt = stmt s `seqStmt` t }
 -------------------------------------------------
 -- | Updates to roles
 -------------------------------------------------
--- lookupRoleM r = do m <- gets renv
-
 spawnSingle :: SymbEx RSing -> SymbEx (Process a) -> SymbEx (Process (Pid RSing))
 spawnSingle r p = SE $ do (TRoleSing _ r') <- runSE r
                           m <- gets renv
                           case M.lookup (S r') m of
-                            Just Nothing -> do sOld <- get
-                                               modify $ \s -> s { stmt = IL.SSkip ()
-                                                                , me   = S r'
-                                                                }
-                                               runSE p
-                                               st <- gets stmt
-                                               modify $ \s -> s { stmt = stmt sOld
-                                                                , me   = me sOld
-                                                                , renv = M.insert (S r') (Just st) (renv sOld)
-                                                                }
-                                               return $ TProc Nothing (TPid Nothing (Pid (Just r')))
-                                     
-             
+                            Just Nothing -> do
+                              sOld <- get
+                              modify $ \s -> s { stmt = IL.SSkip ()
+                                               , me   = S r'
+                                               }
+                              runSE p
+                              st <- gets stmt
+                              modify $ \s -> s { stmt = stmt sOld
+                                               , me   = me sOld
+                                               , renv = M.insert (S r') (Just st) (renv sOld)
+                                               }
+                              return $ TProc Nothing (TPid Nothing (Pid (Just r')))
+
+spawnMany :: SymbEx RMulti -> SymbEx Int -> SymbEx (Process a) -> SymbEx (Process (Pid RMulti))
+spawnMany r n p = SE $ do (TRoleMulti _ r') <- runSE r
+                          m <- gets renv
+                          case M.lookup (M r') m of
+                            Just Nothing -> do
+                              sOld <- get
+                              modify $ \s -> s { stmt = IL.SSkip ()
+                                               , me   = M r'
+                                               }
+                              runSE p
+                              st <- gets stmt
+                              modify $ \s -> s { stmt = stmt sOld
+                                               , me   = me sOld
+                                               , renv = M.insert (M r') (Just st) (renv sOld)
+                                               }
+                              return $ TProc Nothing (TPidMulti Nothing (Pid (Just r')))
 -------------------------------------------------
 -- | The Syntax-directed Symbolic Execution
 -------------------------------------------------
@@ -165,7 +179,9 @@ instance Symantics SymbEx where
                          TArrow _ f <- runSE mf
                          runSE $ f a
 
-  spawn        = spawnSingle
+  spawn           = spawnSingle
+
+  spawnMany       = SymbEx.spawnMany
 
   exec p       = SE $ do (TProc _ a) <- runSE p
                          modify $ \s -> s { stmt = IL.SSkip ()
@@ -180,6 +196,12 @@ instance Symantics SymbEx where
                      modify (\s -> s { renv = M.insert (S (RS n)) Nothing (renv s) })
                      return (TProc Nothing (TRoleSing Nothing (RS n)))
 
+  newRMulti = SE $ do n <- freshInt
+                      modify (\s -> s { renv = M.insert (M (RM n)) Nothing (renv s) })
+                      return (TProc Nothing (TRoleMulti Nothing (RM n)))
+
+  doMany p f = SE $ do TPidMulti _ (Pid (Just x)) <- runSE p
+                       return (TProc Nothing (TUnit Nothing))
 
 instance (Recv a, AbsToIL a) => SymRecv SymbEx a where
   recv         = SE $ do x <- freshVar
@@ -195,8 +217,7 @@ instance (Send a, AbsToIL a) => SymSend SymbEx a where
 
 
 emptyState :: SymbState
-emptyState = SymbState { env = M.empty
-                       , renv = M.empty
+emptyState = SymbState { renv = M.empty
                        , stmt = IL.SSkip ()
                        , ctr = 1
                        , me = S (RS 0)
