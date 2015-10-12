@@ -54,6 +54,3 @@ factory n newstate = do p  <- spawnLocal (state n newstate)
 call_loop              :: PeanoN -> (PeanoN -> Process a) -> Process a
 call_loop (Succ Zero) f = any_nat >>= f
 call_loop (Succ n)    f = (any_nat >>= f) >> call_loop n f
-
-any_nat :: Process PeanoN
-any_nat  = getRandPInRange 1 4

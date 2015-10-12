@@ -12,6 +12,13 @@ import Control.Distributed.Process
 import System.Directory
 import Data.Typeable.Internal
 
+any_bool :: Process Bool
+any_bool  = liftIO $ do n <- randomIO :: IO Int
+                        return (if n `mod` 2 == 1 then True else False)
+
+any_nat :: Process PeanoN
+any_nat  = getRandPInRange 1 5
+
 getRandInRange    :: Int -> Int -> Process Int
 getRandInRange b e = liftIO $ do n <- randomIO
                                  return ((n `mod` (e-b)) + b)
@@ -24,8 +31,11 @@ getRandLInRange b e n = if n == 0
                                    return (x:l)
 
 data PeanoN = Zero | Succ PeanoN
-             deriving (Ord, Eq, Read, Show, Typeable, Generic)
+             deriving (Ord, Eq, Read, Typeable, Generic)
 instance Binary PeanoN
+
+instance Show PeanoN where
+  show p = show (fromPeano p)
 
 toPeano n = if n == 0
             then Zero
