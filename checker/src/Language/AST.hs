@@ -1,9 +1,11 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# Language GADTs #-}
 {-# Language FlexibleInstances #-}
 {-# Language UndecidableInstances #-}
 module Language.AST where
 
 import Data.Typeable
+import Control.Applicative
 
 data RSing  = RS String 
 data RMulti = RM String
