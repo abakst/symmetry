@@ -17,8 +17,6 @@ import Data.Generics hiding (Generic)
 import GHC.Generics
 import GHC.Int
 
-import qualified Control.Monad.State.Lazy as St
-
 data LockM = Lock ProcessId
              deriving (Ord, Eq, Show, Typeable, Generic)
 instance Binary LockM

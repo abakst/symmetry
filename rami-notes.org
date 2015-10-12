@@ -1,21 +1,23 @@
 * Benchmarks
 
-| Name          | Status                |
-|---------------+-----------------------|
-| finite_leader |                       |
-| reslock       |                       |
-| reslockbeh    |                       |
-| sieve         | hs: ✓  config: -      |
-| concdb        | hs: ✓  config: -      |
-| howait        | hs: ✓  config: RC     |
-| state_factory | hs: ✓  config: -      |
-| firewall      | hs: ✓  config: -      |
-| ring          | hs: ✓  config: -      |
-| stutter       | hs: ✓  config: -      |
-| pipe          | hs: ✓  config: RC     |
-| unsafe_send   | - (failure case)      |
-| parikh        | ✓                     |
-| safe_send     | - (similar to parikh) |
+|---------------+------------------------|
+| Name          | Status                 |
+|---------------+------------------------|
+| finite_leader | hs: ✓  config: -       |
+| reslock       | hs: ✓  config: -       |
+| reslockbeh    | - (similar to reslock) |
+| sieve         | hs: ✓  config: -       |
+| concdb        | hs: ✓  config: -       |
+| howait        | hs: ✓  config: RC      |
+| state_factory | hs: ✓  config: -       |
+| firewall      | hs: ✓  config: -       |
+| ring          | hs: ✓  config: -       |
+| stutter       | hs: ✓  config: -       |
+| pipe          | hs: ✓  config: RC      |
+| unsafe_send   | - (failure case)       |
+| parikh        | ✓                      |
+| safe_send     | - (similar to parikh)  |
+|---------------+------------------------|
 
 RC : recursive thread creation
 
