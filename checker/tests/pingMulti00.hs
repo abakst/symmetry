@@ -1,24 +1,32 @@
 {-# Language RebindableSyntax #-}
+{-# Language FlexibleContexts #-}
+{-# Language ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
-module Ping00 where
+module PingMulti00 where
 
 import Prelude hiding ((>>=), (>>), fail, return) 
 import Language.AST  
 import Language.Syntax  
-import SymbEx
 
-pingServer :: SymbEx (Process ())
+pingServer :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
+           => repr (Process ())
 pingServer = do myPid <- self
-                p <- recv
+                p     <- recv
                 send p myPid
 
-master :: SymbEx RMulti -> SymbEx Int -> SymbEx (Process ())
-master r n = do ps <- spawnMany r n pingServer
+master :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
+       => repr RMulti
+       -> repr Int
+       -> repr (Process ())
+master r n = do ps    <- spawnMany r n pingServer
                 myPid <- self
                 doMany ps (lam $ \p -> send p myPid)
-                doMany ps (lam $ \_ -> recv :: SymbEx (Process (Pid RSing)))
-                return tt
+                doMany ps (lam $ \_ -> do (_ :: repr (Pid RSing))  <- recv
+                                          ret tt)
+                ret tt
 
-main :: SymbEx Int -> SymbEx ()
+main :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
+     => repr Int
+     -> repr ()
 main n = exec $ do r <- newRMulti
                    master r n
