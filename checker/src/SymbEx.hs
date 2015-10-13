@@ -2,6 +2,9 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds -fno-warn-name-shadowing  #-}
 module SymbEx where
 
+import           Data.List (nub)
+import           Data.Generics
+
 import           Data.Hashable
 import qualified Data.HashMap.Strict as M
 import           Control.Monad.State
@@ -10,8 +13,7 @@ import qualified AST          as IL
 
 data Var   = V Int deriving Show
 
--- type Env  = M.HashMap Var AbsVal
-type REnv = M.HashMap Role (Maybe (IL.Stmt ()))
+type REnv = M.HashMap Role (IL.Stmt ())
 data Role = S RSing
           | M RMulti
             deriving (Eq, Show)
@@ -20,11 +22,22 @@ instance Hashable Role where
   hashWithSalt s (S r) = hashWithSalt s r
   hashWithSalt s (M r) = hashWithSalt s r
 
-data SymbState = SymbState { renv :: REnv
-                           , ctr  :: Int
-                           , me   :: Role
+data SymbState = SymbState { renv  :: REnv
+                           , ctr   :: Int
+                           , me    :: Role
+                           , renvs :: [REnv]
                            }
 type SymbExM a = State SymbState a
+
+emptyState :: SymbState
+emptyState = SymbState { renv = M.empty
+                       , renvs = []
+                       , ctr = 1
+                       , me = S (RS 0)
+                       }
+
+runSymb :: SymbEx a -> SymbState
+runSymb e = execState (runSE e) emptyState
 
 freshInt :: SymbExM Int
 freshInt = do n <- gets ctr
@@ -127,23 +140,24 @@ seqStmt s1 s2 = IL.SBlock [s1, s2] ()
 -------------------------------------------------
 -- | Updates to roles
 -------------------------------------------------
+insRoleM :: Role -> SymbEx (Process a) -> SymbExM ()
+insRoleM k p = do m <- gets renv
+                  case M.lookup k m of
+                    Nothing -> do
+                      TProc _ st _ <- runSE p
+                      modify $ \s -> s { renv = M.insert k st (renv s) }
+                    Just _  ->
+                      error $ "insRoleM attempting to spawn already spawned role" ++ show k
+
 symSpawnSingle :: SymbEx RSing -> SymbEx (Process a) -> SymbEx (Process (Pid RSing))
 symSpawnSingle r p = SE $ do (TRoleSing _ r') <- runSE r
-                             m <- gets renv
-                             case M.lookup (S r') m of
-                               Just Nothing -> do
-                                 TProc x st _ <- runSE p
-                                 modify $ \s -> s { renv = M.insert (S r') (Just st) (renv s) }
-                                 return $ TProc Nothing skip (TPid Nothing (Pid (Just r')))
+                             insRoleM (S r') p
+                             return $ TProc Nothing skip (TPid Nothing (Pid (Just r')))
 
 symSpawnMany :: SymbEx RMulti -> SymbEx Int -> SymbEx (Process a) -> SymbEx (Process (Pid RMulti))
-symSpawnMany r n p = SE $ do (TRoleMulti _ r') <- runSE r
-                             m <- gets renv
-                             case M.lookup (M r') m of
-                               Just Nothing -> do
-                                 TProc x st _ <- runSE p
-                                 modify $ \s -> s { renv = M.insert (M r') (Just st) (renv s) }
-                                 return $ TProc Nothing skip (TPidMulti Nothing (Pid (Just r')))
+symSpawnMany r _ p = SE $ do (TRoleMulti _ r') <- runSE r
+                             insRoleM (M r') p
+                             return $ TProc Nothing skip (TPidMulti Nothing (Pid (Just r')))
 
 -------------------------------------------------
 -- | The Syntax-directed Symbolic Execution
@@ -220,7 +234,6 @@ symNewRSing :: SymbEx (Process RSing)
 -------------------------------------------------
 symNewRSing
   = SE $ do n <- freshInt
-            modify (\s -> s { renv = M.insert (S (RS n)) Nothing (renv s) })
             return (TProc Nothing skip (TRoleSing Nothing (RS n)))
 
 -------------------------------------------------
@@ -228,7 +241,6 @@ symNewRMulti :: SymbEx (Process RMulti)
 -------------------------------------------------
 symNewRMulti
   = SE $ do n <- freshInt
-            modify (\s -> s { renv = M.insert (M (RM n)) Nothing (renv s) })
             return (TProc Nothing skip (TRoleMulti Nothing (RM n)))
 
 -------------------------------------------------
@@ -238,20 +250,24 @@ symDoMany :: SymbEx (Pid RMulti)
 -------------------------------------------------
 symDoMany p f
   = SE $ do v <- freshVar
-            TPidMulti _ (Pid (Just (RM n))) <- runSE p
+            TPidMulti _ (Pid (Just r)) <- runSE p
             TArrow _ g                 <- runSE f
             TProc _ s _                <- runSE (g (TPid (Just v) (Pid Nothing)))
-            return (TProc Nothing (iter v n s) (TUnit Nothing))
+            return (TProc Nothing (iter v r s) (TUnit Nothing))
     where
-      iter v n s = IL.SIter (varToIL v) (IL.S $ "RM" ++ show n) s ()
+      iter v r s = IL.SIter (varToIL v) (roleToSet r) s ()
 
+roleToSet :: RMulti -> IL.Set
+roleToSet (RM n) = IL.S $ "role_" ++ show n
 -------------------------------------------------
 symExec :: SymbEx (Process a)
         -> SymbEx a
 -------------------------------------------------
 symExec p
   = SE $ do (TProc _ st a) <- runSE p
-            modify $ \s -> s {  renv = M.insert (me s) (Just st) (renv s) }
+            modify $ \s -> s { renv  = M.empty
+                             , renvs = M.insert (me s) st (renv s) : renvs s
+                             }
             return a
 
 -------------------------------------------------
@@ -299,12 +315,19 @@ instance (Recv a, AbsToIL a) => SymRecv SymbEx a where
 instance (Send a, AbsToIL a) => SymSend SymbEx a where
   send = symSend
 
-
-emptyState :: SymbState
-emptyState = SymbState { renv = M.empty
-                       , ctr = 1
-                       , me = S (RS 0)
-                       }
-
-runSymb :: SymbEx a -> SymbState
-runSymb e = execState (runSE e) emptyState
+rEnvToConfig :: REnv -> IL.Config ()
+rEnvToConfig renv
+  = IL.Config { IL.cTypes = types
+              , IL.cSets  = sets
+              , IL.cProcs = procs
+              , IL.cUnfold = []
+              }
+    where
+      types = nub [ IL.MTApp tc $ mkVars vs | IL.MTApp tc vs <- ts ]
+      ts    = listify (const True) procs
+      mkVars vs = map (IL.PVar . IL.V . ("x"++) . show) [1..length vs]
+      sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
+      procs = concProcs ++ absProcs
+      concProcs = [ (IL.PConc n, s) | (S (RS n), s) <- kvs ]
+      absProcs  = [ (IL.PAbs (IL.V "i") (roleToSet r), s) | (M r, s) <- kvs ]
+      kvs   = M.toList renv

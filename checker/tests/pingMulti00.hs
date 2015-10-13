@@ -1,13 +1,16 @@
 {-# Language RebindableSyntax #-}
 {-# Language FlexibleContexts #-}
 {-# Language ScopedTypeVariables #-}
-{-# OPTIONS_GHC -fno-warn-unused-binds -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
+{-# OPTIONS_GHC -fno-warn-unused-binds #-}
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 module PingMulti00 where
 
 import Prelude hiding ((>>=), (>>), fail, return) 
 import Language.AST  
 import Language.Syntax  
 import SymbEx
+import qualified AST as IL
 
 pingServer :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
            => repr (Process ())
@@ -32,4 +35,4 @@ main :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
 main n = exec $ do r <- newRMulti
                    master r n
 
-res = renv $ runSymb (main (repI 10))
+-- configs = renvs $ runSymb (main (repI 10))

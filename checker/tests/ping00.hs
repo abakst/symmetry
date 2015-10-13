@@ -3,9 +3,9 @@
 {-# Language FlexibleContexts #-}
 module Ping00 where
 
-import Prelude (($)) 
-import Language.AST  
-import Language.Syntax  
+import Prelude hiding ((>>=), (>>), fail, return)
+import Language.AST
+import Language.Syntax
 import SymbEx
 
 pingServer :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
@@ -28,5 +28,5 @@ main :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
 main = exec $ do r <- newRSing
                  master r
 
-res :: SymbState                        
-res = runSymb main                        
+res :: SymbState
+res = runSymb main
