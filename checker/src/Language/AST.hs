@@ -2,6 +2,7 @@
 {-# Language FlexibleInstances #-}
 {-# Language UndecidableInstances #-}
 {-# Language MultiParamTypeClasses #-}
+{-# Language TypeOperators #-}
 module Language.AST where
 
 import Data.Hashable
@@ -31,6 +32,8 @@ instance Monad Process where
   return = undefined
   (>>=)  = undefined
 
+type (:+:) a b = Either a b
+
 class Symantics repr where
   -- Value Injection
   tt   :: repr ()
@@ -43,7 +46,7 @@ class Symantics repr where
   pair :: repr a -> repr b -> repr (a, b)
   proj1 :: repr (a, b) -> repr a
   proj2 :: repr (a, b) -> repr b
-  match :: repr (Either a b) -> repr (a -> c) -> repr (b -> c) -> repr (Either a b -> c)
+  match :: repr (Either a b) -> repr (a -> c) -> repr (b -> c) -> repr c
   lam  :: (repr a -> repr b) -> repr (a -> b)
   app  :: repr (a -> b) -> repr a -> repr b
 

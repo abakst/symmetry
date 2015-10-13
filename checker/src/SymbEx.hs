@@ -1,5 +1,6 @@
 {-# Language TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, GADTs #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds -fno-warn-name-shadowing  #-}
+{-# Language TypeOperators #-}
 module SymbEx where
 
 import           Data.List (nub)
@@ -59,6 +60,8 @@ data Abs t where
   TString :: Maybe Var -> Abs String
   TArrow :: Maybe Var -> (Abs a -> SymbEx b) -> Abs (a -> b)
   TProc :: Maybe Var -> IL.Stmt () -> Abs a -> Abs (L.Process a)
+  TSum  :: Maybe Var -> Abs a :+: Abs b -> Abs (a :+: b)
+  TPair :: Maybe Var -> Abs a -> Abs b -> Abs (a, b)
 
 -------------------------------------------------
 -- | Recv t tells us how to create a default abstraction of type t
@@ -289,6 +292,43 @@ symSend pidM mM
             m <- runSE mM
             return (TProc Nothing (sendToIL p m) (TUnit Nothing))
 
+symInL :: SymbEx a
+       -> SymbEx (a :+: b)
+symInL a = SE $ do av <- runSE a
+                   return $ TSum Nothing (Left av)
+symInR :: SymbEx b
+       -> SymbEx (a :+: b)
+symInR b = SE $ do bv <- runSE b
+                   return $ TSum Nothing (Right bv)
+
+symMatch :: SymbEx (a :+: b)
+         -> SymbEx (a -> c)
+         -> SymbEx (b -> c)
+         -> SymbEx c
+symMatch s l r
+  = SE $ do TSum _ v <- runSE s
+            case v of
+              Left a -> runSE . app l . SE $ return a
+              Right b -> runSE . app r . SE $ return b
+
+symPair :: SymbEx a
+        -> SymbEx b
+        -> SymbEx (a, b)
+symPair a b
+  = SE $ do av <- runSE a
+            bv <- runSE b
+            return $ TPair Nothing av bv
+
+symProj1 :: SymbEx (a, b)
+         -> SymbEx a
+symProj1 p = SE $ do TPair _ a _ <- runSE p
+                     return a
+
+symProj2 :: SymbEx (a, b)
+         -> SymbEx b
+symProj2 p = SE $ do TPair _ _ b <- runSE p
+                     return b
+
 -------------------------------------------------
 -- Instances
 -------------------------------------------------
@@ -296,6 +336,12 @@ instance Symantics SymbEx where
   tt        = symtt
   repI      = symRep
   repS      = symRepS
+  inl       = symInL
+  inr       = symInR
+  pair      = symPair
+  proj1     = symProj1
+  proj2     = symProj2
+  match     = symMatch
   lam       = symLam
   app       = symApp
   self      = symSelf
