@@ -1,8 +1,8 @@
 {-# Language RebindableSyntax #-}
-module Language.Syntax where
+module Symmetry.Language.Syntax where
 
 import Prelude (error)
-import Language.AST  
+import Symmetry.Language.AST  
 
 -- Import this module and use with the RebindableSyntax Language extension
 

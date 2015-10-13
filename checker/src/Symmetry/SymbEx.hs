@@ -1,7 +1,7 @@
 {-# Language TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses, GADTs #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds -fno-warn-name-shadowing  #-}
 {-# Language TypeOperators #-}
-module SymbEx where
+module Symmetry.SymbEx where
 
 import           Data.List (nub)
 import           Data.Generics
@@ -9,8 +9,8 @@ import           Data.Generics
 import           Data.Hashable
 import qualified Data.HashMap.Strict as M
 import           Control.Monad.State
-import           Language.AST as L
-import qualified AST          as IL
+import           Symmetry.Language.AST as L
+import qualified Symmetry.IL.AST       as IL
 
 data Var   = V Int deriving Show
 
@@ -29,6 +29,23 @@ data SymbState = SymbState { renv  :: REnv
                            , renvs :: [REnv]
                            }
 type SymbExM a = State SymbState a
+
+rEnvToConfig :: REnv -> IL.Config ()
+rEnvToConfig renv
+  = IL.Config { IL.cTypes = types
+              , IL.cSets  = sets
+              , IL.cProcs = procs
+              , IL.cUnfold = []
+              }
+    where
+      types = nub [ IL.MTApp tc $ mkVars vs | IL.MTApp tc vs <- ts ]
+      ts    = listify (const True) procs
+      mkVars vs = map (IL.PVar . IL.V . ("x"++) . show) [1..length vs]
+      sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
+      procs = concProcs ++ absProcs
+      concProcs = [ (IL.PConc n, s) | (S (RS n), s) <- kvs ]
+      absProcs  = [ (IL.PAbs (IL.V "i") (roleToSet r), s) | (M r, s) <- kvs ]
+      kvs   = M.toList renv
 
 emptyState :: SymbState
 emptyState = SymbState { renv = M.empty
@@ -354,26 +371,10 @@ instance Symantics SymbEx where
   newRSing  = symNewRSing
   newRMulti = symNewRMulti
   doMany    = symDoMany
+  die       = error "TBD: die"
 
 instance (Recv a, AbsToIL a) => SymRecv SymbEx a where
   recv = symRecv
 
 instance (Send a, AbsToIL a) => SymSend SymbEx a where
   send = symSend
-
-rEnvToConfig :: REnv -> IL.Config ()
-rEnvToConfig renv
-  = IL.Config { IL.cTypes = types
-              , IL.cSets  = sets
-              , IL.cProcs = procs
-              , IL.cUnfold = []
-              }
-    where
-      types = nub [ IL.MTApp tc $ mkVars vs | IL.MTApp tc vs <- ts ]
-      ts    = listify (const True) procs
-      mkVars vs = map (IL.PVar . IL.V . ("x"++) . show) [1..length vs]
-      sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
-      procs = concProcs ++ absProcs
-      concProcs = [ (IL.PConc n, s) | (S (RS n), s) <- kvs ]
-      absProcs  = [ (IL.PAbs (IL.V "i") (roleToSet r), s) | (M r, s) <- kvs ]
-      kvs   = M.toList renv

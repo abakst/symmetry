@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module Render where
+module Symmetry.IL.Render where
 
-import           Prelude hiding (concat, concatMap, sum, mapM, sequence, foldl, minimum, maximum)
+import           Prelude hiding (concat, concatMap, sum, mapM, sequence, foldl, minimum, maximum, (<$>))
 import           Text.PrettyPrint.Leijen
 import           Control.Monad.Reader
 import           Data.Function
@@ -13,7 +13,7 @@ import           Control.Exception
 import           System.IO
 import           Debug.Trace
 
-import           AST  
+import           Symmetry.IL.AST  
   
 debug msg x = 
   trace (msg ++ show x) x

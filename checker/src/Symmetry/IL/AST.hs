@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
-module AST where
+module Symmetry.IL.AST where
 
 import           Prelude hiding (concatMap, mapM, foldl, concat)  
 import           Data.Traversable 
@@ -211,11 +211,11 @@ instance Traversable Stmt where
   traverse f (SRecv ms a)
     = flip SRecv <$> f a <*> traverse (traverse (traverse f)) ms
   traverse f (SIter v s ss a) 
-    = flip (SIter v s) <$> f a <*> (traverse f) ss
+    = flip (SIter v s) <$> f a <*> traverse f ss
   traverse f (SLoop v ss a) 
-    = flip (SLoop v) <$> f a <*> (traverse f) ss
+    = flip (SLoop v) <$> f a <*> traverse f ss
   traverse f (SChoose v s ss a) 
-    = flip (SChoose v s) <$> f a <*> (traverse f) ss
+    = flip (SChoose v s) <$> f a <*> traverse f ss
   traverse f (SVar v a)
     = SVar v <$> f a
   traverse f (SBlock ss a)

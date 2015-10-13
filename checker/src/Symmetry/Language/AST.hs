@@ -3,7 +3,7 @@
 {-# Language UndecidableInstances #-}
 {-# Language MultiParamTypeClasses #-}
 {-# Language TypeOperators #-}
-module Language.AST where
+module Symmetry.Language.AST where
 
 import Data.Hashable
 import Data.Typeable
@@ -35,12 +35,12 @@ instance Monad Process where
 type (:+:) a b = Either a b
 
 class Symantics repr where
-  -- Value Injection
+  -- Value Injection:
   tt   :: repr ()
   repI :: Int -> repr Int
   repS :: String -> repr String
 
-  -- Lambda Calculus
+  -- Lambda Calculus:
   inl  :: repr a -> repr (Either a b)
   inr  :: repr b -> repr (Either a b)
   pair :: repr a -> repr b -> repr (a, b)
@@ -50,20 +50,19 @@ class Symantics repr where
   lam  :: (repr a -> repr b) -> repr (a -> b)
   app  :: repr (a -> b) -> repr a -> repr b
 
-  -- Monads
+  -- Monads:
   ret  :: repr a -> repr (Process a)
   bind :: repr (Process a) -> repr (a -> Process b) -> repr (Process b)
   fixM :: repr ((a -> Process a) -> a -> Process a) -> repr (a -> Process a)
 
   -- Primitives:        
-  self :: repr (Process (Pid RSing))
-
+  self      :: repr (Process (Pid RSing))
   spawn     :: repr RSing -> repr (Process ()) -> repr (Process (Pid RSing))
   spawnMany :: repr RMulti -> repr Int -> repr (Process ()) -> repr (Process (Pid RMulti))
   doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process a) -> repr (Process ())
-
   newRSing  :: repr (Process RSing)
   newRMulti :: repr (Process RMulti)
+  die       :: repr (Process a)
 
   -- "Run" a process             
   exec      :: repr (Process a) -> repr a 
