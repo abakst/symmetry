@@ -5,6 +5,7 @@
 {-# Language MultiParamTypeClasses #-}
 module Language.AST where
 
+import Data.Either
 import Data.Hashable
 import Data.Typeable
 import Control.Applicative
@@ -38,6 +39,7 @@ class Symantics repr where
   tt   :: repr ()
   repI :: Int -> repr Int
   repS :: String -> repr String
+  repAny :: a -> repr a
 
   -- Lambda Calculus
   inl  :: repr a -> repr (Either a b)
@@ -45,7 +47,8 @@ class Symantics repr where
   pair :: repr a -> repr b -> repr (a, b)
   proj1 :: repr (a, b) -> repr a
   proj2 :: repr (a, b) -> repr b
-  match :: repr (Either a b) -> repr (a -> c) -> repr (b -> c) -> repr (Either a b -> c)
+  -- match :: repr (Either a b) -> repr (a -> c) -> repr (b -> c) -> repr (Either a b -> c)
+  match :: repr (Either a b) -> repr (a -> c) -> repr (b -> c) -> repr c
   lam  :: (repr a -> repr b) -> repr (a -> b)
   app  :: repr (a -> b) -> repr a -> repr b
 
@@ -64,7 +67,10 @@ class Symantics repr where
   newRMulti :: repr (Process RMulti)
 
   -- "Run" a process             
-  exec      :: repr (Process a) -> repr a 
+  exec      :: repr (Process a) -> repr a
+
+  die       :: repr (Process a) -- die gracefully
+  fail_proc :: repr (Process a) -- enter into a failure case
 
 class Symantics repr => SymRecv repr a where
   recv :: repr (Process a)
