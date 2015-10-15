@@ -42,6 +42,7 @@ library
                      , unordered-containers >= 0.2.5.1
                      , wl-pprint >=1.2 && <1.3
   hs-source-dirs:      src
+                     , tests
   default-language:    Haskell2010
 
 -- executable checker

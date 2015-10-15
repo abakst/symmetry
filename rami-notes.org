@@ -35,6 +35,15 @@ RC : recursive thread creation
 *** DONE Statement for spawning a new thread?
     look at [[file:process_effects.lhs][process effects]]
 
+** new
+*** datatypes
+    data Msg = Init Pid String
+             │ Get Pid
+             │ Set String
+*** recursive datatypes
+    data Peano = Zero | Succ Peano
+*** lists
+    pattern matching
 * Notes
 ** check coreSyn
 CoreSyn holds all the main data types for use by for the Glasgow Haskell Compiler midsection

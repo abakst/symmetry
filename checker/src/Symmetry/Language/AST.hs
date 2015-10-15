@@ -41,8 +41,25 @@ class Symantics repr where
   -- Value Injection:
   tt   :: repr ()
   repI :: Int -> repr Int
+  repB :: Bool -> repr Bool
   repS :: String -> repr String
-  repAny :: a -> repr a
+
+  plus :: repr Int -> repr Int -> repr Int
+
+  eq   :: (Ord a) => repr a -> repr a -> repr Bool
+  gt   :: (Ord a) => repr a -> repr a -> repr Bool
+  lt   :: (Ord a) => repr a -> repr a -> repr Bool
+
+  not  :: repr Bool -> repr Bool
+  and  :: repr Bool -> repr Bool -> repr Bool
+  or   :: repr Bool -> repr Bool -> repr Bool
+
+  ifte :: repr Bool -> repr a -> repr a -> repr a
+
+  nil  :: repr [a]
+  cons :: repr a   -> repr [a] -> repr [a]
+  hd   :: repr [a] -> repr a
+  tl   :: repr [a] -> repr [a]
 
   -- Lambda Calculus:
   inl  :: repr a -> repr (Either a b)
@@ -61,7 +78,7 @@ class Symantics repr where
 
   -- Primitives:        
   self      :: repr (Process (Pid RSing))
-  spawn     :: repr RSing -> repr (Process ()) -> repr (Process (Pid RSing))
+  spawn     :: repr RSing -> repr (Process a) -> repr (Process (Pid RSing))
   spawnMany :: repr RMulti -> repr Int -> repr (Process ()) -> repr (Process (Pid RMulti))
   doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process a) -> repr (Process ())
   newRSing  :: repr (Process RSing)

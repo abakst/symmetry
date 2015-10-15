@@ -33,9 +33,6 @@ msg_handler = lam $ \msg ->
                   match e2 gh $ lam $ \e3 ->
                   match e3 oh bh
 
-id :: ParikhSem repr => repr (a->a)
-id  = lam $ \x -> x
-
 recv_init :: ParikhSem repr => repr (Process (Pid RSing, String))
 recv_init  = do (msg::repr Msg) <- recv
                 ret $ app (app (app (app (app (app msg_handler msg) id) fail) fail) fail) fail
