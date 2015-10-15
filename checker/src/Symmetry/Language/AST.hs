@@ -71,9 +71,6 @@ class Symantics repr where
   -- "Run" a process             
   exec      :: repr (Process a) -> repr a
 
-  die       :: repr (Process a) -- die gracefully
-  fail_proc :: repr (Process a) -- enter into a failure case
-
 class Symantics repr => SymRecv repr a where
   recv :: repr (Process a)
 
