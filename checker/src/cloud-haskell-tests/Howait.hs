@@ -25,10 +25,9 @@ howait =  do peano <- getRandPInRange 0 5
 {-a server that increments the number it's given-}
 serve :: Process ()
 serve  = let pred (s,(_::ProcessId),(_::PeanoN)) = s == "req"
-             serve_helper (_,p,x) = do
-                                      self <- getSelfPid
-                                      send p ("reply", self, (Succ x))
-                                      serve
+             serve_helper (_,p,x) = do self <- getSelfPid
+                                       send p ("reply", self, (Succ x))
+                                       serve
            in receiveWait [matchIf pred serve_helper]
 
 {-client that sends a message to the server to increment the given number-}

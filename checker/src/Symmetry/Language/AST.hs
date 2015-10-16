@@ -4,6 +4,7 @@
 {-# Language UndecidableInstances #-}
 {-# Language MultiParamTypeClasses #-}
 {-# Language TypeOperators #-}
+{-# Language StandaloneDeriving #-}
 module Symmetry.Language.AST where
 
 import Data.Either
@@ -11,8 +12,8 @@ import Data.Hashable
 import Data.Typeable
 import Control.Applicative
 
-data RSing  = RS Int deriving (Eq, Show)
-data RMulti = RM Int deriving (Eq, Show)
+data RSing  = RS Int deriving (Eq, Ord, Show)
+data RMulti = RM Int deriving (Eq, Ord, Show)
 
 instance Hashable RSing where
   hashWithSalt s (RS i) = hashWithSalt s i
@@ -21,6 +22,9 @@ instance Hashable RMulti where
   hashWithSalt s (RM i) = hashWithSalt s i
 
 data Pid r = Pid r
+
+deriving instance Eq a  => Eq (Pid a)
+deriving instance Ord a => Ord (Pid a)
 
 data Process a
   deriving (Typeable)
