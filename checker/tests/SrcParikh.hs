@@ -9,6 +9,7 @@ import Prelude (($), undefined, String)
 import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 import Data.Either
+import SrcHelper
 
 type Msg = (Pid RSing,String) :+: -- Init (Pid RSing) String
            (String :+:            -- Set String

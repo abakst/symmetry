@@ -44,6 +44,7 @@ RC : recursive thread creation
     data Peano = Zero | Succ Peano
 *** lists
     pattern matching
+***
 * Notes
 ** check coreSyn
 CoreSyn holds all the main data types for use by for the Glasgow Haskell Compiler midsection

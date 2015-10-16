@@ -37,24 +37,26 @@ instance Monad Process where
 
 type (:+:) a b = Either a b
 
+type Boolean = Either () ()
+
 class Symantics repr where
   -- Value Injection:
   tt   :: repr ()
   repI :: Int -> repr Int
-  repB :: Bool -> repr Bool
   repS :: String -> repr String
 
-  plus :: repr Int -> repr Int -> repr Int
+  repT :: repr Boolean
+  repF :: repr Boolean
 
-  eq   :: (Ord a) => repr a -> repr a -> repr Bool
-  gt   :: (Ord a) => repr a -> repr a -> repr Bool
-  lt   :: (Ord a) => repr a -> repr a -> repr Bool
+  plus   :: repr Int -> repr Int -> repr Int
 
-  not  :: repr Bool -> repr Bool
-  and  :: repr Bool -> repr Bool -> repr Bool
-  or   :: repr Bool -> repr Bool -> repr Bool
+  eq   :: (Ord a) => repr a -> repr a -> repr Boolean
+  gt   :: (Ord a) => repr a -> repr a -> repr Boolean
+  lt   :: (Ord a) => repr a -> repr a -> repr Boolean
 
-  ifte :: repr Bool -> repr a -> repr a -> repr a
+  not  :: repr Boolean -> repr Boolean
+  and  :: repr Boolean -> repr Boolean -> repr Boolean
+  or   :: repr Boolean -> repr Boolean -> repr Boolean
 
   nil  :: repr [a]
   cons :: repr a   -> repr [a] -> repr [a]
