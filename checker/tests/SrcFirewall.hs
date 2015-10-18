@@ -39,7 +39,7 @@ recv_answer  = do msg :: repr Msg <- recv
                   ret $ match msg fail id
 
 firewall :: FirewallSem repr => repr (Process ())
-firewall  = do l :: repr [Int] <- any_list
+firewall  = do l :: repr [Int] <- app any_list tt
                app start l
 
 start :: FirewallSem repr => repr ([Int] -> Process ())

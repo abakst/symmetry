@@ -42,7 +42,7 @@ result_msg :: HowaitSem repr => repr (Pid RSing -> Int -> Msg)
 result_msg  = lam $ \pid -> lam $ \n -> inr $ inr $ pair pid n
 
 howait :: HowaitSem repr => repr (Process ())
-howait  = do n <- any_nat
+howait  = do n <- app any_nat tt
              r <- newRSing
              s <- spawn r serve
              app2 sp_wait1 (lam $ \x -> app2 client s x) n

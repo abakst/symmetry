@@ -43,7 +43,7 @@ forward_msg :: RingSem repr => repr ([Int] -> Msg)
 forward_msg  = lam $ \xs -> inr $ inr xs
 
 ring :: RingSem repr => repr (Process ())
-ring  = do xs :: repr [Int] <- any_list
+ring  = do xs :: repr [Int] <- app any_list tt
            p <- app (app init_ring slave) xs
            app probe_ring p
 

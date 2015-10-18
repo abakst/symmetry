@@ -19,7 +19,7 @@ class ( Symantics repr
 
 pipe :: PipeSem repr => repr (Process ())
 pipe  = do me <- self
-           n <- any_nat
+           n <- app any_nat tt
            head <- app (app (app init_pipe (lam $ \x -> plus (repI 1) x)) n) me
            send head (repI 0)
            sink
