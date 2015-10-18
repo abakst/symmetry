@@ -8,8 +8,8 @@ module Symmetry.Language.AST where
 import Data.Hashable
 import Data.Typeable
 
-data RSing  = RS Int deriving (Eq, Show)
-data RMulti = RM Int deriving (Eq, Show)
+data RSing  = RS Int deriving (Ord, Eq, Show)
+data RMulti = RM Int deriving (Ord, Eq, Show)
 
 instance Hashable RSing where
   hashWithSalt s (RS i) = hashWithSalt s i
@@ -41,12 +41,6 @@ class Symantics repr where
   repS :: String -> repr String
 
   -- Lambda Calculus:
-  inl  :: repr a -> repr (Either a b)
-  inr  :: repr b -> repr (Either a b)
-  pair :: repr a -> repr b -> repr (a, b)
-  proj1 :: repr (a, b) -> repr a
-  proj2 :: repr (a, b) -> repr b
-  match :: repr (Either a b) -> repr (a -> c) -> repr (b -> c) -> repr c
   lam  :: (repr a -> repr b) -> repr (a -> b)
   app  :: repr (a -> b) -> repr a -> repr b
 
@@ -66,6 +60,16 @@ class Symantics repr where
 
   -- "Run" a process             
   exec      :: repr (Process a) -> repr a 
+
+class Symantics repr => SymTypes repr a b where
+  inl  :: repr a -> repr (a :+: b)
+  inr  :: repr b -> repr (a :+: b)
+  pair :: repr a -> repr b -> repr (a, b)
+  proj1 :: repr (a, b) -> repr a
+  proj2 :: repr (a, b) -> repr b
+
+class Symantics repr => SymMatch repr a b c where
+  match :: repr (a :+: b) -> repr (a -> c) -> repr (b -> c) -> repr c
 
 class Symantics repr => SymRecv repr a where
   recv :: repr (Process a)
