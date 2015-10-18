@@ -24,6 +24,8 @@ type ALV = AllocT :+: (LookupT :+: ValueT)
 type FreeAllocated = () :+: -- Free
                      ()     -- Allocated
 
+type LookupResT = () :+: Int
+
 alloc_msg :: CDBSem repr => repr (Int -> Pid RSing -> ALV)
 alloc_msg  = lam $ \n -> lam $ \pid -> inl $ pair n pid
 
@@ -56,6 +58,8 @@ recv_value  = do msg :: repr ALV <- recv
 class ( Symantics repr
       , SymSend   repr ALV
       , SymRecv   repr ALV
+      , SymSend   repr LookupResT
+      , SymRecv   repr LookupResT
       , SymSend   repr FreeAllocated
       , SymRecv   repr FreeAllocated
       ) => CDBSem repr
@@ -76,19 +80,40 @@ database  = lam $ \l ->
               let allocHandler = lam $ \msg ->
                     let key = proj1 msg
                         p   = proj2 msg
-                     in match (lookup key l)
-                          (do send p free_msg
-                              val <- recv_val
-                              if (eq (proj2 val) p)
-                                 then app database (cons (pair key (proj1 val)) l)
-                                 else fail)
+                     in match (app2 lookup key l)
+                          (lam $ \_ -> do send p free_msg
+                                          val <- recv_value
+                                          ifte (eq (proj2 val) p)
+                                               (app database (cons (pair key (proj1 val)) l))
+                                               fail)
                           (lam $ \x -> do send p allocated_msg
                                           app database l)
                   lookupHandler = lam $ \msg ->
                     let key = proj1 msg
                         p   = proj2 msg
-                     in do send p (lookup)
-                           undefined
-              undefined
+                     in do send p (app2 lookup key l)
+                           app database l
+               in do msg :: repr ALV <- recv
+                     match msg allocHandler $ lam $ \e1 ->
+                       match e1 lookupHandler fail
 
-client   = undefined
+client :: CDBSem repr => repr (Pid RSing -> Process ())
+client  = lam $ \db ->
+            do choice <- app any_bool tt
+               me     <- self
+               let insert_h = do k <- app any_nat tt
+                                 send db (app2 alloc_msg k me)
+                                 let free_h = lam $ \_ ->
+                                       do v <- app any_nat tt
+                                          send db (app2 value_msg v me)
+                                          app client db
+                                     alloc_h = lam $ \_ -> app client db
+                                  in do msg :: repr FreeAllocated <- recv
+                                        match msg free_h alloc_h
+                   lookup_h = do k <- app any_nat tt
+                                 send db (app2 lookup_msg k me)
+                                 msg :: repr LookupResT <- recv
+                                 match msg
+                                   (lam $ \_ -> app client db)
+                                   (lam $ \x -> app client db)
+                in ifte choice insert_h lookup_h

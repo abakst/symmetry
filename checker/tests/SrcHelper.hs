@@ -1,5 +1,7 @@
 module SrcHelper where
 
+import Prelude hiding (lookup)
+
 import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 
@@ -26,3 +28,15 @@ app4 f a1 a2 a3 a4 = app (app (app (app f a1) a2) a3) a4
 
 ifte      :: Symantics repr => repr Boolean -> repr a -> repr a -> repr a
 ifte b t e = match b (lam $ \_ -> t) (lam $ \_ -> e)
+
+lookup :: (Symantics repr, Ord a, Ord b)
+       => repr (a -> [(a,b)] -> (Either () b))
+lookup  = lam $ \k -> lam $ \m ->
+            ifte (eq nil m)
+              (inl tt)
+              (let x  = hd m
+                   k' = proj1 x
+                   v' = proj2 x
+                in ifte (eq k k')
+                     (inr v')
+                     (app2 lookup k m))
