@@ -270,6 +270,13 @@ renderStmtConc me (SRecv ms _)
                              d    <- renderStmt me s
                              return $ seqStmts [recv, d]
 
+renderStmtConc me (SCase l sl sr _)
+  = do dl <- renderStmtConc me sl
+       dr <- renderStmtConc me sr
+       return $ ifs [ isLeftLabel l dl
+                    , isRightLabel l dr
+                    ]
+
 renderStmtConc _ (SSkip _)
   = return $ text "skip"
     
@@ -301,6 +308,9 @@ renderStmtConc me (SBlock ss _)
           
 renderStmtConc _ _
   = return $ text "assert(0 == 1) /* TBD */"
+
+isLeftLabel (V x) s  = text x <+> equals <+> inlCstr <+> text "->" <$> s
+isRightLabel (V x) s = text x <+> equals <+> inrCstr <+> text "->" <$> s
 
 stmtLabel :: Int -> Doc 
 stmtLabel i = 
@@ -409,7 +419,6 @@ stmtGuard me (SRecv mts i)
     
 stmtGuard _ s
   = return $ stmtCounter (annot s) <+> text ">" <+> int 0
-    
                
 selectStmt :: Pid -> [Stmt Int] -> RenderM 
 selectStmt me ss 
