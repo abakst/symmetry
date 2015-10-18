@@ -40,3 +40,9 @@ lookup  = lam $ \k -> lam $ \m ->
                 in ifte (eq k k')
                      (inr v')
                      (app2 lookup k m))
+
+print :: Symantics repr => repr (a -> Process ())
+print  = undefined
+
+mod :: Symantics repr => repr (Int -> Int -> Int)
+mod  = undefined

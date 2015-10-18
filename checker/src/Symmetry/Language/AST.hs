@@ -41,7 +41,7 @@ instance Monad Process where
 
 type (:+:) a b = Either a b
 
-type Boolean = Either () ()
+type Boolean = Either () ()  -- Either True False
 
 class Symantics repr where
   -- Value Injection:
