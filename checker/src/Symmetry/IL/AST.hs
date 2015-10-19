@@ -13,6 +13,8 @@ import           Data.Generics
 import           Data.List (nub, isPrefixOf)
 import qualified Data.Map.Strict as M
 
+import           Control.Applicative ((<$>),(<*>))
+
 data Set = S String
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 

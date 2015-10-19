@@ -12,8 +12,8 @@ import Data.Hashable
 import Data.Typeable
 import Control.Applicative
 
-data RSing  = RS Int deriving (Ord, Eq, Show)
-data RMulti = RM Int deriving (Ord, Eq, Show)
+data RSing  = RS Int deriving (Ord, Eq, Show, Typeable)
+data RMulti = RM Int deriving (Ord, Eq, Show, Typeable)
 
 instance Hashable RSing where
   hashWithSalt s (RS i) = hashWithSalt s i
@@ -21,7 +21,7 @@ instance Hashable RSing where
 instance Hashable RMulti where
   hashWithSalt s (RM i) = hashWithSalt s i
 
-data Pid r = Pid r
+data Pid r = Pid r deriving (Typeable)
 
 deriving instance Eq a  => Eq (Pid a)
 deriving instance Ord a => Ord (Pid a)

@@ -16,6 +16,8 @@ import           Control.Monad.State hiding (join)
 import           Symmetry.Language.AST as L
 import qualified Symmetry.IL.AST       as IL
 
+import           Control.Applicative ((<$>))
+
 data Var   = V Int deriving (Ord, Eq, Show)
 
 type REnv = M.Map Role (IL.Stmt ())
