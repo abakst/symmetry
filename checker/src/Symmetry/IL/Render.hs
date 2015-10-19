@@ -357,6 +357,11 @@ renderStmtAbs me (SRecv ms i)
   where
     render1 (m, oc) = do d <- renderStmtConc me $ SRecv [m] i
                          return $ block [d, decrCounter i, oc]
+
+renderStmtAbs _ (SCase v l r i)
+  = return $ ifs [ isLeftLabel v  $ seqStmts [decrCounter i, incrCounter (annot l)]
+                 , isRightLabel v $ seqStmts [decrCounter i, incrCounter (annot r)]
+                 ]
                             
 renderStmtAbs _ (SVar _ i)
   = inOutCountersM i
@@ -371,7 +376,7 @@ renderStmtAbs _ (SNull)
   = return $ text "skip"
 
 renderStmtAbs _ s
-  = return . text $ "assert(0 == 1) /* TBD:" ++ show s
+  = return . text $ "assert(0 == 1) /* TBD:" ++ show s ++ "*/"
     
 inOutCountersM :: Int -> RenderM
 inOutCountersM i = do cfg <- asks stmtMap
@@ -390,11 +395,11 @@ stmtCounter i
     
 decrCounter :: Int -> Doc
 decrCounter i
-  = text "__DEC" <> parens (stmtCounter i) <> semi
+  = text "__DEC" <> parens (stmtCounter i)
 
 incrCounter :: Int -> Doc
 incrCounter i
-  = text "__INC" <> parens (stmtCounter i) <> semi
+  = text "__INC" <> parens (stmtCounter i)
     
 gotoStmt :: Int -> Doc
 gotoStmt i

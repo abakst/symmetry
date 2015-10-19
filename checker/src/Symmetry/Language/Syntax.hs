@@ -24,3 +24,5 @@ fail = error "TBD: Language.Syntax.fail"
 
 return :: Symantics repr => repr a -> repr (Process a)
 return = ret
+
+x |> f = app f x
