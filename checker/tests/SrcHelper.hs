@@ -30,6 +30,11 @@ app3 f a1 a2 a3 = app (app (app f a1) a2) a3
 app4 :: Symantics repr => repr (a->b->c->d->e) -> repr a -> repr b -> repr c -> repr d -> repr e
 app4 f a1 a2 a3 a4 = app (app (app (app f a1) a2) a3) a4
 
+app5 :: Symantics repr
+     => repr (a->b->c->d->e->f)
+     -> repr a -> repr b -> repr c -> repr d -> repr e -> repr f
+app5 f a1 a2 a3 a4 a5 = app (app (app (app (app f a1) a2) a3) a4) a5
+
 ifte      :: Symantics repr => repr Boolean -> repr a -> repr a -> repr a
 ifte b t e = match b (lam $ \_ -> t) (lam $ \_ -> e)
 
@@ -64,3 +69,6 @@ match4 :: Symantics repr
 match4 msg f1 f2 f3 f4 = match msg f1 $ lam $ \e1 ->
                            match e1 f2 $ lam $ \e2 ->
                              match e2 f3 f4
+
+compare :: Symantics repr => repr (a -> a -> (Either () (Either () ())))
+compare  = undefined
