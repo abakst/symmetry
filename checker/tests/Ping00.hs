@@ -1,16 +1,15 @@
 {-# Language RebindableSyntax #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language FlexibleContexts #-}
-module Ping00 where
+module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return)
-import Symmetry.Language.AST
-import Symmetry.Language.Syntax
-import Symmetry.IL.Render
-import Symmetry.SymbEx
+import Symmetry.Language
+import Symmetry.Verify
 
 pingServer :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
-           => repr (Process ())
+           => repr
+              (Process ())
 pingServer = do myPid <- self
                 p     <- recv
                 send p myPid
@@ -24,10 +23,10 @@ master = lam $ \r -> do p     <- spawn r pingServer
                         _ :: repr (Pid RSing) <- recv
                         return tt
 
-main :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
-     => repr ()
-main = exec $ do r <- newRSing
-                 app master r
+mainProc :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
+         => repr ()
+mainProc = exec $ do r <- newRSing
+                     r |> master
 
--- res :: SymbState
-res = render . rEnvToConfig . head . renvs $ runSymb main
+main :: IO ()
+main = checkerMain mainProc

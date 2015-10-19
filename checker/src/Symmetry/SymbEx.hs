@@ -27,31 +27,33 @@ instance Hashable Role where
   hashWithSalt s (S r) = hashWithSalt s r
   hashWithSalt s (M r) = hashWithSalt s r
 
-data SymbState = SymbState { renv  :: REnv
-                           , ctr   :: Int
+data SymbState = SymbState { renv   :: REnv
+                           , ctr    :: Int
                            , ntypes :: Int
-                           , me    :: Role
-                           , renvs :: [REnv]
-                           , tyenv :: IL.MTypeEnv
-                           -- , tyenv :: M.Map IL.MType IL.TId
+                           , me     :: Role
+                           , renvs  :: [REnv]
+                           , tyenv  :: IL.MTypeEnv
                            }
 type SymbExM a = State SymbState a
 
-stateToConfig :: SymbState -> IL.Config ()
-stateToConfig state
-  = IL.Config { IL.cTypes = types
-              , IL.cSets  = sets
-              , IL.cProcs = procs
-              , IL.cUnfold = []
-              }
+stateToConfigs :: SymbState -> [IL.Config ()]
+stateToConfigs state
+  = map mk1Config (renvs state)
     where
       types = tyenv state
       mkVars vs = map (IL.PVar . IL.V . ("x_"++) . show) [1..length vs]
-      sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
-      procs = concProcs ++ absProcs
-      concProcs = [ (IL.PConc n, s) | (S (RS n), s) <- kvs ]
-      absProcs  = [ (IL.PAbs (IL.V "i") (roleToSet r), s) | (M r, s) <- kvs ]
-      kvs   = M.toList (head $ renvs state)
+      mk1Config renv
+                = IL.Config { IL.cTypes = types
+                            , IL.cSets  = sets
+                            , IL.cProcs = procs
+                            , IL.cUnfold = []
+                            }
+        where
+          kvs   = M.toList renv
+          concProcs = [ (IL.PConc n, s) | (S (RS n), s) <- kvs ]
+          absProcs  = [ (IL.PAbs (IL.V "i") (roleToSet r), s) | (M r, s) <- kvs ]
+          sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
+          procs = concProcs ++ absProcs
 
 emptyState :: SymbState
 emptyState = SymbState { renv = M.empty

@@ -19,37 +19,25 @@ cabal-version:       >=1.10
 library 
   exposed-modules: Symmetry.Language.AST
                    Symmetry.Language.Syntax
+                   Symmetry.Language
                    Symmetry.IL.Render
                    Symmetry.IL.AST
                    Symmetry.SymbEx
-  build-depends:       base >=4.7 
+                   Symmetry.Verify
+  build-depends:       base >=4.7
                      , containers >= 0.5.5.1
-                     , unordered-containers
-                     , directory >= 1.2.1.0
+                     , directory >= 1.2.2.0
                      , filepath >= 1.3.0.2
-                     , mtl
                      , hashable
+                     , mtl
+                     , options
                      , parsec >= 3.1.5
                      , plugins
-                     , process >= 1.2.0.0
+                     , process >= 1.2.3.0
                      , syb >= 0.4.1
+                     , system-filepath >= 0.4.13.4
+                     , template-haskell >= 2.10.0.0
+                     , unordered-containers
                      , wl-pprint >=1.2 && <1.3
   hs-source-dirs:      src
   default-language:    Haskell2010
-
--- executable checker
---   main-is:             Main.hs
---   other-modules:       AST, Render
---   -- other-extensions:
---   build-depends:       base >=4.7 && <4.8
---                      , containers >= 0.5.5.1
---                      , directory >= 1.2.1.0
---                      , filepath >= 1.3.0.2
---                      , mtl
---                      , parsec >= 3.1.5
---                      , plugins
---                      , process >= 1.2.0.0
---                      , syb >= 0.4.1
---                      , wl-pprint >=1.2 && <1.3
---   hs-source-dirs:      src
---   default-language:    Haskell2010
