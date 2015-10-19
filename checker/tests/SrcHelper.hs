@@ -1,6 +1,10 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module SrcHelper where
 
-import Prelude hiding (lookup)
+import Prelude hiding (lookup, fail)
 
 import Symmetry.Language.AST
 import Symmetry.Language.Syntax
@@ -46,3 +50,17 @@ print  = undefined
 
 mod :: Symantics repr => repr (Int -> Int -> Int)
 mod  = undefined
+
+match3 :: Symantics repr
+       => repr (Either a (Either b c))
+       -> repr (a -> r) -> repr (b -> r) -> repr (c -> r)
+       -> repr r
+match3 msg f1 f2 f3 = match msg f1 $ lam (\e1 -> match e1 f2 f3)
+
+match4 :: Symantics repr
+       => repr (Either a (Either b (Either c d)))
+       -> repr (a -> r) -> repr (b -> r) -> repr (c -> r) -> repr (d -> r)
+       -> repr r
+match4 msg f1 f2 f3 f4 = match msg f1 $ lam $ \e1 ->
+                           match e1 f2 $ lam $ \e2 ->
+                             match e2 f3 f4
