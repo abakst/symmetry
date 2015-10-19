@@ -6,6 +6,7 @@ import           Text.PrettyPrint.Leijen
 import           Control.Monad.Reader
 import           Data.Function
 import           Data.Foldable
+import           Data.Maybe
 import qualified Data.Map.Strict as M
 import           Data.List (intercalate, groupBy, nub, partition)
 import           Data.Generics hiding (empty)
@@ -37,20 +38,21 @@ atomic ss
     
 block :: [Doc] -> Doc
 block ds 
-  = lbrace <$> (indent 2 $ seqStmts ds) <$> rbrace
+  = lbrace <$> indent 2 (seqStmts ds) <$> rbrace
     
 ifs :: [Doc] -> Doc
 ifs ss 
-  = text "if" <$> (indent 2 $ nonDetStmts ss) <$> text "fi"
+  = text "if" <$> indent 2 (nonDetStmts ss) <$> text "fi"
     
 doLoop :: [Doc] -> Doc
 doLoop ss
-  = text "do" <$> (indent 2 $ nonDetStmts ss) <$> text "od" 
+  = text "do" <$> indent 2 (nonDetStmts ss) <$> text "od" 
     
 forLoop :: Doc -> Doc -> Doc
-forLoop i body = text "for" <+> (parens i) <+> lbrace <$>
-                 (indent 2 body) <$>
-                 rbrace
+forLoop i body
+  = text "for" <+> parens i <+> lbrace <$>
+                   indent 2 body <$>
+                   rbrace
 
 nonDetStmts :: [Doc] -> Doc
 nonDetStmts ss 
@@ -73,20 +75,21 @@ renderProcName p@(PUnfold (V v) _ _) = renderProcPrefix p <> brackets (text v)
 renderProcName p@(PVar (V v))      = renderProcPrefix p <> text v
                            
 renderProcTypeName :: Pid -> Doc     
-renderProcTypeName p@(PConc _)       = renderProcName p <> text "_Process"
-renderProcTypeName p@(PAbs _ _)      = renderProcPrefix p <> text "_Process"
-renderProcTypeName p@(PUnfold _ _ _)   = renderProcPrefix p <> 
-                                       text "_Process_Unfold"
+renderProcTypeName   (PVar _)     = error "renderProcTypeName Var"
+renderProcTypeName p@(PConc _)    = renderProcName p <> text "_Process"
+renderProcTypeName p@(PAbs _ _)   = renderProcPrefix p <> text "_Process"
+renderProcTypeName p@(PUnfold {}) = renderProcPrefix p <> text "_Process_Unfold"
 
 renderProcTypeArgs :: Pid -> Doc
-renderProcTypeArgs (PConc _)          = parens empty
+renderProcTypeArgs (PVar _)            = error "renderProcTypeArgs Var"
+renderProcTypeArgs (PConc _)           = parens empty
 renderProcTypeArgs (PUnfold (V v) _ _) = parens (byte <+> text v)
-renderProcTypeArgs (PAbs (V v) _)     = parens (byte <+> text v)
+renderProcTypeArgs (PAbs (V v) _)      = parens (byte <+> text v)
 
 evalExp :: Doc -> Doc
 evalExp e = text "eval" <> parens e
 
-renderEvalPids  :: MType -> [Doc]
+renderEvalPids  :: MConstr -> [Doc]
 renderEvalPids
   = map go . tyargs
   where 
@@ -94,69 +97,98 @@ renderEvalPids
     go p@(PUnfold _ _ i) = evalExp (renderProcPrefix p <> brackets (int (i+setSize)))
     go p = evalExp (renderProcName p)
 
-renderPids  :: MType -> [Doc]
+renderPids  :: MConstr -> [Doc]
 renderPids
   = map renderProcName . tyargs
 
 -- | Messages
-renderMType :: MType -> Doc
-renderMType 
-  = text . untycon . tycon
-    
-renderSendMsg :: MType -> Doc
-renderSendMsg m@(MTApp _ [])
-  = renderMType m
-renderSendMsg m
-  = renderMType m <> tupled (renderPids m)
-             
-renderRecvMsg :: MType -> Doc 
-renderRecvMsg m@(MTApp _ [])
-  = renderMType m 
-renderRecvMsg m
-  = renderMType m <> tupled (renderEvalPids m)
+renderMConstr :: MConstr -> Doc
+renderMConstr MTApp{ tycon = tc }
+  = text $ untycon tc
+renderMConstr (MCaseL _ m)
+  = renderMConstr m 
+renderMConstr (MCaseR _ m)
+  = renderMConstr m 
+renderMConstr (MTProd m1 m2)
+  = renderMConstr m1 <> renderMConstr m2
 
-renderMTypes :: [MType] -> Doc
-renderMTypes ts
+inlCstr = text "LL"    
+inrCstr = text "RR"
+    
+renderSendMsg :: MConstr -> Doc
+renderSendMsg = hcat . punctuate comma . go
+  where
+    go m@(MTApp _ [])
+      = [renderMConstr m]
+    go m@(MTApp _ _)
+      = renderMConstr m : (punctuate comma $ renderPids m)
+    go (MCaseL l c) = renderLabel l : go c
+    go (MCaseR l c) = renderLabel l : go c
+    go (MTProd c d) = go c ++ go d
+
+renderLabel LL         = inlCstr
+renderLabel RL         = inrCstr
+renderLabel (VL (V x)) = text x
+             
+renderRecvMsg :: MConstr -> Doc 
+renderRecvMsg = hcat . punctuate comma . go
+  where
+    go m@(MTApp _ [])
+      = [renderMConstr m]
+    go m@(MTApp _ _)
+      = renderMConstr m : (punctuate comma $ renderEvalPids m)
+    go (MCaseL l c) = renderLabel l : go c
+    go (MCaseR l c) = renderLabel l : go c
+    go (MTProd c d) = go c ++ go d
+
+builtInCstr :: [Doc]
+builtInCstr = [ inlCstr, inrCstr ]
+
+renderMConstrs :: MTypeEnv -> Doc
+renderMConstrs ts
   = text "mtype" 
     <+> equals
-    <+> encloseSep lbrace rbrace comma rts
+    <+> encloseSep lbrace rbrace comma (rts ++ builtInCstr)
     <> semi
   where
-    rts = map renderMType ts
+    rts = map renderMConstr . nub $ listify f ts
+    f (MTApp{}) = True
+    f _         = False
+
+chanTy :: Doc
+chanTy = text "chan"                  
+
+switchBase :: TId -> CId -> Doc
+switchBase t c = text "tcs_" <> int t <> text "_" <> int c
           
 -- | Addressing Process Channels
-renderSwitchboard :: Int -> Int -> Doc
-renderSwitchboard nprocs ntypes = text "chan" <+> text "switchboard" 
-                                  <+> brackets (int (nprocs*nprocs*ntypes))
-                                  <> semi
-             
-switchboard :: Int -> Int -> Pid -> Pid -> MType -> Doc 
-switchboard np nt from p m = 
-  -- text "switchboard" <+> brackets (
-                          (renderProcVar from <> text "*" <> int (np*nt))
+switchboard :: Int -> Pid -> Pid -> (TId, CId, MConstr) -> Doc 
+switchboard np from p (t,c,_) = 
+  switchBase t c <+> brackets (
+                          (renderProcVar from <> text "*" <> int np)
                           <+> text "+"
-                          <+> (renderProcVar p <> text "*" <> int nt)
-                          <+> text "+"
-                          <+> parens (renderMType m <> text "-" <> int 1)
-                         -- )
+                          <+> renderProcVar p
+                     )
 
-initSwitchboard :: Int -> Int -> Pid -> Pid -> MType -> Doc
-initSwitchboard np nt p q t
-  = text "switchboard" <> 
-    brackets (switchboard np nt p q t) <+> 
+initSwitchboard :: Int -> Pid -> Pid -> (TId, CId, MConstr) -> Doc
+initSwitchboard np p q (t, c, m)
+  = switchboard np p q (t, c, m) <+> 
     equals <+> 
-    renderChanName p q t 
+    renderChanName p q t c
                
 -- initSwitchboard n p@(PAbs (V v) (S _)) t
 --   = forLoop (text v <+> text "in" <+> renderProcPrefix p) $
 --     (switchboard n p t <+> equals <+> renderChanName p q t <> brackets (text v))
 
-renderChanName :: Pid -> Pid -> MType -> Doc                            
-renderChanName p q t
+renderChanName :: Pid -> Pid -> TId -> CId -> Doc                            
+renderChanName p q ti cj
   =  renderProcChanName p <> text "_" <>
      renderProcChanName q <> text "_" <>
-     renderMType t
+     text "t" <> int ti <> text "c" <> int cj
+     -- renderMConstr t
        where
+         renderProcChanName (PVar _)
+           = error "renderChanName var"
          renderProcChanName pid@(PConc _)
            = renderProcName pid
          renderProcChanName pid@(PAbs _ _) 
@@ -173,7 +205,7 @@ renderProcAssn n rhs
   = renderProcDecl n <+> equals <+> rhs
     
 type SetMap  = M.Map Set Int
-type ChanMap = Pid -> Pid -> MType -> Doc
+type ChanMap = Pid -> Pid -> (TId, CId, MConstr) -> Doc
 type StmtMap = M.Map Int [Int]
 
 -- | Emit Promela code for each statement    
@@ -186,26 +218,26 @@ data RenderEnv = RE { chanMap :: ChanMap
 type RenderM = Reader RenderEnv Doc
 
 renderStmt :: Pid -> Stmt Int -> RenderM
-renderStmt (p @ (PConc _)) s       = renderStmtConc p s
-renderStmt (p @ (PUnfold _ _ _)) s = renderStmtConc p s
-renderStmt p s                     = renderStmtAbs  p s
+renderStmt (p @ (PConc _)) s    = renderStmtConc p s
+renderStmt (p @ (PUnfold {})) s = renderStmtConc p s
+renderStmt p s                  = renderStmtAbs  p s
 -- renderStmt f p s               = nonDetStmts $ map (renderStmtAbs f p) ss
 --   where
 --     ss = listify (\(_::Stmt Int) -> True) s
         
-sendMsg :: Pid -> Pid -> MType -> RenderM
-sendMsg p q m
+sendMsg :: Pid -> Pid -> (TId, CId, MConstr) -> RenderM
+sendMsg p q (t,c,m)
   = do f <- asks chanMap
-       return $ text "switchboard" <> brackets (f p q m) <> text "!" <> renderSendMsg m
+       return $ f p q (t,c,m) <> text "!" <> renderSendMsg m
 
-recvMsg :: Pid -> Pid -> MType -> RenderM 
-recvMsg p q m
+recvMsg :: Pid -> Pid -> (TId, CId, MConstr) -> RenderM 
+recvMsg p q (t,c,m)
   = do f <- asks chanMap
-       return $ text "__RECV" <> tupled [f p q m , renderRecvMsg m]
+       return $ text "__RECV" <> tupled [f p q (t,c,m) , renderRecvMsg m]
                    
 renderStmtConc :: Pid -> Stmt Int -> RenderM
-renderStmtConc me (SSend p [(m,s)] _)
-  = do send <- sendMsg me p m
+renderStmtConc me (SSend p [(t,c,m,s)] _)
+  = do send <- sendMsg me p (t,c,m)
        d <- renderStmt me s
        return $ align (send <> semi <$> d)
 
@@ -213,31 +245,37 @@ renderStmtConc me (SSend p ms _)
   = do ds <- mapM go ms
        return $ ifs ds
   where 
-    go (m, SSkip _) = sendMsg me p m
-    go (m, s)       = do send <- sendMsg me p m
-                         d    <- renderStmt me s
-                         return $ block [send, d]
+    go (t, c, m, SSkip _) = sendMsg me p (t,c,m)
+    go (t, c, m, s)       = do send <- sendMsg me p (t,c,m)
+                               d    <- renderStmt me s
+                               return $ block [send, d]
       
-renderStmtConc me (SRecv [(m,s)] _)
+renderStmtConc me (SRecv [(t,c,m,s)] _)
   = do pm <- asks pidMap
        d  <- renderStmt me s
        rs <- mapM go $ M.keys pm
        return $ align (ifs rs <> semi <$> d)
   where
-    go p     = recvMsg p me m
+    go p     = recvMsg p me (t,c,m)
 
 renderStmtConc me (SRecv ms _)
   = do rs <- foldM f [] ms
        return $ ifs rs
   where 
     -- concatMap
-    f l ms       = fmap (l ++) $ recvs ms
-    recvs (m, s) = asks pidMap >>= mapM (go m s) . M.keys
-    go m (SSkip _) p = 
-          recvMsg p me m
-    go m s p = do recv <- recvMsg p me m
-                  d    <- renderStmt me s
-                  return $ seqStmts [recv, d]
+    f l ms              = fmap (l ++) $ recvs ms
+    recvs (t, c, m, s)  = asks pidMap >>= mapM (go (t,c,m) s) . M.keys
+    go m (SSkip _) p    = recvMsg p me m
+    go m s p            = do recv <- recvMsg p me m
+                             d    <- renderStmt me s
+                             return $ seqStmts [recv, d]
+
+renderStmtConc me (SCase l sl sr _)
+  = do dl <- renderStmtConc me sl
+       dr <- renderStmtConc me sr
+       return $ ifs [ isLeftLabel l dl
+                    , isRightLabel l dr
+                    ]
 
 renderStmtConc _ (SSkip _)
   = return $ text "skip"
@@ -271,6 +309,9 @@ renderStmtConc me (SBlock ss _)
 renderStmtConc _ _
   = return $ text "assert(0 == 1) /* TBD */"
 
+isLeftLabel (V x) s  = text x <+> equals <+> inlCstr <+> text "->" <$> s
+isRightLabel (V x) s = text x <+> equals <+> inrCstr <+> text "->" <$> s
+
 stmtLabel :: Int -> Doc 
 stmtLabel i = 
   text "stmt_L" <> int i 
@@ -303,7 +344,7 @@ renderStmtAbs :: Pid
               -> Stmt Int 
               -> RenderM
 renderStmtAbs me (SSend p ms i)
-  = do recv <- renderStmtConc me (SSend p [(mt, SNull) | (mt,_) <- ms] i)
+  = do recv <- renderStmtConc me (SSend p [(t,c,mt,SNull) | (t,c,mt,_) <- ms] i)
        cfg <- asks stmtMap
        return $ block (recv : inOutCounters cfg i)
     
@@ -311,7 +352,7 @@ renderStmtAbs me (SRecv ms i)
   = do cfg       <- asks stmtMap
        let outms = assert (length ms == length outcs) $ zip ms outcs
            outcs = outCounters cfg i
-       rs        <- mapM render1 [ ((mt, SNull), oc) | ((mt, _), oc) <- outms]
+       rs        <- mapM render1 [ ((t, c, mt, SNull), oc) | ((t, c, mt, _), oc) <- outms]
        return $ ifs rs
   where
     render1 (m, oc) = do d <- renderStmtConc me $ SRecv [m] i
@@ -359,15 +400,15 @@ gotoStmt :: Int -> Doc
 gotoStmt i
   = text "goto" <+> stmtLabel i
 
-recvGuard :: Pid -> [(MType, a)] -> RenderM
+recvGuard :: Pid -> [(TId, CId, MConstr, a)] -> RenderM
 recvGuard me ms
   = do pm <- asks pidMap 
        f <- asks chanMap
        return . hcat . punctuate (text "||") $
          concatMap (\p -> map (go f p) ms) $ M.keys pm
   where
-    go f them (m, _) = text "nempty" <> 
-                       parens (text "switchboard" <> brackets (f them me m))
+    go f them (t, c, v, _) = text "nempty" <> 
+                             parens (f them me (t,c,v))
 
 stmtGuard :: Pid -> Stmt Int -> RenderM
 stmtGuard me (SRecv mts i)
@@ -378,7 +419,6 @@ stmtGuard me (SRecv mts i)
     
 stmtGuard _ s
   = return $ stmtCounter (annot s) <+> text ">" <+> int 0
-    
                
 selectStmt :: Pid -> [Stmt Int] -> RenderM 
 selectStmt me ss 
@@ -470,7 +510,7 @@ renderProcs (Config { cTypes = ts, cProcs = ps }) pm sm
     eqUnfolds p1 p2 = p1 == p2
     env = RE { pidMap = pm
              , setMap = sm
-             , chanMap = switchboard (length ps) (length ts)
+             , chanMap = switchboard (length ps)
              , stmtMap = cfg
              }
     cfg = M.unions (map (nextStmts . snd) psfilter)
@@ -488,11 +528,13 @@ renderMain m (Config { cTypes = ts, cProcs = ps})
     boardInits  = do let pids = map fst ps
                      p        <- pids
                      q        <- pids
-                     t        <- ts
-                     return $ initSwitchboard (length ps) (length ts) p q t
+                     (t,cm)   <- M.toList ts
+                     (c,m)    <- M.toList cm
+                     -- t        <- ts
+                     return $ initSwitchboard (length ps) p q (t,c,m)
     procInits   = map (runProc m . fst) ps
     pidInits    = map ((\p -> assignProcVar p (sz p)) . fst) ps
-    sz p        = maybe (err p) id $ M.lookup p m
+    sz p        = fromMaybe (err p) $ M.lookup p m
     err p       = error ("Unknown pid (renderMain): " ++ show p)
 
 runProc :: PidMap -> Pid -> Doc
@@ -546,35 +588,42 @@ declProcVars m
   where
     go pid k d = declProcVar pid k <$> d
                 
-chanMsgType :: MType -> Doc
-chanMsgType t
-  = enclose lbrace rbrace . hcat $ punctuate comma msg 
-    where
-      msg =  text "mtype" : map (const (byte)) (tyargs t)
-             
-declChannels :: PidMap -> [MType] -> Doc
-declChannels pm ts 
-  = vcat $ map (\t -> vcat $ map (go t) (product $ M.keys pm)) ts
+chanMsgType :: MConstr -> Doc
+chanMsgType
+  = enclose lbrace rbrace . hcat . punctuate comma . chanMsgType'
+
+chanMsgType' :: MConstr -> [Doc]
+chanMsgType' (MTApp _ as)
+  = text "mtype" : map (const byte) as
+chanMsgType' (MCaseL _ c)
+  = text "mtype" : chanMsgType' c
+chanMsgType' (MCaseR _ c)
+  = text "mtype" : chanMsgType' c
+chanMsgType' (MTProd c c')
+  = chanMsgType' c ++ chanMsgType' c'
+
+declChannelsOfCstr :: PidMap -> (TId, CId, MConstr) -> Doc             
+declChannelsOfCstr pm (tid,cid,c) = vcat $ map go (prod $ M.keys pm)
   where
-    product ps = [ (p,q) | p <- ps, q <- ps ]
-    go t (p,q)           = text "chan" <+> renderChanName p q t
-                               <+> equals
-                               <+> text "[__K__] of"
-                               <+> chanMsgType t
-                               <> semi
-    -- go t p@(PConc _)  = text "chan" <+> renderChanName p q t
-    --                            <+> equals
-    --                            <+> text "[1] of"
-    --                            <+> chanMsgType t
-    --                            <> semi
-    -- go t p@(PAbs _ _) = text "chan" <+> renderChanName p q t <> brackets (int (sz p))
-    --                            <+> equals
-    --                            <+> text "[1] of"
-    --                            <+> chanMsgType t
-    --                            <> semi
-    -- go _ (PUnfold _ _ _)= empty
-    sz p                = maybe (err p) snd $ M.lookup p pm
-    err p               = error ("Unknown pid (runProc): " ++ show p)
+    prod ps = [ (p,q) | p <- ps, q <- ps ]
+    go (p,q)
+      = chanTy <+> renderChanName p q tid cid
+               <+> equals
+               <+> text "[__K__] of"
+               <+> chanMsgType c
+               <> semi
+
+declChannelsOfType :: PidMap -> TId -> M.Map CId MConstr -> Doc             
+declChannelsOfType pm tid m
+  = vcat $ M.foldrWithKey go [] m
+  where
+    go cid c docs = declChannelsOfCstr pm (tid, cid, c) : docs
+             
+declChannels :: PidMap -> MTypeEnv -> Doc
+declChannels pm te 
+  = vcat $ M.foldrWithKey go [] te
+  where
+    go tid m docs = declChannelsOfType pm tid m : docs
 
 buildPidMap :: Config a -> PidMap
 buildPidMap (Config { cUnfold = us, cProcs = ps })
@@ -595,14 +644,31 @@ updUnfold (m, i) p@(PUnfold v s _)
       j               = maybe err (succ . fst) $ M.lookup (PAbs v s) m
       err             = error ("Unknown pid (updUnfold): " ++ show p)
 
-declSwitchboard :: PidMap -> [MType] -> Doc
-declSwitchboard pm ts
-  = renderSwitchboard nprocs (length ts)
-    where 
-      nprocs = M.foldrWithKey (\p v s -> s + count p v) 0 pm
-      count (PAbs _ _) (_, n) = n - setSize + 1
-      count (PConc _) (_,n) = n
-      count _ _          = 0
+-- renderSwitchboard :: Int -> Int -> Doc
+-- renderSwitchboard nprocs ntypes
+--   = chanTy <+> switchBase <+>
+--     brackets (int (nprocs*nprocs*ntypes)) <> semi
+
+declSwitchboardsCstr :: Int -> TId -> CId -> Doc
+declSwitchboardsCstr nprocs tid cid
+  = chanTy <+> switchBase tid cid
+           <+> brackets (int (nprocs * nprocs)) <> semi
+
+declSwitchboardsType :: Int -> TId -> M.Map CId MConstr -> Doc
+declSwitchboardsType nprocs tid m
+  = vcat $ map go $ M.keys m
+  where
+    go cid = declSwitchboardsCstr nprocs tid cid
+                        
+declSwitchboards :: PidMap -> MTypeEnv -> Doc
+declSwitchboards pm te
+  = vcat $ M.foldrWithKey go [] te
+  where
+    go tid m docs = declSwitchboardsType nprocs tid m : docs
+    nprocs = M.foldrWithKey (\p v s -> s + count p v) 0 pm
+    count (PAbs _ _) (_, n) = n - setSize + 1
+    count (PConc _) (_,n) = n
+    count _ _          = 0
 
 macrify = intercalate " \\\n"
 decMacro = macrify [ "#define __DEC(_x) atomic { assert (_x > 0);"
@@ -616,15 +682,15 @@ decMacro = macrify [ "#define __DEC(_x) atomic { assert (_x > 0);"
                    , "fi }"
                    ]
 recvMacro =
-  macrify [ "#define __RECV(_i, _as) atomic {"
-          , "switchboard[_i]?[_as];"
+  macrify [ "#define __RECV(_i,...) atomic {"
+          , "_i?[__VA_ARGS__];"
           , "if"
-          , "  :: len(switchboard[_i]) < __K__ ->"
-          , "     switchboard[_i]?_as"
+          , "  :: len(_i) < __K__ ->"
+          , "     _i?__VA_ARGS__"
           , "  :: else ->"
           , "  if"
-          , "  :: switchboard[_i]?_as"
-          , "  :: switchboard[_i]?<_as>"
+          , "  :: _i?__VA_ARGS__"
+          , "  :: _i?<__VA_ARGS__>"
           , "  fi"
           , "fi }"
           ]
@@ -643,13 +709,13 @@ render c@(Config { cTypes = ts })
     <$$> (align $ vcat macros)
     <$$> declProcVars pMap
     <$$> declChannels pMap ts
-    <$$> declSwitchboard pMap ts
+    <$$> declSwitchboards pMap ts
     <$$> procs
     <$$> renderMain pMap unfolded
   where
     unfolded                 = freshIds . instAbs $ unfold c
     pMap                   = buildPidMap unfolded
-    mtype                    = renderMTypes ts
+    mtype                    = renderMConstrs ts
     procs                    = renderProcs (unfolded) pMap sMap
     sMap                   = M.foldrWithKey goKey M.empty pMap
     goKey (PAbs _ s) (_,n) m = M.insert s n m

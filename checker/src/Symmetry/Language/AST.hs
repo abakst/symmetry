@@ -12,8 +12,8 @@ import Data.Hashable
 import Data.Typeable
 import Control.Applicative
 
-data RSing  = RS Int deriving (Eq, Ord, Show)
-data RMulti = RM Int deriving (Eq, Ord, Show)
+data RSing  = RS Int deriving (Ord, Eq, Show)
+data RMulti = RM Int deriving (Ord, Eq, Show)
 
 instance Hashable RSing where
   hashWithSalt s (RS i) = hashWithSalt s i
@@ -68,12 +68,6 @@ class Symantics repr where
   tl   :: repr [a] -> repr [a]
 
   -- Lambda Calculus:
-  inl  :: repr a -> repr (Either a b)
-  inr  :: repr b -> repr (Either a b)
-  pair :: repr a -> repr b -> repr (a, b)
-  proj1 :: repr (a, b) -> repr a
-  proj2 :: repr (a, b) -> repr b
-  match :: repr (Either a b) -> repr (a -> c) -> repr (b -> c) -> repr c
   lam  :: (repr a -> repr b) -> repr (a -> b)
   app  :: repr (a -> b) -> repr a -> repr b
 
@@ -82,7 +76,7 @@ class Symantics repr where
   bind :: repr (Process a) -> repr (a -> Process b) -> repr (Process b)
   fixM :: repr ((a -> Process a) -> a -> Process a) -> repr (a -> Process a)
 
-  -- Primitives:        
+  -- Primitives:
   self      :: repr (Process (Pid RSing))
   spawn     :: repr RSing -> repr (Process a) -> repr (Process (Pid RSing))
   spawnMany :: repr RMulti -> repr Int -> repr (Process ()) -> repr (Process (Pid RMulti))
@@ -91,8 +85,18 @@ class Symantics repr where
   newRMulti :: repr (Process RMulti)
   die       :: repr (Process a)
 
-  -- "Run" a process             
+  -- "Run" a process
   exec      :: repr (Process a) -> repr a
+
+class Symantics repr => SymTypes repr a b where
+  inl  :: repr a -> repr (a :+: b)
+  inr  :: repr b -> repr (a :+: b)
+  pair :: repr a -> repr b -> repr (a, b)
+  proj1 :: repr (a, b) -> repr a
+  proj2 :: repr (a, b) -> repr b
+
+class Symantics repr => SymMatch repr a b c where
+  match :: repr (a :+: b) -> repr (a -> c) -> repr (b -> c) -> repr c
 
 class Symantics repr => SymRecv repr a where
   recv :: repr (Process a)
