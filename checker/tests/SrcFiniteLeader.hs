@@ -45,6 +45,12 @@ class ( Symantics repr
       , SymSend   repr ECM
       , SymRecv   repr Out
       , SymSend   repr Out
+      , SymTypes  repr () ()
+      , SymTypes  repr () (() :+: ())
+      , SymMatch  repr () () ()
+      , SymMatch  repr () () (Process (Pid RSing))
+      , SymMatch  repr () () (Process ())
+      , SymMatch repr () (Either () ()) (Process ())
       ) => FLSem repr
 
 finite_leader :: FLSem repr => repr (Process ())

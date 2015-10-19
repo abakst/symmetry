@@ -13,8 +13,9 @@ import Data.Either
 import SrcHelper
 
 class ( Symantics repr
-      , SymSend   repr Int
-      , SymRecv   repr Int
+      , SymSend repr Int
+      , SymRecv repr Int
+      , SymMatch repr () () (Process (Pid RSing))
       ) => PipeSem repr
 
 pipe :: PipeSem repr => repr (Process ())

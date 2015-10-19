@@ -18,10 +18,18 @@ type Msg = (Pid RSing, Int) :+:  -- Call   Pid Int
            (Pid RSing, FWO)      -- Answer Pid FWO
 
 class ( Symantics repr
-      , SymSend   repr Msg
-      , SymRecv   repr Msg
-      , SymSend   repr FWO
-      , SymRecv   repr FWO
+      , SymSend  repr Msg
+      , SymRecv  repr Msg
+      , SymSend  repr FWO
+      , SymRecv  repr FWO
+      , SymTypes repr (Pid RSing) FWO
+      , SymTypes repr (Pid RSing) Int
+      , SymTypes repr (Pid RSing, Int) (Pid RSing, FWO)
+      , SymTypes repr Int String
+      , SymMatch repr () () (Process ())
+      , SymMatch repr () () (Process FWO)
+      , SymMatch repr (Pid RSing, Int) (Pid RSing, FWO) (Pid RSing, Int)
+      , SymMatch repr (Pid RSing, Int) (Pid RSing, FWO) (Pid RSing, FWO)
       ) => FirewallSem repr
 
 call_msg :: FirewallSem repr => repr (Pid RSing -> Int -> Msg)

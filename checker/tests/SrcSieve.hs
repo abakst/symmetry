@@ -33,6 +33,12 @@ class ( Symantics repr
       , SymSend   repr Int
       , SymRecv   repr Msg
       , SymSend   repr Msg
+      , SymMatch repr () () (() :+: ())
+      , SymMatch repr () () (Process (Int -> Boolean))
+      , SymMatch repr (Pid RSing) Int (Pid RSing)
+      , SymMatch repr (Pid RSing) Int Int
+      , SymTypes repr () ()
+      , SymTypes repr (Pid RSing) Int
       ) => SieveSem repr
 
 sieve_main :: SieveSem repr => repr (Process ())

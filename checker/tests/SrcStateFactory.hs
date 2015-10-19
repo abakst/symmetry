@@ -19,6 +19,8 @@ class ( Symantics repr
       , SymRecv   repr Msg1
       , SymSend   repr Msg2
       , SymRecv   repr Msg2
+      , SymTypes repr (Pid RSing) Int
+      , SymMatch repr () () (Process Int)
       ) => SFSem repr
 
 create_msg1 :: SFSem repr => repr (Pid RSing -> Int -> Msg1)
@@ -31,7 +33,7 @@ state_factory  = do n1 <- app any_nat tt
                     app2 call_loop n2 funWithState
                     ret tt
 
-state :: SFSem repr => repr (Int -> (Int -> Int -> Process Int) -> Process a)
+state :: SFSem repr => repr (Int -> (Int -> Int -> Process Int) -> Process ())
 state  = lam $ \n -> lam $ \newstate ->
            do msg1 :: repr Msg1 <- recv
               let p     = proj1 msg1
@@ -50,7 +52,7 @@ factory  = lam $ \n -> lam $ \newstate ->
                           s :: repr Msg2 <- recv
                           ret s)
 
-call_loop :: SFSem repr => repr (Int -> (Int -> Process a) -> Process a)
+call_loop :: SFSem repr => repr (Int -> (Int -> Process Int) -> Process Int)
 call_loop  = lam $ \n -> lam $ \f ->
                ifte (lt n (repI 1)) fail $
                  ifte (eq n (repI 1))

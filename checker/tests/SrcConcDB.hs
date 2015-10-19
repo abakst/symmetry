@@ -62,6 +62,20 @@ class ( Symantics repr
       , SymRecv   repr LookupResT
       , SymSend   repr FreeAllocated
       , SymRecv   repr FreeAllocated
+      , SymTypes  repr Int (Pid RSing)
+      , SymTypes  repr (Int, Pid RSing) (LookupT :+: ValueT)
+      , SymTypes  repr (Int, Pid RSing) ValueT
+      , SymTypes  repr () ()
+      , SymTypes  repr () Int
+      , SymTypes  repr Int Int
+      , SymMatch  repr () () Int
+      , SymMatch  repr () () (Process ())
+      , SymMatch  repr LookupT ValueT LookupT
+      , SymMatch  repr AllocT (LookupT :+: ValueT) AllocT
+      , SymMatch  repr () Int (Process ())
+      , SymMatch  repr () () (() :+: Int)
+      , SymMatch  repr AllocT (LookupT :+: ValueT) (Process ())
+      , SymMatch  repr (Int, Pid RSing) ValueT (Process ())
       ) => CDBSem repr
 
 concdb :: CDBSem repr => repr (Process ())

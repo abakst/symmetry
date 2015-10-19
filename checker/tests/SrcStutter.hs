@@ -14,6 +14,8 @@ import Data.Either
 class ( Symantics repr
       , SymSend   repr Msg
       , SymRecv   repr Msg
+      , SymMatch repr () () (Process ())
+      , SymTypes repr () ()
       ) => StutterSem repr
 
 type Msg = () :+: ()

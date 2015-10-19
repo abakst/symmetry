@@ -66,6 +66,27 @@ class ( Symantics repr
       , SymSend   repr Res
       , SymRecv   repr Cmd
       , SymSend   repr Cmd
+      , SymMatch repr () () (Process ())
+      , SymMatch repr () () (Process Int)
+      , SymMatch repr () Int (Process ())
+      , SymMatch repr (Pid RSing) (Either (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing))) (Pid RSing)
+      , SymMatch repr (Pid RSing) (Either (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing))) (Pid RSing, Cmd)
+      , SymMatch repr (Pid RSing) (Either (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing))) (Process ())
+      , SymMatch repr (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing)) (Pid RSing)
+      , SymMatch repr (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing)) (Pid RSing, Cmd)
+      , SymMatch repr (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing)) (Process ())
+      , SymMatch repr (Pid RSing, Cmd) (Pid RSing) (Pid RSing)
+      , SymMatch repr (Pid RSing, Cmd) (Pid RSing) (Pid RSing, Cmd)
+      , SymMatch repr (Pid RSing, Cmd) (Pid RSing) (Process ())
+      , SymMatch repr Int () (Int, ResM)
+      , SymTypes repr () Int
+      , SymTypes repr (Pid RSing) ((Pid RSing, Cmd) :+: Pid RSing)
+      , SymTypes repr (Pid RSing) (Pid RSing :+: ((Pid RSing, Cmd) :+: Pid RSing))
+      , SymTypes repr (Pid RSing) Cmd
+      , SymTypes repr (Pid RSing) Int
+      , SymTypes repr (Pid RSing, Cmd) (Pid RSing)
+      , SymTypes repr Int ()
+      , SymTypes repr Int ResM
       ) => ReslockSem repr
 
 -- LOCKED RESOURCE

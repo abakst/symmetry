@@ -16,8 +16,14 @@ type Msg = (Pid RSing, Int)  :+: -- Reply   Pid Int
             (Pid RSing, Int))    -- Result  Pid Int
 
 class ( Symantics repr
-      , SymSend   repr Msg
-      , SymRecv   repr Msg
+      , SymSend repr Msg
+      , SymRecv repr Msg
+      , SymTypes repr (Pid RSing) Int
+      , SymTypes repr (Pid RSing, Int) ((Pid RSing, Int) :+: (Pid RSing, Int))
+      , SymTypes repr (Pid RSing, Int) (Pid RSing, Int)
+      , SymMatch repr () () (Process [Int])
+      , SymMatch repr (Pid RSing, Int) (Pid RSing, Int) (Pid RSing, Int)
+      , SymMatch repr (Pid RSing, Int) ((Pid RSing, Int) :+: (Pid RSing, Int)) (Pid RSing, Int)
       ) => HowaitSem repr
 
 recv_reply :: HowaitSem repr => repr (Process (Pid RSing, Int))

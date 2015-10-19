@@ -14,20 +14,22 @@ import GHC.Num ((+))
 import Data.Either
 
 class ( Symantics repr
-      , SymSend   repr Msg
-      , SymRecv   repr Msg
+      , SymSend repr Msg
+      , SymRecv repr Msg
+      , SymMatch repr () () (Process ())
+      , SymMatch repr (Int, Pid RSing) (Either [Int] [Int]) (Process ())
+      , SymMatch repr (Int, Pid RSing) (Either [Int] [Int]) [Int]
+      , SymMatch repr [Int] [Int] (Process ())
+      , SymMatch repr [Int] [Int] [Int]
+      , SymTypes repr (Int, Pid RSing) ([Int] :+: [Int])
+      , SymTypes repr Int (Pid RSing)
+      , SymTypes repr [Int] [Int]
       ) => RingSem repr
+
 
 type Msg = (Int,Pid RSing) :+:  -- Peek PeanoN ProcessId
            ([Int]          :+:  -- Ans  [PeanoN]
            ([Int]          ))   -- Forward [PeanoN]
-
-msg_handler :: RingSem repr
-            => repr (Msg -> ((Int,Pid RSing)->a) -> ([Int]->a) -> ([Int]->a) -> a)
-msg_handler = lam $ \msg ->
-              lam $ \ph -> lam $ \ah -> lam $ \fh ->
-                match msg ph $ lam $ \e1 ->
-                  match e1 ah fh
 
 peek_msg :: RingSem repr => repr (Int -> Pid RSing -> Msg)
 peek_msg  = lam $ \i -> lam $ \pid -> inl $ pair i pid
@@ -37,7 +39,7 @@ ans_msg  = lam $ \xs -> inr $ inl xs
 
 recv_ans :: RingSem repr => repr (Process [Int])
 recv_ans  = do msg::repr Msg <- recv
-               ret (app (app (app (app msg_handler msg) fail) id) fail)
+               ret $ match3 msg fail id fail
 
 forward_msg :: RingSem repr => repr ([Int] -> Msg)
 forward_msg  = lam $ \xs -> inr $ inr xs
@@ -85,4 +87,4 @@ slave = lam $ \nxt -> lam $ \me ->
           let fh = lam $ \xs -> send nxt (app forward_msg (cons me xs))
               ph = undefined
           in do msg :: repr Msg <- recv
-                app (app (app (app msg_handler msg) ph) fail) fh
+                match3 msg ph fail fh
