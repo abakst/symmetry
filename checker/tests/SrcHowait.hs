@@ -10,6 +10,7 @@ import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 import Data.Either
 import SrcHelper
+import Symmetry.SymbEx
 
 type Msg = (Pid RSing, Int)  :+: -- Reply   Pid Int
            ((Pid RSing, Int) :+: -- Request Pid Int
@@ -25,6 +26,9 @@ class ( Symantics repr
       , SymMatch repr (Pid RSing, Int) (Pid RSing, Int) (Pid RSing, Int)
       , SymMatch repr (Pid RSing, Int) ((Pid RSing, Int) :+: (Pid RSing, Int)) (Pid RSing, Int)
       ) => HowaitSem repr
+
+-- tests/SrcHowait.hs:30:10-25: No instance for (AbsValToIL (Pid RSing, Int)) …
+-- instance HowaitSem SymbEx
 
 recv_reply :: HowaitSem repr => repr (Process (Pid RSing, Int))
 recv_reply = do msg :: repr Msg <- recv

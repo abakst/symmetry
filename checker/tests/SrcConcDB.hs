@@ -10,6 +10,7 @@ import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 import Data.Either
 import SrcHelper
+import Symmetry.SymbEx
 
 -- msg1 : Alloc, Lookup
 -- msg2 : Value
@@ -77,6 +78,8 @@ class ( Symantics repr
       , SymMatch  repr AllocT (LookupT :+: ValueT) (Process ())
       , SymMatch  repr (Int, Pid RSing) ValueT (Process ())
       ) => CDBSem repr
+
+--instance CDBSem SymbEx
 
 concdb :: CDBSem repr => repr (Process ())
 concdb  = do r  <- newRSing

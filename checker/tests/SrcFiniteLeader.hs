@@ -10,6 +10,7 @@ import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 import Data.Either
 import SrcHelper
+import Symmetry.SymbEx
 
 type MyDat = () :+: (() :+: ()) -- A | B | C
 type ECM   = () :+: ()          -- Elected | Congratulations
@@ -52,6 +53,8 @@ class ( Symantics repr
       , SymMatch  repr () () (Process ())
       , SymMatch repr () (Either () ()) (Process ())
       ) => FLSem repr
+
+instance FLSem SymbEx
 
 finite_leader :: FLSem repr => repr (Process ())
 finite_leader  = do testtnode

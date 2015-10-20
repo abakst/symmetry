@@ -9,6 +9,7 @@ import Prelude (($), undefined, Int, fromInteger)
 import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 import SrcHelper
+import Symmetry.SymbEx
 
 import GHC.Num ((+))
 import Data.Either
@@ -26,6 +27,7 @@ class ( Symantics repr
       , SymTypes repr [Int] [Int]
       ) => RingSem repr
 
+--instance RingSem SymbEx
 
 type Msg = (Int,Pid RSing) :+:  -- Peek PeanoN ProcessId
            ([Int]          :+:  -- Ans  [PeanoN]

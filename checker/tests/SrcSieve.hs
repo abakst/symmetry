@@ -10,6 +10,7 @@ import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 import Data.Either
 import SrcHelper
+import Symmetry.SymbEx
 
 type Msg = (Pid RSing) :+:  -- Poke ProcessId
            Int              -- Ans  Int
@@ -40,6 +41,8 @@ class ( Symantics repr
       , SymTypes repr () ()
       , SymTypes repr (Pid RSing) Int
       ) => SieveSem repr
+
+--instance SieveSem SymbEx
 
 sieve_main :: SieveSem repr => repr (Process ())
 sieve_main  = do me    <- self

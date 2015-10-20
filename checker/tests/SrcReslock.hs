@@ -10,6 +10,7 @@ import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 import Data.Either
 import SrcHelper
+import Symmetry.SymbEx
 
 type Cmd = Int :+: ()            -- Write Int | Read
 
@@ -88,6 +89,8 @@ class ( Symantics repr
       , SymTypes repr Int ()
       , SymTypes repr Int ResM
       ) => ReslockSem repr
+
+--instance ReslockSem SymbEx
 
 -- LOCKED RESOURCE
 

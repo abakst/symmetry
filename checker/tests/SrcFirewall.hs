@@ -10,6 +10,7 @@ import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 import Data.Either
 import SrcHelper
+import Symmetry.SymbEx
 
 type FWO = Int    :+:
            String
@@ -31,6 +32,8 @@ class ( Symantics repr
       , SymMatch repr (Pid RSing, Int) (Pid RSing, FWO) (Pid RSing, Int)
       , SymMatch repr (Pid RSing, Int) (Pid RSing, FWO) (Pid RSing, FWO)
       ) => FirewallSem repr
+
+--instance FirewallSem SymbEx
 
 call_msg :: FirewallSem repr => repr (Pid RSing -> Int -> Msg)
 call_msg  = lam $ \pid -> lam $ \i -> inl (pair pid i)

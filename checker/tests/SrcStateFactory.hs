@@ -10,6 +10,7 @@ import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 import Data.Either
 import SrcHelper
+import Symmetry.SymbEx
 
 type Msg1 = (Pid RSing, Int) -- Msg1 Pid Int
 type Msg2 = Int              -- Msg2 Int
@@ -22,6 +23,8 @@ class ( Symantics repr
       , SymTypes repr (Pid RSing) Int
       , SymMatch repr () () (Process Int)
       ) => SFSem repr
+
+--instance SFSem SymbEx
 
 create_msg1 :: SFSem repr => repr (Pid RSing -> Int -> Msg1)
 create_msg1  = lam $ \pid -> lam $ \n -> pair pid n

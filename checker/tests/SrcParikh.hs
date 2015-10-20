@@ -10,6 +10,7 @@ import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 import Data.Either
 import SrcHelper
+import Symmetry.SymbEx
 
 type Msg = (Pid RSing,String) :+: -- Init (Pid RSing) String
            (String :+:            -- Set String
@@ -48,6 +49,8 @@ class ( Symantics repr
       , SymTypes repr (Pid RSing, String) (String :+: (Pid RSing :+: (() :+: ())))
       , SymTypes repr String (Pid RSing :+: (() :+: ()))
       ) => ParikhSem repr
+
+-- instance ParikhSem SymbEx
 
 recv_init :: ParikhSem repr => repr (Process (Pid RSing, String))
 recv_init  = do (msg::repr Msg) <- recv

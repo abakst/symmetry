@@ -11,12 +11,15 @@ import Symmetry.Language.Syntax
 import GHC.Num ((+))
 import Data.Either
 import SrcHelper
+import Symmetry.SymbEx
 
 class ( Symantics repr
       , SymSend repr Int
       , SymRecv repr Int
       , SymMatch repr () () (Process (Pid RSing))
       ) => PipeSem repr
+
+instance PipeSem SymbEx
 
 pipe :: PipeSem repr => repr (Process ())
 pipe  = do me <- self
