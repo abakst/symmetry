@@ -9,7 +9,7 @@ import Symmetry.IL.AST
 import Control.Exception
 import Control.Monad
 import Control.Applicative
-import System.Exit hiding (exitSuccess, exitWith)
+import System.Exit
 import System.Directory
 import System.FilePath
 import System.IO
@@ -43,12 +43,7 @@ outf, outTrail :: FilePath -> FilePath
 outf d = d </> "out.pml"
 outTrail d = outf d <.> "trail"
 
-type ExitType        = Bool
-exitSuccess          = return True
-exitWith ExitSuccess = return True
-exitWith _           = return False
-
-run1Cfg :: FilePath -> Config () -> IO ExitType
+run1Cfg :: FilePath -> Config () -> IO ()
 run1Cfg outd cfg
   = do createDirectoryIfMissing True outd
        removeFile (outTrail outd) `catch` \(_ :: IOException) ->
@@ -69,7 +64,7 @@ run1Cfg outd cfg
                        ExitSuccess -> exitSuccess
                        _           -> exitWith e
 
-checkerMain :: SymbEx () -> IO ExitType
+checkerMain :: SymbEx () -> IO ()
 checkerMain main
   = runCommand $ \opts _ -> 
       if optVerify opts then
@@ -81,3 +76,4 @@ checkerMain main
            exitSuccess
       else
         exitSuccess
+

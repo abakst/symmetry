@@ -102,3 +102,26 @@ compare  = undefined
 
 ret_tt  :: Symantics repr => repr (Process a) -> repr (Process ())
 ret_tt p = p Symmetry.Language.Syntax.>> ret tt
+
+pair3 :: ( Symantics repr
+         , SymTypes repr a (b,c)
+         , SymTypes repr b c)
+      => repr a -> repr b -> repr c -> repr (a,(b,c))
+pair3 a1 a2 a3 = pair a1 (pair a2 a3)
+
+pair4 :: ( Symantics repr
+         , SymTypes repr a (b, (c, d))
+         , SymTypes repr b (c, d)
+         , SymTypes repr c d
+         )
+      => repr a -> repr b -> repr c -> repr d -> repr (a,(b,(c,d)))
+pair4 a1 a2 a3 a4 = pair a1 $ pair a2 $ pair a3 a4
+
+pair5 :: ( Symantics repr
+         , SymTypes repr a (b,(c,(d,e)))
+         , SymTypes repr b (c,(d,e))
+         , SymTypes repr c (d,e)
+         , SymTypes repr d e
+         )
+      => repr a -> repr b -> repr c -> repr d -> repr e -> repr (a,(b,(c,(d,e))))
+pair5 a1 a2 a3 a4 a5 = pair a1 $ pair a2 $ pair a3 $ pair a4 a5

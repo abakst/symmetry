@@ -1,7 +1,7 @@
 {-# Language RebindableSyntax #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language FlexibleContexts #-}
-module Ping00 where
+module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return)
 import Symmetry.Language
@@ -28,5 +28,5 @@ mainProc :: (Symantics repr, SymSend repr (Pid RSing), SymRecv repr (Pid RSing))
 mainProc = exec $ do r <- newRSing
                      r |> master
 
--- main :: IO ()
--- main = checkerMain mainProc
+main :: IO ()
+main = checkerMain mainProc
