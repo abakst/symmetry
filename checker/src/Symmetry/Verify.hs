@@ -9,7 +9,7 @@ import Symmetry.IL.AST
 import Control.Exception
 import Control.Monad
 import Control.Applicative
-import System.Exit
+import System.Exit hiding (exitSuccess, exitWith)
 import System.Directory
 import System.FilePath
 import System.IO
@@ -42,8 +42,13 @@ outName = "out.pml"
 outf, outTrail :: FilePath -> FilePath
 outf d = d </> "out.pml"
 outTrail d = outf d <.> "trail"
-                      
-run1Cfg :: FilePath -> Config () -> IO ()
+
+type ExitType        = Bool
+exitSuccess          = return True
+exitWith ExitSuccess = return True
+exitWith _           = return False
+
+run1Cfg :: FilePath -> Config () -> IO ExitType
 run1Cfg outd cfg
   = do createDirectoryIfMissing True outd
        removeFile (outTrail outd) `catch` \(_ :: IOException) ->
@@ -55,14 +60,16 @@ run1Cfg outd cfg
        checkExit y
        (_, _, _, z) <- createProcess panCmd { cwd = Just outd, std_out = CreatePipe }
        checkExit z
-       catch (void $ openFile (outTrail outd) ReadMode) $ \(_ :: IOException) ->
+       catch (openFile (outTrail outd) ReadMode >> return True) $ \(_ :: IOException) ->
          exitSuccess
        exitWith (ExitFailure 1)
   where
     checkExit x = do e <- waitForProcess x
-                     when (e /= ExitSuccess) $ exitWith e
+                     case e of
+                       ExitSuccess -> exitSuccess
+                       _           -> exitWith e
 
-checkerMain :: SymbEx () -> IO ()
+checkerMain :: SymbEx () -> IO ExitType
 checkerMain main
   = runCommand $ \opts _ -> 
       if optVerify opts then

@@ -3,13 +3,14 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language FlexibleContexts #-}
 
-module StutterSrc where
+module SrcStutter where
 
 import Prelude (($), undefined, Int, fromInteger)
 import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 import GHC.Num ((+))
 import Data.Either
+import Symmetry.SymbEx
 
 class ( Symantics repr
       , SymSend   repr Msg
@@ -17,6 +18,8 @@ class ( Symantics repr
       , SymMatch repr () () (Process ())
       , SymTypes repr () ()
       ) => StutterSem repr
+
+instance StutterSem SymbEx
 
 type Msg = () :+: ()
 

@@ -99,3 +99,6 @@ match5 msg f1 f2 f3 f4 f5 = match msg f1 $ lam $ \e1 ->
 
 compare :: Symantics repr => repr (a -> a -> (Either () (Either () ())))
 compare  = undefined
+
+ret_tt  :: Symantics repr => repr (Process a) -> repr (Process ())
+ret_tt p = p Symmetry.Language.Syntax.>> ret tt
