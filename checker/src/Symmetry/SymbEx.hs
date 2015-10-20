@@ -319,15 +319,15 @@ symtt
   = SE . return $ AUnit Nothing
 
 -------------------------------------------------
-symRep :: Int -> SymbEx Int
+symInt :: Int -> SymbEx Int
 -------------------------------------------------
-symRep _
+symInt _
   = SE . return $ AInt Nothing
 
 -------------------------------------------------
-symRepS :: String -> SymbEx String
+symStr :: String -> SymbEx String
 -------------------------------------------------
-symRepS _
+symStr _
   = SE . return $ AString Nothing
 
 -------------------------------------------------
@@ -563,8 +563,9 @@ symProj2 p = SE $ do p' <- runSE p
 -------------------------------------------------
 instance Symantics SymbEx where
   tt        = symtt
-  repI      = symRep
-  repS      = symRepS
+  int       = symInt
+  str       = symStr
+  bool      = error "TBD: bool"
   lam       = symLam
   app       = symApp
   self      = symSelf

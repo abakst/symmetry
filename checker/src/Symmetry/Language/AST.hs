@@ -7,10 +7,8 @@
 {-# Language StandaloneDeriving #-}
 module Symmetry.Language.AST where
 
-import Data.Either
 import Data.Hashable
 import Data.Typeable
-import Control.Applicative
 
 data RSing  = RS Int deriving (Ord, Eq, Show, Typeable)
 data RMulti = RM Int deriving (Ord, Eq, Show, Typeable)
@@ -46,21 +44,19 @@ type Boolean = Either () ()  -- Either True False
 class Symantics repr where
   -- Value Injection:
   tt   :: repr ()
-  repI :: Int -> repr Int
-  repS :: String -> repr String
-
-  repT :: repr Boolean
-  repF :: repr Boolean
+  int  :: Int    -> repr Int
+  str  :: String -> repr String
+  bool :: Bool   -> repr Bool
 
   plus   :: repr Int -> repr Int -> repr Int
 
-  eq   :: (Ord a) => repr a -> repr a -> repr Boolean
-  gt   :: (Ord a) => repr a -> repr a -> repr Boolean
-  lt   :: (Ord a) => repr a -> repr a -> repr Boolean
+  eq   :: (Ord a) => repr a -> repr a -> repr Bool
+  gt   :: (Ord a) => repr a -> repr a -> repr Bool
+  lt   :: (Ord a) => repr a -> repr a -> repr Bool
 
-  not  :: repr Boolean -> repr Boolean
-  and  :: repr Boolean -> repr Boolean -> repr Boolean
-  or   :: repr Boolean -> repr Boolean -> repr Boolean
+  not  :: repr Bool -> repr Bool
+  and  :: repr Bool -> repr Bool -> repr Bool
+  or   :: repr Bool -> repr Bool -> repr Bool
 
   nil  :: repr [a]
   cons :: repr a   -> repr [a] -> repr [a]
