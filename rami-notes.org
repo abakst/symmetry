@@ -1,0 +1,50 @@
+* Benchmarks
+
+|---------------+------------------------|
+| Name          | Status                 |
+|---------------+------------------------|
+| finite_leader | hs: ✓  config: -       |
+| reslock       | hs: ✓  config: -       |
+| reslockbeh    | - (similar to reslock) |
+| sieve         | hs: ✓  config: -       |
+| concdb        | hs: ✓  config: -       |
+| howait        | hs: ✓  config: RC      |
+| state_factory | hs: ✓  config: -       |
+| firewall      | hs: ✓  config: -       |
+| ring          | hs: ✓  config: -       |
+| stutter       | hs: ✓  config: -       |
+| pipe          | hs: ✓  config: RC      |
+| unsafe_send   | - (failure case)       |
+| parikh        | ✓                      |
+| safe_send     | - (similar to parikh)  |
+|---------------+------------------------|
+
+RC : recursive thread creation
+
+* Questions
+** old
+*** DONE How to show the failure cases?
+    recv(A) ==> recv(ERR); SKIP
+
+*** DONE Functions that call each other?
+    f1: loop L_f1. ___________ goto L_fa;
+    f2: loop L_f1. ___________ goto L_fb;
+    ...
+    fn: loop L_f1. ___________ goto L_fz;
+
+*** DONE Statement for spawning a new thread?
+    look at [[file:process_effects.lhs][process effects]]
+
+** new
+*** datatypes
+    data Msg = Init Pid String
+             │ Get Pid
+             │ Set String
+*** recursive datatypes
+    data Peano = Zero | Succ Peano
+*** lists
+    pattern matching
+***
+* Notes
+** check coreSyn
+CoreSyn holds all the main data types for use by for the Glasgow Haskell Compiler midsection

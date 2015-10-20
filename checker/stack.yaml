@@ -1,0 +1,7 @@
+flags: {}
+packages:
+- '.'
+extra-deps: [
+    plugins-1.5.5.0,
+]
+resolver: lts-3.8

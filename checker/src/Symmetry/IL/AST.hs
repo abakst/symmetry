@@ -13,6 +13,8 @@ import           Data.Generics
 import           Data.List (nub, isPrefixOf)
 import qualified Data.Map.Strict as M
 
+import           Control.Applicative ((<$>),(<*>))
+
 data Set = S String
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
@@ -43,7 +45,7 @@ isAbs :: Pid -> Bool
 isAbs (PAbs _ _) = True
 isAbs _          = False
 
-data Label = LL | RL | VL Var 
+data Label = LL | RL | VL Var
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data MConstr = MTApp  { tycon :: MTyCon, tyargs :: [Pid] }
@@ -67,13 +69,13 @@ lookupConstr m c
   where
     go Nothing i c' = if eqConstr c c' then Just i else Nothing
     go a       _ _  = a
-                      
+
 lookupType m t
   = M.foldlWithKey go Nothing m
   where
     go Nothing i t' = if t == t' then Just i else Nothing
     go a       _ _  = a
-    
+
 
 -- a + (b * c) + d
 -- if
@@ -98,7 +100,7 @@ data Stmt a = SSkip a
             | SSend Pid [(TId, CId, MConstr, Stmt a)] a
             | SRecv     [(TId, CId, MConstr, Stmt a)] a
             | SIter Var Set (Stmt a) a
-            | SLoop LVar (Stmt a) a
+            | SLoop LVar (Stmt a) a         {-used to create a loop with the given label-}
             | SChoose Var Set (Stmt a) a
             | SVar LVar a
             | SCase Var (Stmt a) (Stmt a) a
@@ -109,10 +111,10 @@ data Stmt a = SSkip a
             | SNonDet [Stmt a]
          deriving (Eq, Read, Show, Functor, Foldable, Data, Typeable)
 
--- (A a | B b | C (c + d))                  
--- 
+-- (A a | B b | C (c + d))
+--
 -- recv (x : t1 + (t2 + t3))
--- x is 
+-- x is
 -- recv (t1 + t2)
 -- -> SRecv(MTSum t1 t2)
 -- -> if
@@ -317,7 +319,7 @@ addNext i is = M.alter (fmap (++is)) i
 
 stmt :: (TId, CId, MConstr, Stmt a) -> Stmt a
 stmt (_,_,_,s) = s
-               
+
 lastStmts :: Stmt a -> [Stmt a]
 lastStmts s@(SSkip _)       = [s]
 lastStmts s@(SVar _ _)      = [s]
