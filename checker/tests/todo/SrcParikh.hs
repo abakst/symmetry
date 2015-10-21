@@ -27,17 +27,21 @@ class ( Symantics repr
       , SymMatch repr () () (Pid RSing)
       , SymMatch repr () () (Pid RSing, String)
       , SymMatch repr () () (Process ())
+      , SymMatch repr () () (Process String)
       , SymMatch repr () () String
       , SymMatch repr (Pid RSing) (() :+: ()) ()
       , SymMatch repr (Pid RSing) (() :+: ()) (Pid RSing)
       , SymMatch repr (Pid RSing) (() :+: ()) (Pid RSing, String)
       , SymMatch repr (Pid RSing) (() :+: ()) (Process ())
+      , SymMatch repr (Pid RSing) (() :+: ()) (Process String)
       , SymMatch repr (Pid RSing) (() :+: ()) String
       , SymMatch repr (Pid RSing, String) (String :+: (Pid RSing :+: (() :+: ()))) ()
       , SymMatch repr (Pid RSing, String) (String :+: (Pid RSing :+: (() :+: ()))) (Pid RSing)
       , SymMatch repr (Pid RSing, String) (String :+: (Pid RSing :+: (() :+: ()))) (Pid RSing, String)
       , SymMatch repr (Pid RSing, String) (String :+: (Pid RSing :+: (() :+: ()))) (Process ())
+      , SymMatch repr (Pid RSing, String) (String :+: (Pid RSing :+: (() :+: ()))) (Process String)
       , SymMatch repr (Pid RSing, String) (String :+: (Pid RSing :+: (() :+: ()))) String
+      , SymMatch repr String ((Pid RSing) :+: (() :+: ())) (Process String)
       , SymMatch repr String (Pid RSing :+: (() :+: ())) ()
       , SymMatch repr String (Pid RSing :+: (() :+: ())) (Pid RSing)
       , SymMatch repr String (Pid RSing :+: (() :+: ())) (Pid RSing, String)
@@ -50,7 +54,7 @@ class ( Symantics repr
       , SymTypes repr String (Pid RSing :+: (() :+: ()))
       ) => ParikhSem repr
 
--- instance ParikhSem SymbEx
+instance ParikhSem SymbEx
 
 recv_init :: ParikhSem repr => repr (Process (Pid RSing, String))
 recv_init  = do (msg::repr Msg) <- recv
@@ -106,12 +110,15 @@ cons :: ParikhSem repr => repr (a->b->a)
 cons = lam $ \a -> lam $ \b -> a
 
 do_serve :: ParikhSem repr => repr (String -> Process ())
-do_serve  = lam $ \s -> let init_h = lam $ \_ -> fail
-                            set_h  = lam $ \s' -> app do_serve s'
-                            get_h  = lam $ \p -> do send p s
-                                                    app do_serve s
-                            bye_h  = lam $ \_ -> die
-                            ok_h   = lam $ \_ -> fail
-                         in do (msg::repr Msg) <- recv
-                               ret tt
-                               match5 msg init_h set_h get_h ok_h bye_h
+do_serve  = lam $ \s ->
+  do let helper = lam $ \do_serve -> lam $ \s ->
+                    do let init_h = lam $ \_ -> fail
+                       let set_h = lam $ \s' -> app do_serve s'
+                       let get_h = lam $ \p -> do send p s
+                                                  app do_serve s
+                       let bye_h = lam $ \_ -> die
+                       let ok_h = lam $ \_ -> fail
+                       msg :: repr Msg <- recv
+                       match5 msg init_h set_h get_h ok_h bye_h
+     app (fixM helper) s
+     ret tt

@@ -23,17 +23,19 @@ class ( Symantics repr
       , SymRecv  repr Msg
       , SymSend  repr FWO
       , SymRecv  repr FWO
-      , SymTypes repr (Pid RSing) FWO
-      , SymTypes repr (Pid RSing) Int
-      , SymTypes repr (Pid RSing, Int) (Pid RSing, FWO)
-      , SymTypes repr Int String
       , SymMatch repr () () (Process ())
       , SymMatch repr () () (Process FWO)
-      , SymMatch repr (Pid RSing, Int) (Pid RSing, FWO) (Pid RSing, Int)
+      , SymMatch repr () () (Process T_sa)
       , SymMatch repr (Pid RSing, Int) (Pid RSing, FWO) (Pid RSing, FWO)
+      , SymMatch repr (Pid RSing, Int) (Pid RSing, FWO) (Pid RSing, Int)
+      , SymTypes repr (Pid RSing) FWO
+      , SymTypes repr (Pid RSing) Int
+      , SymTypes repr (Pid RSing) [Int]
+      , SymTypes repr (Pid RSing, Int) (Pid RSing, FWO)
+      , SymTypes repr Int String
       ) => FirewallSem repr
 
---instance FirewallSem SymbEx
+instance FirewallSem SymbEx
 
 call_msg :: FirewallSem repr => repr (Pid RSing -> Int -> Msg)
 call_msg  = lam $ \pid -> lam $ \i -> inl (pair pid i)
@@ -60,13 +62,22 @@ start  = lam $ \l -> do r_srv <- newRSing
                         fir <- spawn r_fir (app server (app2 fw srv notZero))
                         app2 sendall fir l
 
+type T_sa = (Pid RSing, [Int])
+f_sendall :: FirewallSem repr
+          => repr ((T_sa -> Process T_sa) -> T_sa -> Process T_sa)
+f_sendall  = lam $ \sendall -> lam $ \arg ->
+               do let to = proj1 arg
+                  let l  = proj2 arg
+                  ifte (eq nil l) (ret arg) $
+                    let x  = hd l
+                        xs = tl l
+                     in do me <- self
+                           send to (app2 call_msg me x)
+                           app sendall $ pair to xs
+
 sendall :: FirewallSem repr => repr (Pid RSing -> [Int] -> Process ())
-sendall  = lam $ \to -> lam $ \l -> ifte (eq nil l) (ret tt) $
-             let x  = hd l
-                 xs = tl l
-             in do me <- self
-                   send to (app2 call_msg me x)
-                   app2 sendall to xs
+sendall  = lam $ \to -> lam $ \l -> do app (fixM f_sendall) (pair to l)
+                                       ret tt
 
 pred :: FirewallSem repr => repr (Int -> Process FWO)
 pred  = lam $ \n -> ifte (eq n (repI 0)) (fail) (ret $ inl $ plus n (repI (-1)))
@@ -75,11 +86,16 @@ notZero :: FirewallSem repr => repr (Int -> Boolean)
 notZero  = lam $ \n -> not (eq (repI 0) n)
 
 server :: FirewallSem repr => repr ((Int -> Process FWO) -> Process ())
-server  = lam $ \handle_call -> do me  <- self
-                                   msg <- recv_call
-                                   res <- app handle_call (proj2 msg)
-                                   send (proj1 msg) (app2 answer_msg me res)
-                                   app server handle_call
+server  = lam $ \handle_call ->
+            do let helper = lam $ \server -> lam $ \handle_call ->
+                              do me  <- self
+                                 msg <- recv_call
+                                 res <- app handle_call (proj2 msg)
+                                 send (proj1 msg) (app2 answer_msg me res)
+                                 app server handle_call
+               app (fixM helper) handle_call
+               ret tt
+
 
 fw :: FirewallSem repr => repr (Pid RSing -> (Int -> Boolean) -> Int -> Process FWO)
 fw  = lam $ \pr -> lam $ \t -> lam $ \x ->
