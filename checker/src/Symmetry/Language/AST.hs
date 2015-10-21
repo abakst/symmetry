@@ -66,8 +66,8 @@ class Symantics repr where
 
   -- Primitives:        
   self      :: repr (Process repr (Pid RSing))
-  send :: (Serialize repr a) => repr (Pid RSing) -> repr a -> repr (Process repr ())
-  recv :: (Serialize repr a) => repr (Process repr a)
+  send :: (Typeable a) => repr (Pid RSing) -> repr a -> repr (Process repr ())
+  recv :: (Typeable a, ArbPat repr a) => repr (Process repr a)
 
   newRSing  :: repr (Process repr RSing)
   spawn     :: repr RSing -> repr (Process repr ()) -> repr (Process repr (Pid RSing))
@@ -81,30 +81,28 @@ class Symantics repr where
   -- "Run" a process             
   exec      :: repr (Process repr a) -> repr a 
 
-  inl  :: repr a -> repr (a :+: b)
-  inr  :: repr b -> repr (a :+: b)
-  pair :: repr a -> repr b -> repr (a, b)
+  inl   :: repr a -> repr (a :+: b)
+  inr   :: repr b -> repr (a :+: b)
+  pair  :: repr a -> repr b -> repr (a, b)
   proj1 :: repr (a, b) -> repr a
   proj2 :: repr (a, b) -> repr b
 
- -- Fold these in???           
-  -- t     :: trep a
-  -- tjoin :: trep a -> trep a -> trep a 
+  match :: (Typeable a, Typeable b, ArbPat repr a, ArbPat repr b)
+        => repr (a :+: b) -> repr (a -> c) -> repr (b -> c) -> repr c
 
-  -- pat  :: pat a
-  -- mcase :: pat a -> rep (a -> c) -> mcase (a -> c)
+class Pat pat where
+  joinPat  :: pat a -> pat a -> pat a
+  liftPat1 :: pat a -> pat (a :+: b)
+  liftPat2 :: pat b -> pat (a :+: b)
 
--- instance SymType repr a  
+class Pat pat => ArbPat pat a where
+  arb   :: pat a
 
--- class (Symantics repr, SymPat repr pat a, SymPat repr pat b) => SymMatch repr pat a b c where
---   match :: repr (a :+: b) -> repr (pat repr a -> c) -> repr (pat repr b -> c) -> repr c
--- class (Symantics repr trep pat mcase) => SymMatch trep repr pat mcase c where
---   match :: repr (a :+: b) -> mcase (a -> c) -> mcase (b -> c) -> repr c
-class (Symantics repr) => SymMatch repr where
-  match :: (Typeable a, Typeable b) => repr (a :+: b) -> repr (a -> c) -> repr (b -> c) -> repr c
+instance (ArbPat arb a, ArbPat arb b) => ArbPat arb (a :+: b) where
+  arb  = liftPat1 arb `joinPat` liftPat2 arb
 
-class Typeable a => Serialize (f :: * -> *) a where
-  data Put f :: *
-  data Get f :: * -> *
-  put :: f a -> Put f
-  get :: Get f a
+-- foo :: (SymMatch repr, ArbPat repr Int, ArbPat repr (Pid RSing)) =>
+--     repr (Pid RSing :+: (Int :+: Pid RSing) -> ())
+-- foo = lam $ \x -> match x
+--                    (lam $ \y -> tt)
+--                    (lam $ \z -> match z (lam $ \_ -> tt) (lam $ \_ -> tt))

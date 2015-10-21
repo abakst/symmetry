@@ -13,8 +13,6 @@ import           Data.Generics
 import           Data.List (nub, isPrefixOf)
 import qualified Data.Map.Strict as M
 
-import           Control.Applicative ((<$>),(<*>))
-
 data Set = S String
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
@@ -358,8 +356,8 @@ data Config a = Config {
 
 -- | Operations
 freshId :: Stmt a -> State Int (Stmt Int)
-freshId s
-  = mapM (const fr) s
+freshId
+  = mapM (const fr)
   where
     fr = do n <- get
             put (n + 1)
