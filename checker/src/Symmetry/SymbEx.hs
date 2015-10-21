@@ -2,6 +2,8 @@
 {-# Language FlexibleContexts #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds -fno-warn-name-shadowing  #-}
 {-# Language TypeOperators #-}
+{-# Language TypeFamilies #-}
+{-# Language ScopedTypeVariables #-}
 module Symmetry.SymbEx where
 
 import           Data.List (nub)
@@ -9,16 +11,17 @@ import           Data.Tuple (swap)
 import           Data.Generics
 import           Data.Typeable
 import           Data.Maybe
+import           Data.Dynamic
 
 import           Data.Hashable
 import qualified Data.Map.Strict as M
-import           Control.Monad.State hiding (join)
+import           Control.Monad.State hiding (join, get, put)
 import           Symmetry.Language.AST as L
 import qualified Symmetry.IL.AST       as IL
 
 import           Control.Applicative ((<$>))
 
-data Var   = V Int deriving (Ord, Eq, Show)
+data Var a = V Int deriving (Ord, Eq, Show)
 
 type REnv = M.Map Role (IL.Stmt ())
 data Role = S RSing
@@ -79,24 +82,30 @@ freshTId = do n <- gets ntypes
               modify $ \s -> s { ntypes = n + 1 }
               return n
 
-freshVar :: SymbExM Var
+freshVar :: SymbExM (Var a)
 freshVar = V <$> freshInt
 
-data SymbEx a = SE { runSE :: SymbExM (AbsVal a) }
+newtype SymbEx a = SE { runSE :: SymbExM (AbsVal a) }
 
 data AbsVal t where
-  AUnit      :: Maybe Var -> AbsVal ()
-  AInt       :: Maybe Var -> AbsVal Int
-  AString    :: Maybe Var -> AbsVal String
-  ASum       :: Maybe Var -> Maybe (AbsVal a) -> Maybe (AbsVal b) -> AbsVal (a :+: b)
-  APair      :: Maybe Var -> AbsVal a -> AbsVal b -> AbsVal (a, b)
-  AArrow     :: Maybe Var -> (AbsVal a -> SymbEx b) -> AbsVal (a -> b)
-  -- "Process" related
-  APid       :: Maybe Var -> L.Pid (Maybe RSing) -> AbsVal (Pid RSing)
-  APidMulti  :: Maybe Var -> L.Pid (Maybe RMulti) -> AbsVal (Pid RMulti)
-  ARoleSing  :: Maybe Var -> RSing -> AbsVal RSing
-  ARoleMulti :: Maybe Var -> RMulti -> AbsVal RMulti
-  AProc      :: Maybe Var -> IL.Stmt () -> AbsVal a -> AbsVal (L.Process a)
+  AUnit      :: Maybe (Var t) -> AbsVal ()
+  AInt       :: Maybe (Var t) -> AbsVal Int
+  AString    :: Maybe (Var t) -> AbsVal String
+  ASum       :: Maybe (Var t) -> Maybe (AbsVal a) -> Maybe (AbsVal b) -> AbsVal (a :+: b)
+  APair      :: Maybe (Var t) -> AbsVal a -> AbsVal b -> AbsVal (a, b)
+  AArrow     :: Maybe (Var t) -> (AbsVal a -> SymbEx b) -> AbsVal (a -> b)
+  -- "Process" related(
+  APid       :: Maybe (Var t) -> L.Pid (Maybe RSing) -> AbsVal (Pid RSing)
+  APidMulti  :: Maybe (Var t) -> L.Pid (Maybe RMulti) -> AbsVal (Pid RMulti)
+  ARoleSing  :: Maybe (Var t) -> RSing -> AbsVal RSing
+  ARoleMulti :: Maybe (Var t) -> RMulti -> AbsVal RMulti
+  AProc      :: Maybe (Var t) -> IL.Stmt () -> AbsVal a -> AbsVal (Process SymbEx a)
+
+setVar :: Var t -> AbsVal t -> AbsVal t                
+setVar v (AUnit _)       = AUnit (Just v)
+setVar v (ASum _ l r)    = ASum  (Just v) l r
+setVar v (APid _ p)      = APid  (Just v) p
+setVar v (APair _ p1 p2) = APair (Just v) p1 p2
 
 absToILType :: Typeable t => AbsVal t -> IL.MType
 absToILType x = M.fromList $ zip [0..] $ go (typeRep x)
@@ -124,26 +133,29 @@ absToILType x = M.fromList $ zip [0..] $ go (typeRep x)
 -- | Recv t tells us how to create a default abstraction of type t
 -------------------------------------------------
 class Typeable t => Recv t where
-  recvTy :: Maybe Var -> AbsVal t
+  recvTy :: (Typeable t) => Maybe (Var t) -> AbsVal t
 
-instance Recv (Pid RSing) where
-  recvTy v = APid v (Pid Nothing)
+instance Pat SymbEx where
+  joinPat x y = SE $ do xx <- runSE x
+                        yy <- runSE y
+                        return $ xx `join` yy
 
-instance Recv () where
-  recvTy = AUnit
+  liftPat1 x  = SE $ do xx <- runSE x
+                        return $ ASum Nothing (Just xx) Nothing
 
-instance Recv Int where
-  recvTy = AInt
+  liftPat2 x  = SE $ do xx <- runSE x
+                        return $ ASum Nothing Nothing (Just xx)
 
-instance Recv String where
-  recvTy = AString
+instance ArbPat SymbEx Int where            
+  arb = SE . return $ AInt Nothing
 
-instance (Recv a, Recv b) => Recv (a :+: b) where
-  recvTy v = ASum v (Just $ recvTy Nothing) (Just $ recvTy Nothing)
+instance ArbPat SymbEx (Pid RSing) where            
+  arb = SE . return $ APid Nothing (Pid Nothing)
+
 -------------------------------------------------
 -- | An instance of Send t means that t can be sent in a message
 -------------------------------------------------
-class Send t where
+class (Typeable a) => Send a where
   -- This line intentionally left blank
 
 instance Send (()) where
@@ -169,20 +181,28 @@ instance Pure (Pid RSing) where
 -------------------------------------------------
 -- | How to join abstractions
 -------------------------------------------------
-class Join t where
-  join :: AbsVal t -> AbsVal t -> AbsVal t
+-- class Join t where
+--   join :: AbsVal t -> AbsVal t -> AbsVal t
 
-instance Join () where
-  join _ _ = AUnit Nothing
+join :: AbsVal t -> AbsVal t -> AbsVal t          
 
-instance Join (Pid RSing) where
-  join (APid _ (Pid Nothing)) (APid _ _)  = APid Nothing (Pid Nothing)
-  join (APid _ _ ) (APid _ (Pid Nothing)) = APid Nothing (Pid Nothing)
-  join _ _                                = error "Join Pid RSing: TBD"
+join (AUnit _) (AUnit _) = AUnit Nothing
+join (AInt _)  (AInt _)  = AInt Nothing
 
-instance Join t => Join (L.Process t) where
-  join (AProc _ s1 a1) (AProc _ s2 a2)
-    = AProc Nothing (s1 `joinStmt` s2) (a1 `join` a2)
+join (APid _ (Pid Nothing)) (APid _ _) = APid Nothing (Pid Nothing)
+join (APid _ _) (APid _ (Pid Nothing)) = APid Nothing (Pid Nothing)
+join (APid _ _) (APid _ _)             = error "Join Pid RSing: TBD"
+
+join (AProc _ s1 a1) (AProc _ s2 a2)
+  = AProc Nothing (s1 `joinStmt` s2) (a1 `join` a2)
+
+join (ASum _ l1 r1) (ASum _ l2 r2)
+  = ASum Nothing (l1 `maybeJoin` l2) (r1 `maybeJoin` r2)
+  where
+    maybeJoin :: forall a. Maybe (AbsVal a) -> Maybe (AbsVal a) -> Maybe (AbsVal a)
+    maybeJoin (Just x) (Just y) = Just (x `join` y)
+    maybeJoin (Just x) Nothing  = Just x
+    maybeJoin _  y              = y
 
 -------------------------------------------------
 -- | Helpers for generating IL from AbsValtractions
@@ -198,7 +218,7 @@ joinStmt s1 s2
   | s1 == s2  = s1
   | otherwise = error $ "joinStmt: " ++ show s1 ++ "&" ++ show s2
 
-varToIL :: Var -> IL.Var
+varToIL :: Var a -> IL.Var
 varToIL (V x) = IL.V ("x_" ++ show x)
 
 pidAbsValToIL :: AbsVal (Pid RSing) -> IL.Pid
@@ -206,61 +226,60 @@ pidAbsValToIL (APid Nothing (Pid (Just (RS r)))) = IL.PConc r
 pidAbsValToIL (APid (Just x) _) = IL.PVar $ varToIL x
 pidAbsValToIL _                 = error "pidAbsValToIL: back to the drawing board"
 
-class AbsValToIL a where
-  absToIL :: AbsVal a -> [IL.MConstr]
 
 mkVal :: String -> [IL.Pid] -> IL.MConstr
 mkVal s = IL.MTApp (IL.MTyCon s)
 
-instance AbsValToIL () where
-  absToIL _ = [mkVal "Unit" []]
+absToIL :: AbsVal a -> [IL.MConstr]
+absToIL (AUnit _) = [mkVal "Unit" []]
+absToIL (AInt  _) = [mkVal "Int" []]
+absToIL (AString _) = [mkVal "String" []]
 
-instance AbsValToIL Int where
-  absToIL _ = [mkVal "Int" []]
+absToIL (APid Nothing (Pid (Just (RS r)))) = [mkVal "Pid" [IL.PConc r]]
+absToIL (APid (Just x) _)                  = [mkVal "Pid" [IL.PVar $ varToIL x]]
+absToIL (APid _ _)                         = error "absToIL: back to the drawing board"
 
-instance AbsValToIL String where
-  absToIL _ = [mkVal "String" []]
+absToIL (ASum _ (Just a) Nothing)  = IL.MCaseL IL.LL <$> absToIL a
+absToIL (ASum _ Nothing (Just b))  = IL.MCaseR IL.RL <$> absToIL b
+absToIL (ASum (Just x) (Just a) (Just b)) = (IL.MCaseL (IL.VL (varToIL x)) <$> absToIL a)
+                                         ++ (IL.MCaseR (IL.VL (varToIL x)) <$> absToIL b)
+absToIL (ASum _ Nothing Nothing)   = error "absToIL sum"
 
-instance AbsValToIL (Pid RSing) where
-  absToIL (APid Nothing (Pid (Just (RS r)))) = [mkVal "Pid" [IL.PConc r]]
-  absToIL (APid (Just x) _)                  = [mkVal "Pid" [IL.PVar $ varToIL x]]
-  absToIL _                 = error "absToIL: back to the drawing board"
-
-instance (Recv a, AbsValToIL a, Recv b, AbsValToIL b) => AbsValToIL (a :+: b) where
-  absToIL (ASum _ (Just a) Nothing)  = IL.MCaseL IL.LL <$> absToIL a
-  absToIL (ASum _ Nothing (Just b))  = IL.MCaseR IL.RL <$> absToIL b
-  absToIL (ASum (Just x) (Just a) (Just b)) = (IL.MCaseL (IL.VL (varToIL x)) <$> absToIL a)
-                                           ++ (IL.MCaseR (IL.VL (varToIL x)) <$> absToIL b)
-  absToIL (ASum _ Nothing Nothing)   = error "absToIL sum"
+absToIL (APair _ a b) = do x <- absToIL a
+                           y <- absToIL b
+                           return $ IL.MTProd x y
 
 -------------------------------------------------
 -- | Generate IL from primitive Processes
 -------------------------------------------------
-sendToIL :: (Typeable a, AbsValToIL a, Send a) => AbsVal (Pid RSing) -> AbsVal a -> SymbExM (IL.Stmt ())
+sendToIL :: (Typeable a) => AbsVal (Pid RSing) -> AbsVal a -> SymbExM (IL.Stmt ())
 sendToIL p m = do
   g <- gets tyenv 
-  let t = absToILType m
+  let t  = absToILType m
+  let cs = absToIL m
+  -- (t, cs) <- unPut $ put (SE $ return m)
   case IL.lookupType g t of
-    Just i  -> return $ IL.SSend (pidAbsValToIL p) (mts i g) ()
+    Just i  -> return $ IL.SSend (pidAbsValToIL p) (mts i g cs) ()
     Nothing -> do i <- freshTId
                   let g' = M.insert i t g
                   modify $ \s -> s { tyenv = g' }
-                  return $ IL.SSend (pidAbsValToIL p) (mts i g') ()
+                  return $ IL.SSend (pidAbsValToIL p) (mts i g' cs) ()
   where
-    mts i g = [ (i, fromMaybe (error (show c)) $ IL.lookupConstr (g M.! i) c, c, skip) | c <- absToIL m ]
+    mts i g cs = [ (i, fromMaybe (error (show c)) $ IL.lookupConstr (g M.! i) c, c, skip) | c <- cs ]
 
-recvToIL :: (Typeable a, AbsValToIL a) => AbsVal a -> SymbExM (IL.Stmt ())
+recvToIL :: (Typeable a) => AbsVal a -> SymbExM (IL.Stmt ())
 recvToIL m = do
   g <- gets tyenv 
-  let t = absToILType m
+  let t  = absToILType m
+  let cs = absToIL m
   case IL.lookupType g t of
-    Just i  -> return $ IL.SRecv (mts i g) ()
+    Just i  -> return $ IL.SRecv (mts i g cs) ()
     Nothing -> do i <- freshTId
                   let g' = M.insert i t g
                   modify $ \s -> s { tyenv = g' }
-                  return $ IL.SRecv (mts i g') ()
+                  return $ IL.SRecv (mts i g' cs) ()
   where
-    mts i g = [ (i, fromMaybe (error (show c)) $ IL.lookupConstr (g M.! i) c, c, skip) | c <- absToIL m ]
+    mts i g cs = [ (i, fromMaybe (error (show c)) $ IL.lookupConstr (g M.! i) c, c, skip) | c <- cs ]
 
 skip :: IL.Stmt ()
 skip = IL.SSkip ()
@@ -289,7 +308,7 @@ seqStmt s1 s2 = IL.SBlock [s1, s2] ()
 -------------------------------------------------
 -- | Updates to roles
 -------------------------------------------------
-insRoleM :: Role -> SymbEx (Process a) -> SymbExM ()
+insRoleM :: Role -> SymbEx (Process SymbEx a) -> SymbExM ()
 insRoleM k p = do m <- gets renv
                   case M.lookup k m of
                     Nothing -> do
@@ -298,12 +317,12 @@ insRoleM k p = do m <- gets renv
                     Just _  ->
                       error $ "insRoleM attempting to spawn already spawned role" ++ show k
 
-symSpawnSingle :: SymbEx RSing -> SymbEx (Process a) -> SymbEx (Process (Pid RSing))
+symSpawnSingle :: SymbEx RSing -> SymbEx (Process SymbEx a) -> SymbEx (Process SymbEx (Pid RSing))
 symSpawnSingle r p = SE $ do (ARoleSing _ r') <- runSE r
                              insRoleM (S r') p
                              return $ AProc Nothing skip (APid Nothing (Pid (Just r')))
 
-symSpawnMany :: SymbEx RMulti -> SymbEx Int -> SymbEx (Process a) -> SymbEx (Process (Pid RMulti))
+symSpawnMany :: SymbEx RMulti -> SymbEx Int -> SymbEx (Process SymbEx a) -> SymbEx (Process SymbEx (Pid RMulti))
 symSpawnMany r _ p = SE $ do (ARoleMulti _ r') <- runSE r
                              insRoleM (M r') p
                              return $ AProc Nothing skip (APidMulti Nothing (Pid (Just r')))
@@ -319,15 +338,15 @@ symtt
   = SE . return $ AUnit Nothing
 
 -------------------------------------------------
-symRep :: Int -> SymbEx Int
+symInt :: Int -> SymbEx Int
 -------------------------------------------------
-symRep _
+symInt _
   = SE . return $ AInt Nothing
 
 -------------------------------------------------
-symRepS :: String -> SymbEx String
+symStr :: String -> SymbEx String
 -------------------------------------------------
-symRepS _
+symStr _
   = SE . return $ AString Nothing
 
 -------------------------------------------------
@@ -345,20 +364,20 @@ symApp e1 e2
             runSE (f' e2')
 
 -------------------------------------------------
-symSelf :: SymbEx (Process (Pid RSing))
+symSelf :: SymbEx (Process SymbEx (Pid RSing))
 -------------------------------------------------
 symSelf
   = SE $ do S r <- gets me
             return . AProc Nothing skip $ APid Nothing (Pid (Just r))
 
 -------------------------------------------------
-symRet :: SymbEx a -> SymbEx (Process a)
+symRet :: SymbEx a -> SymbEx (Process SymbEx a)
 -------------------------------------------------
 symRet x
   = SE $ do a <- runSE x
             return (AProc Nothing skip a)
 -------------------------------------------------
-symBind :: SymbEx (Process a) -> SymbEx (a -> Process b) -> SymbEx (Process b)
+symBind :: SymbEx (Process SymbEx a) -> SymbEx (a -> Process SymbEx b) -> SymbEx (Process SymbEx b)
 -------------------------------------------------
 symBind mm mf
   = SE $ do AProc _ st a  <- runSE mm
@@ -367,7 +386,7 @@ symBind mm mf
             return $ AProc Nothing (st `seqStmt` st') b
 
 -------------------------------------------------
-symFixM :: SymbEx ((a -> Process a) -> a -> Process a) -> SymbEx (a -> Process a)
+symFixM :: SymbEx ((a -> Process SymbEx a) -> a -> Process SymbEx a) -> SymbEx (a -> Process SymbEx a)
 -------------------------------------------------
 symFixM f
   = SE $ do n <- freshInt
@@ -379,14 +398,14 @@ symFixM f
                                                     AProc b s r <- runSE (h a)
                                                     return $ AProc b (IL.SLoop v s ()) r
 -------------------------------------------------
-symNewRSing :: SymbEx (Process RSing)
+symNewRSing :: SymbEx (Process SymbEx RSing)
 -------------------------------------------------
 symNewRSing
   = SE $ do n <- freshInt
             return (AProc Nothing skip (ARoleSing Nothing (RS n)))
 
 -------------------------------------------------
-symNewRMulti :: SymbEx (Process RMulti)
+symNewRMulti :: SymbEx (Process SymbEx RMulti)
 -------------------------------------------------
 symNewRMulti
   = SE $ do n <- freshInt
@@ -394,8 +413,8 @@ symNewRMulti
 
 -------------------------------------------------
 symDoMany :: SymbEx (Pid RMulti)
-          -> SymbEx (Pid RSing -> Process a)
-          -> SymbEx (Process ())
+          -> SymbEx (Pid RSing -> Process SymbEx a)
+          -> SymbEx (Process SymbEx ())
 -------------------------------------------------
 symDoMany p f
   = SE $ do v <- freshVar
@@ -409,7 +428,7 @@ symDoMany p f
 roleToSet :: RMulti -> IL.Set
 roleToSet (RM n) = IL.S $ "role_" ++ show n
 -------------------------------------------------
-symExec :: SymbEx (Process a)
+symExec :: SymbEx (Process SymbEx a)
         -> SymbEx a
 -------------------------------------------------
 symExec p
@@ -420,51 +439,24 @@ symExec p
             return a
 
 -------------------------------------------------
-symRecv :: (Fresh a, Typeable a, AbsValToIL a)
-        => SymbEx (Process a)
+symRecv :: (Typeable a, ArbPat SymbEx a)
+        => SymbEx (Process SymbEx a)
 -------------------------------------------------
 symRecv
-  = SE $ do x <- freshVar
-            v <- freshVal
-            s <- recvToIL v
+  = SE $ do v     <- freshVal
+            s     <- recvToIL v
             return $ AProc Nothing s v
 
--- recv(x : A + (B * C))
--- ASum (Just x) (Just (... y ) (Just ...))
-
-class Fresh a where
-  freshVal :: SymbExM (AbsVal a)
-
-instance Fresh () where
-  freshVal = (AUnit . Just) <$> freshVar
-
-instance Fresh Int where
-  freshVal = (AInt . Just) <$> freshVar
-
-instance Fresh String where
-  freshVal = (AString . Just) <$> freshVar
-
-instance Fresh (Pid RSing) where
-  freshVal = do b <- freshVar
-                return $ APid (Just b) (Pid Nothing)
-
-instance (Fresh a, Fresh b) => Fresh (a :+: b) where
-  freshVal = do x <- Just <$> freshVal
-                y <- Just <$> freshVal
-                b <- Just <$> freshVar
-                return $ ASum b x y
-
-instance (Fresh a, Fresh b) => Fresh (a,b) where
-  freshVal = do x <- freshVal
-                y <- freshVal
-                b <- Just <$> freshVar
-                return $ APair b x y
+freshVal :: ArbPat SymbEx a => SymbExM (AbsVal a)
+freshVal = do x <- freshVar
+              v <- runSE arb
+              return $ setVar x v
 
 -------------------------------------------------
-symSend :: (Typeable a, Send a, AbsValToIL a)
+symSend :: Typeable a
         => SymbEx (Pid RSing)
         -> SymbEx a
-        -> SymbEx (Process ())
+        -> SymbEx (Process SymbEx ())
 -------------------------------------------------
 symSend pidM mM
   = SE $ do p <- runSE pidM
@@ -481,8 +473,9 @@ symInR :: SymbEx b
 symInR b = SE $ do bv <- runSE b
                    return $ ASum Nothing Nothing (Just bv)
 
-symMatch :: (Recv a, Recv b, Join c)
-         => SymbEx (a :+: b)
+symMatch :: forall a b c.
+            (Typeable a, Typeable b, ArbPat SymbEx a, ArbPat SymbEx b) =>
+            SymbEx (a :+: b)
          -> SymbEx (a -> c)
          -> SymbEx (b -> c)
          -> SymbEx c
@@ -491,39 +484,46 @@ symMatch s l r
             case (vl, vr) of
               (Just a, Nothing) -> runSE . app l . SE $ return a
               (Nothing, Just b) -> runSE . app r . SE $ return b
-              (Just a, Just b)  -> do
+              (Nothing, Nothing) -> do
                 (v1, v2) <- case x of
                               Nothing -> error "does this happen?" -- return (Nothing, Nothing)
                               _       -> do v1 <- freshVar
                                             v2 <- freshVar
                                             return (Just v1, Just v2)
-                let (val1, val2) = (recvTy v1, recvTy v2)
+                val1 <- runSE arb
+                val2 <- runSE arb
+                -- let (val1, val2) = (recvTy v1, recvTy v2)
                 c1 <- runSE . app l . SE . return $ val1
                 c2 <- runSE . app r . SE . return $ val2
                 return $ join c1 c2
+              (Just a, Just b)  -> do 
+                c1 <- runSE . app l . SE . return $ a
+                c2 <- runSE . app r . SE . return $ b
+                return $ join c1 c2
 
-symMatchProc :: (Recv a, Recv b, Join c)
-         => SymbEx (a :+: b)
-         -> SymbEx (a -> Process c)
-         -> SymbEx (b -> Process c)
-         -> SymbEx (Process c)
-symMatchProc s l r
-  = SE $ do ASum x vl vr <- runSE s
-            case (vl, vr) of
-              (Just a, Nothing) -> runSE . app l . SE $ return a
-              (Nothing, Just b) -> runSE . app r . SE $ return b
-              (Just a, Just b)  ->
-                case x of
-                  Nothing -> do
-                    AProc _ _ v1 <- runSE . app l . SE . return $ (recvTy Nothing)
-                    AProc _ _ v2 <- runSE . app l . SE . return $ (recvTy Nothing)
-                    return $ AProc Nothing (error "TBD: symMatchProc") (v1 `join` v2)
-                  Just y  -> do
-                    px <- freshVar
-                    py <- freshVar
-                    AProc _ s1 v1 <- runSE . app l . SE . return $ (recvTy $ Just px)
-                    AProc _ s2 v2 <- runSE . app l . SE . return $ (recvTy $ Just py)
-                    return $ AProc Nothing (IL.SCase (varToIL y) s1 s2 ()) (v1 `join` v2)
+-- symMatchProc :: forall a b c. 
+--             (Typeable a, Typeable b)
+--          => SymbEx (a :+: b)
+--          -> SymbEx (a -> Process SymbEx c)
+--          -> SymbEx (b -> Process SymbEx c)
+--          -> SymbEx (Process SymbEx c)
+-- symMatchProc s l r
+--   = SE $ do ASum x vl vr <- runSE s
+--             case (vl, vr) of
+--               (Just a, Nothing) -> runSE . app l . SE $ return a
+--               (Nothing, Just b) -> runSE . app r . SE $ return b
+--               (Just a, Just b)  ->
+--                 case x of
+--                   Nothing -> do
+--                     AProc _ _ v1 <- runSE . app l . SE . return $ (recvTy Nothing :: AbsVal a)
+--                     AProc _ _ v2 <- runSE . app r . SE . return $ (recvTy Nothing :: AbsVal b)
+--                     return $ AProc Nothing (error "TBD: symMatchProc") (v1 `join` v2)
+--                   Just y  -> do
+--                     px <- freshVar
+--                     py <- freshVar
+--                     AProc _ s1 v1 <- runSE . app l . SE . return $ a
+--                     AProc _ s2 v2 <- runSE . app r . SE . return $ b
+--                     return $ AProc Nothing (IL.SCase (varToIL y) s1 s2 ()) (v1 `join` v2)
 
 
                          -- return $ AProc Nothing (IL.SSkip ()) (recvTy Nothing)
@@ -544,15 +544,13 @@ symPair a b
             bv <- runSE b
             return $ APair Nothing av bv
 
-symProj1 :: (Recv a, AbsValToIL a)
-         => SymbEx (a, b)
+symProj1 :: SymbEx (a, b)
          -> SymbEx a
 symProj1 p = SE $ do p' <- runSE p
                      case p' of
                        APair _ a _ -> return a
 
-symProj2 :: (Recv b, AbsValToIL b)
-         => SymbEx (a, b)
+symProj2 :: SymbEx (a, b)
          -> SymbEx b
 symProj2 p = SE $ do p' <- runSE p
                      case p' of
@@ -562,9 +560,11 @@ symProj2 p = SE $ do p' <- runSE p
 -- Instances
 -------------------------------------------------
 instance Symantics SymbEx where
+  data Process SymbEx a = P a
   tt        = symtt
-  repI      = symRep
-  repS      = symRepS
+  int       = symInt
+  str       = symStr
+  bool      = error "TBD: bool"
   lam       = symLam
   app       = symApp
   self      = symSelf
@@ -579,33 +579,13 @@ instance Symantics SymbEx where
   doMany    = symDoMany
   die       = error "TBD: die"
 
-instance (Typeable a, Fresh a, AbsValToIL a) => SymRecv SymbEx a where
-  recv = symRecv
-
-instance (Typeable a, Send a, AbsValToIL a) => SymSend SymbEx a where
-  send = symSend
-
-instance (Recv a, Recv b, AbsValToIL a, AbsValToIL b) => SymTypes SymbEx a b where
   inl   = symInL
   inr   = symInR
   pair  = symPair
   proj1 = symProj1
   proj2 = symProj2
 
-instance {-# OVERLAPPABLE #-}(Recv a, Recv b, Join c, Pure c) => SymMatch SymbEx a b c where
+  recv = symRecv
+  send = symSend
+
   match = symMatch
-
-instance {-# OVERLAPPING #-} (Recv a, Recv b, Join c, Pure c) => SymMatch SymbEx a b (Process c) where
-  match = symMatchProc
-
-
-if_ :: (SymMatch repr a b c, Symantics repr)
-    => repr (a :+: b) -> repr (a -> c) -> repr (b -> c) -> repr c
-if_ = match
-
--- Scratch:
--- def t = Sum (Int) (Pid x)
--- do x <- recv :: Process (Int :+: Pid)
---    match x (lam $ \i -> send p i)
---            (lam $ \p -> send p 3)
---
