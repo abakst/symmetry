@@ -7,7 +7,7 @@
 | firewall      | ✓     | ×       | ×   | AbsValToIL [Int]                       |
 | state factory | ✓     | ×       | ×   | AbsValToIL (Int -> Int -> Process Int) |
 | howait        | ✓     | ×       | ×   | AbsValToIL (Int -> Process Int)        |
-| concdb        | ×     |         |     |                                        |
-| sieve         | ×     |         |     |                                        |
+| concdb        | ✓     | ×       | ×   | AbsValToIL (Int, Pid RSing)            |
+| sieve         | ✓     | ×       | ×   | AbsValToIL (Int -> Boolean)            |
 | reslock       | ×     |         |     |                                        |
 | finite leader | ×     |         |     |                                        |
