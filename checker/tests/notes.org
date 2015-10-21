@@ -1,13 +1,13 @@
-| Benchmark     | FixPt | Compile | Run | Comment                          |
-|---------------+-------+---------+-----+----------------------------------|
-| parikh        | ✓     | ×       | ×   | (AbsValToIL (Pid RSing, String)) |
-| stutter       | ✓     | ✓       | ×   | sth is wrong with message order  |
-| pipe          | ✓     | ×       | ×   | (AbsValToIL (Int -> Int))        |
-| ring          | ✓     | ×       | ×   | Fresh [Int]                      |
-| firewall      | ×     |         |     |                                  |
-| state factory | ×     |         |     |                                  |
-| howait        | ×     |         |     |                                  |
-| concdb        | ×     |         |     |                                  |
-| sieve         | ×     |         |     |                                  |
-| reslock       | ×     |         |     |                                  |
-| finite leader | ×     |         |     |                                  |
+| Benchmark     | FixPt | Compile | Run | Comment                                |
+|---------------+-------+---------+-----+----------------------------------------|
+| parikh        | ✓     | ×       | ×   | (AbsValToIL (Pid RSing, String))       |
+| stutter       | ✓     | ✓       | ×   | sth is wrong with message order        |
+| pipe          | ✓     | ×       | ×   | (AbsValToIL (Int -> Int))              |
+| ring          | ✓     | ×       | ×   | Fresh [Int]                            |
+| firewall      | ✓     | ×       | ×   | AbsValToIL [Int]                       |
+| state factory | ✓     | ×       | ×   | AbsValToIL (Int -> Int -> Process Int) |
+| howait        | ✓     | ×       | ×   | AbsValToIL (Int -> Process Int)        |
+| concdb        | ×     |         |     |                                        |
+| sieve         | ×     |         |     |                                        |
+| reslock       | ×     |         |     |                                        |
+| finite leader | ×     |         |     |                                        |
