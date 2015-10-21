@@ -9,7 +9,7 @@ import Symmetry.IL.AST
 import Control.Exception
 import Control.Monad
 import Control.Applicative
-import System.Exit hiding (exitSuccess, exitWith)
+import System.Exit 
 import System.Directory
 import System.FilePath
 import System.IO
@@ -43,33 +43,29 @@ outf, outTrail :: FilePath -> FilePath
 outf d = d </> "out.pml"
 outTrail d = outf d <.> "trail"
 
-type ExitType        = Bool
-exitSuccess          = return True
-exitWith ExitSuccess = return True
-exitWith _           = return False
-
-run1Cfg :: FilePath -> Config () -> IO ExitType
+run1Cfg :: FilePath -> Config () -> IO Bool
 run1Cfg outd cfg
   = do createDirectoryIfMissing True outd
        removeFile (outTrail outd) `catch` \(_ :: IOException) ->
          return ()
        renderToFile (outf outd) cfg
-       (_, _, _, x) <- createProcess (spinCmd outName) { cwd = Just outd }
-       checkExit x
-       (_, _, _, y) <- createProcess ccCmd { cwd = Just outd }
-       checkExit y
-       (_, _, _, z) <- createProcess panCmd { cwd = Just outd, std_out = CreatePipe }
-       checkExit z
-       catch (openFile (outTrail outd) ReadMode >> return True) $ \(_ :: IOException) ->
-         exitSuccess
-       exitWith (ExitFailure 1)
+       runCmd (spinCmd outName)
+       runCmd ccCmd
+       runCmd panCmd
+       fileExists (outTrail outd)
   where
+    fileExists f = catch (openFile f ReadMode >> return True)
+                         (\(_ :: IOException) -> return False)
+    
+    runCmd c    = do (_,_,_,x) <- createProcess c { cwd = Just outd, std_out = CreatePipe }
+                     checkExit x
+
     checkExit x = do e <- waitForProcess x
                      case e of
-                       ExitSuccess -> exitSuccess
+                       ExitSuccess -> return ()
                        _           -> exitWith e
 
-checkerMain :: SymbEx () -> IO ExitType
+checkerMain :: SymbEx () -> IO ()
 checkerMain main
   = runCommand $ \opts _ -> 
       if optVerify opts then
@@ -77,7 +73,8 @@ checkerMain main
            let  dir  = optDir opts
                 cfgs = stateToConfigs . runSymb $ main
                 outd = d </> dir 
-           forM_ cfgs $ run1Cfg outd
+           es <- forM cfgs $ run1Cfg outd
+           when (or es) exitFailure 
            exitSuccess
       else
         exitSuccess

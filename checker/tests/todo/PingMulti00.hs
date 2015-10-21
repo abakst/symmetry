@@ -8,11 +8,10 @@
 module PingMulti00 where
 
 import Prelude hiding ((>>=), (>>), fail, return) 
-import Symmetry.Language.AST  
-import Symmetry.Language.Syntax  
-import Symmetry.SymbEx
-import qualified Symmetry.IL.AST as IL
-import Symmetry.IL.Render
+import Symmetry.Language
+import Symmetry.Verify
+-- import qualified Symmetry.IL.AST as IL
+-- import Symmetry.IL.Render
 
 type Message repr = repr (Pid RSing :+: Pid RSing)
 ping :: (SymTypes repr (Pid RSing) (Pid RSing), Symantics repr) =>
@@ -47,9 +46,12 @@ master = lam $ \r -> lam $ \n ->
                                 ret tt)
       ret tt
 
-main :: (Symantics repr, SymSend repr (Pid RSing :+: Pid RSing), SymRecv repr (Pid RSing :+: Pid RSing),
+mainProc :: (Symantics repr, SymSend repr (Pid RSing :+: Pid RSing), SymRecv repr (Pid RSing :+: Pid RSing),
                SymMatch repr (Pid RSing) (Pid RSing) (Process ()),
                      SymTypes repr (Pid RSing) (Pid RSing))
      => repr (Int -> ())
-main = lam $ \n -> exec $ do r <- newRMulti
-                             app (app master r) n
+mainProc = lam $ \n -> exec $ do r <- newRMulti
+                                 app (app master r) n
+
+main :: IO ()
+main = checkerMain (repI 10 |> mainProc)

@@ -11,85 +11,125 @@ import Data.Typeable
 
 import DistribUtils
 
--- <<Message
 data Message = Ping ProcessId
              | Pong ProcessId
-  deriving (Typeable, Generic)          -- <1>
+  deriving (Typeable, Generic)
 
-instance Binary Message                 -- <2>
--- >>
+type Pid = ProcessId {- PidClass -}
 
--- <<pingServer
+instance Binary Messaged
+
 {-
-pingServer :: P me < me ▹ ∀p. recv(Ping p); send p (Pong me) > () 
+P ::= 0
+    | c(x).P
+    | c<x>
+    | case x of {B -> P}
+    | (P | x ▹ Q)
+    | new(x) P
+
+[[ P < A > () ]] ~ (new(k) A | k(x).0)
+
+(new(k)(P.k<x> | k<x>.Q)) ⇒ (P.Q) whenever k not in P, Q
 -}
+
+{-
+expect     :: P < me(T)(x).k<x> > T 
+
+send       :: p:Pid 
+           -> x:T 
+           -> P < p(T)<T>.k<()> > ()
+
+getSelfPid :: P < k<me> > Pid
+
+spawn      :: P < A > ()
+           -> P < new(x) (k<x> || x : new(k)A) > Pid
+
+???
+forM       :: xs:[a]
+           -> (a -> P < A > b)
+           -> P < (R 0 (λi.λX. (new(k)(A || k<x>.X))))  xs > [b]
+
+(>>=)      :: P < A > a
+           -> (x:a -> P < B > b)
+           -> P < new(k) (A.k<x> || k(x).B) > b
+-}
+
+
+{-
+SRecv [ (mPing (pvar "x"), SSend (pvar "x") [(mPong me, SSkip ())] ())
+      , (mPong (pvar "x"), SSkip ())
+      ] ()
+-}
+
+-- pingServer :: P < me(T)(x).case x of { Ping from -> from(Message)(Message @ Pong me).k<()>
+--                                      ; _         -> die
+--                                      }
+--                 > ()
 pingServer :: Process ()
-pingServer = do
-  Ping from <- expect                              -- <1>
-  say $ printf "ping received from %s" (show from) -- <2>
-  mypid <- getSelfPid                              -- <3>
-  send from (Pong mypid)                           -- <4>
--- >>
+pingServer = 
+  -- do
+  -- Ping from <- expect
+  -- P < new(k)(me(T)(x).k<x> || k(x).case x of { Ping from -> ... }... > ()
+  -- Which should be equivalent to:
+  -- P < me(T)(x).case x of { Ping from -> from(Message)(Message @ Pong me).k<()>
+  --                        ; _         -> die
+  --                        }
+  --   > ()
+  expect -- P < me(T)(x).k<x> > Message
+  >>=
+  \p ->
+    -- P < case p of { Ping from -> ...; _ -> die.k<()> } > 
+    case p of
+      Ping from -> 
+      -- P < new(k)(k<()> || k(x).(new(k)(k<me> || k(me).from(Message)(Messagae @ Pong me)).k<()>)) > ()
+        -- P < k<()> > ()
+        say $ printf "ping received from %s" (show from)
+        -- P < k<me> > Pid
+        mypid <- getSelfPid                             
+        -- P < from(Message)(Message @ Pong mypid).k<()> > ()
+        send from (Pong mypid)                          
+      Pong from ->
+        error "AH!"
+    return ()
+         
 
--- <<remotable
 remotable ['pingServer]
--- >>
-
--- <<master
-{-
-G = foreach (p ∈ p[]):
-      me --> p <Ping me>; 
-    foreach (p ∈ p[]):
-      p --> me <Pong p>;
-
-G ↑ p ∈ p[] = recv(Ping me); send(me, Pong p);
-G ↑ me      = foreach (p ∈ p[]): 
-                send(p, Ping me);
-              foreach (p ∈ p[]):
-                recv(p, Pong p);
--}
 
 {-
-master :: P me < p[n] ▹ ∃q. recv(Ping q); send q (Pong q);
-                 me   ▹ foreach(pi ∈ p[n]):
-                          send(pi, Ping me) 
-                        foreach(pi ∈ p[n]):
-                          recv(Pong _)
-               > () 
+SBlock [ SIter (V "pi") (S "ps")
+           (SSend (pvar "pi") [(mPing tpid0, SSkip ())] ()) ()
+       , SIter (V "pii") (S "ps")
+           (SRecv [(mPong (pvar "x"), SSkip ())] ()) ()] ()
 -}
-master :: [NodeId] -> Process ()                     -- <1>
+master :: [NodeId] -> Process ()
 master peers = do
-
-  ps <- forM peers $ \nid -> do                      -- <2>
+  ps <- forM peers $ \nid -> do
           say $ printf "spawning on %s" (show nid)
+          -- P < Spawn(PingServer) > Pid
           spawn nid $(mkStaticClosure 'pingServer)
 
   mypid <- getSelfPid
 
-  forM_ ps $ \pid -> do                              -- <3>
+  forM_ ps $ \pid -> do
     say $ printf "pinging %s" (show pid)
     send pid (Ping mypid)
 
-  waitForPongs ps                                    -- <4>
+  waitForPongs ps
 
   say "All pongs successfully received"
   terminate
   
-waitForPongs :: [ProcessId] -> Process ()            -- <5>
+waitForPongs :: [ProcessId] -> Process ()
 waitForPongs [] = return ()
 waitForPongs ps = do
   m <- expect
   case m of
     Pong p -> waitForPongs (filter (/= p) ps)
-    -- _  -> say "MASTER received ping" >> terminate
+    _  -> say "MASTER received ping" >> terminate
 
 waitForPongs' :: [ProcessId] -> Process ()
 waitForPongs' = 
   forM_ ps $ const $ do { Pong _ <- expect; return () }
 
--- >>
-
--- <<main
 main :: IO ()
 main = distribMain master Main.__remoteTable
--- >>

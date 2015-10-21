@@ -54,6 +54,7 @@ master = do
   send pid (Ping mypid)                             -- <4>
 
   Pong _ <- expect                                  -- <5>
+  expect
   say "pong."
 
   terminate                                         -- <6>
