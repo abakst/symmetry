@@ -15,8 +15,8 @@ any_bool  = lam $ \_ -> ret repF
 any_nat :: Symantics repr => repr (() -> Process Int)
 any_nat  = lam $ \_ -> ret (repI 42)
 
-any_list :: Symantics repr => repr (() -> Process [a])
-any_list = lam $ \_ -> ret nil
+any_list :: Symantics repr => repr (() -> Process [Int])
+any_list = lam $ \_ -> ret (cons (repI 1) (cons (repI 2) nil))
 
 id :: Symantics repr => repr (a->a)
 id  = lam $ \x -> x

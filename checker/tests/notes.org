@@ -3,7 +3,7 @@
 | parikh        | ✓     | ×       | ×   | (AbsValToIL (Pid RSing, String)) |
 | stutter       | ✓     | ✓       | ×   | sth is wrong with message order  |
 | pipe          | ✓     | ×       | ×   | (AbsValToIL (Int -> Int))        |
-| ring          | ×     |         |     |                                  |
+| ring          | ✓     | ×       | ×   | Fresh [Int]                      |
 | firewall      | ×     |         |     |                                  |
 | state factory | ×     |         |     |                                  |
 | howait        | ×     |         |     |                                  |
