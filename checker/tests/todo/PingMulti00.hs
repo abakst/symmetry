@@ -5,7 +5,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
-module PingMulti00 where
+module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return) 
 import Symmetry.Language
