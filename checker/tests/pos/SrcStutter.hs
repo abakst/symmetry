@@ -39,7 +39,7 @@ stutter  = do role <- newRSing
 --   then fail
 --   else ()
 dosmt :: StutterSem repr => repr (Msg -> Process ())
-dosmt  = lam $ \msg -> match msg (lam $ \_ -> ret tt) fail
+dosmt  = lam $ \msg -> match msg fail (lam $ \_ -> ret tt)
 
 -- send the infinite sequence of ['a','b','a','b',...] messages
 sendAB :: StutterSem repr => repr ((Pid RSing) -> Process (Pid RSing))
