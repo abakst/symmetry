@@ -146,8 +146,14 @@ instance Pat SymbEx where
   liftPat2 x  = SE $ do xx <- runSE x
                         return $ ASum Nothing Nothing (Just xx)
 
+instance ArbPat SymbEx () where            
+  arb = SE . return $ AUnit Nothing
+
 instance ArbPat SymbEx Int where            
   arb = SE . return $ AInt Nothing
+
+instance ArbPat SymbEx String where            
+  arb = SE . return $ AString Nothing
 
 instance ArbPat SymbEx (Pid RSing) where            
   arb = SE . return $ APid Nothing (Pid Nothing)
@@ -194,7 +200,7 @@ join (APid _ _) (APid _ (Pid Nothing)) = APid Nothing (Pid Nothing)
 join (APid _ _) (APid _ _)             = error "Join Pid RSing: TBD"
 
 join (AProc _ s1 a1) (AProc _ s2 a2)
-  = AProc Nothing (s1 `joinStmt` s2) (a1 `join` a2)
+  = AProc Nothing skip (a1 `join` a2)
 
 join (ASum _ l1 r1) (ASum _ l2 r2)
   = ASum Nothing (l1 `maybeJoin` l2) (r1 `maybeJoin` r2)
@@ -350,11 +356,30 @@ symStr _
   = SE . return $ AString Nothing
 
 -------------------------------------------------
+symBool :: Boolean -> SymbEx Boolean
+-------------------------------------------------
+symBool b
+  = SE $ do u <- runSE symtt
+            return $ case b of
+                       Left _ -> 
+                         ASum Nothing (Just u) Nothing
+                       Right _ -> 
+                         ASum Nothing Nothing (Just u) 
+
+-------------------------------------------------
+symNonDet :: SymbEx Boolean
+-------------------------------------------------
+symNonDet
+  = SE . return $ ASum Nothing (Just $ AUnit Nothing)
+                               (Just $ AUnit Nothing)
+
+-------------------------------------------------
 symLam :: (SymbEx a -> SymbEx b) -> SymbEx (a -> b)
 -------------------------------------------------
 symLam f
   = SE . return $ AArrow Nothing $ \a -> f (SE $ return a)
 
+    
 -------------------------------------------------
 symApp :: SymbEx (a -> b) -> SymbEx a -> SymbEx b
 -------------------------------------------------
@@ -463,6 +488,13 @@ symSend pidM mM
             m <- runSE mM
             s <- sendToIL p m
             return (AProc Nothing s (AUnit Nothing))
+-------------------------------------------------
+symDie :: SymbEx (Process SymbEx a)
+-------------------------------------------------
+symDie 
+  = SE $ return (AProc Nothing s undefined)
+    where
+      s = IL.SDie ()
 
 symInL :: SymbEx a
        -> SymbEx (a :+: b)
@@ -489,18 +521,27 @@ symMatch s l r
                               Nothing -> error "does this happen?" -- return (Nothing, Nothing)
                               _       -> do v1 <- freshVar
                                             v2 <- freshVar
-                                            return (Just v1, Just v2)
-                val1 <- runSE arb
-                val2 <- runSE arb
+                                            return (v1, v2)
+                val1 <- setVar v1 <$> runSE arb
+                val2 <- setVar v2 <$> runSE arb
                 -- let (val1, val2) = (recvTy v1, recvTy v2)
                 c1 <- runSE . app l . SE . return $ val1
                 c2 <- runSE . app r . SE . return $ val2
-                return $ join c1 c2
+                return $ joinProcs x c1 c2
               (Just a, Just b)  -> do 
                 c1 <- runSE . app l . SE . return $ a
                 c2 <- runSE . app r . SE . return $ b
-                return $ join c1 c2
-
+                case x of
+                  Nothing -> 
+                    return $ joinProcs Nothing c1 c2
+                  Just v -> 
+                    return $ joinProcs (Just v) c1 c2
+    where
+      joinProcs :: forall a b. Maybe (Var b) -> AbsVal a -> AbsVal a -> AbsVal a
+      joinProcs (Just x) (AProc _ s1 v1) (AProc _ s2 v2)
+        = AProc Nothing (IL.SCase (varToIL x) s1 s2 ()) (v1 `join` v2)
+      joinProcs x t1 t2
+        = t1 `join` t2
 -- symMatchProc :: forall a b c. 
 --             (Typeable a, Typeable b)
 --          => SymbEx (a :+: b)
@@ -564,7 +605,8 @@ instance Symantics SymbEx where
   tt        = symtt
   int       = symInt
   str       = symStr
-  bool      = error "TBD: bool"
+  bool      = symBool
+  nondet    = symNonDet
   lam       = symLam
   app       = symApp
   self      = symSelf
@@ -577,7 +619,7 @@ instance Symantics SymbEx where
   newRSing  = symNewRSing
   newRMulti = symNewRMulti
   doMany    = symDoMany
-  die       = error "TBD: die"
+  die       = symDie
 
   inl   = symInL
   inr   = symInR

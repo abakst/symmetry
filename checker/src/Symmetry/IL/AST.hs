@@ -102,6 +102,7 @@ data Stmt a = SSkip a
             | SChoose Var Set (Stmt a) a
             | SVar LVar a
             | SCase Var (Stmt a) (Stmt a) a
+            | SDie a
             {- These do not appear in the source: -}
             | SNull
             | SVarDecl Var a
@@ -202,6 +203,8 @@ instStmt dom (SCase v sl sr a)
   = SCase v (instStmt dom sl) (instStmt dom sr) a
 instStmt _ (SVar v a)
   = SVar v a
+instStmt _ (SDie a)
+  = SDie a
 
 instMS :: [Pid] -> (TId, CId, MConstr, Stmt a) -> [(TId, CId, MConstr, Stmt a)]
 instMS dom (t, c, m, s)
@@ -267,6 +270,7 @@ annot (SRecv _ a)       = a
 annot (SIter _ _ _ a)   = a
 annot (SChoose _ _ _ a) = a
 annot (SVar _ a)        = a
+annot (SDie a)          = a
 annot (SLoop _ _ a)     = a
 annot (SCase _ _ _ a)   = a
 annot x                 = error ("annot: TBD " ++ show x)
@@ -297,6 +301,8 @@ instance Traversable Stmt where
     = flip (SChoose v s) <$> f a <*> traverse f ss
   traverse f (SVar v a)
     = SVar v <$> f a
+  traverse f (SDie a)
+    = SDie <$> f a
   traverse f (SBlock ss a)
     = flip SBlock <$> f a <*> traverse (traverse f) ss
   traverse f (SCase v sl sr a)
@@ -328,6 +334,7 @@ lastStmts (SChoose _ _ s _) = lastStmts s
 lastStmts (SIter _ _ s _)   = lastStmts s
 lastStmts (SLoop _ s _)     = lastStmts s
 lastStmts (SCase _ sl sr _) = lastStmts sl ++ lastStmts sr
+lastStmts s@(SDie a)        = [s]
 
 nextStmts :: Stmt Int -> M.Map Int [Int]
 nextStmts (SSend _ ms i)
