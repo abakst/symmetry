@@ -262,7 +262,6 @@ renderStmtConc me (SRecv ms _)
   = do rs <- foldM f [] ms
        return $ ifs rs
   where 
-    -- concatMap
     f l ms              = fmap (l ++) $ recvs ms
     recvs (t, c, m, s)  = asks pidMap >>= mapM (go (t,c,m) s) . M.keys
     go m (SSkip _) p    = recvMsg p me m
@@ -305,12 +304,16 @@ renderStmtConc me (SChoose (V v) s ss _)
     
 renderStmtConc me (SBlock ss _)
   = fmap block $ mapM (renderStmt me) ss
+
+renderStmtConc _ (SDie _)
+  = return $ text "assert(0 == 1)"
           
 renderStmtConc _ _
   = return $ text "assert(0 == 1) /* TBD */"
 
-isLeftLabel (V x) s  = text x <+> equals <+> inlCstr <+> text "->" <$> s
-isRightLabel (V x) s = text x <+> equals <+> inrCstr <+> text "->" <$> s
+eq = equals <> equals
+isLeftLabel (V x) s  = text x <+> eq <+> inlCstr <+> text "->" <$> s
+isRightLabel (V x) s = text x <+> eq <+> inrCstr <+> text "->" <$> s
 
 stmtLabel :: Int -> Doc 
 stmtLabel i = 
@@ -374,6 +377,9 @@ renderStmtAbs _ (SLoop _ _ i)
 
 renderStmtAbs _ (SNull)
   = return $ text "skip"
+
+renderStmtAbs me (SDie _)
+  = return $ text "assert (0 == 1)"
 
 renderStmtAbs _ s
   = return . text $ "assert(0 == 1) /* TBD:" ++ show s ++ "*/"

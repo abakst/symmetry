@@ -7,14 +7,12 @@ import Prelude hiding ((>>=), (>>), fail, return)
 import Symmetry.Language
 import Symmetry.Verify
 
-pingServer :: (Symantics repr, ArbPat repr (Pid (RSing)))
-           => repr (Process repr ())
+pingServer :: (DSL repr) => repr (Process repr ())
 pingServer = do myPid <- self
                 p     <- recv
                 send p myPid
 
-master :: (Symantics repr, ArbPat repr (Pid (RSing)))
-       => repr
+master :: (DSL repr) => repr
           (RSing -> Process repr ())
 master = lam $ \r -> do p     <- spawn r pingServer
                         myPid <- self
@@ -22,8 +20,7 @@ master = lam $ \r -> do p     <- spawn r pingServer
                         _ :: repr (Pid RSing) <- recv
                         return tt
 
-mainProc :: (Symantics repr, ArbPat repr (Pid RSing))
-         => repr ()
+mainProc :: (DSL repr) => repr ()
 mainProc = exec $ do r <- newRSing
                      r |> master
 

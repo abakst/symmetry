@@ -19,8 +19,8 @@ m >>= f = bind m (lam f)
 m >> n = do {_ <- m; n}
                  
 
-fail :: a
-fail = error "TBD: Language.Syntax.fail"
+fail :: Symantics repr => repr (Process repr a)
+fail = die
 
 return :: Symantics repr => repr a -> repr (Process repr a)
 return = ret
