@@ -12,6 +12,7 @@ import           Data.Typeable
 import           Data.Generics
 import           Data.List (nub, isPrefixOf)
 import qualified Data.Map.Strict as M
+import Text.PrettyPrint.Leijen as P hiding ((<$>))
 
 data Set = S String
            deriving (Ord, Eq, Read, Show, Typeable, Data)
@@ -181,6 +182,12 @@ unfold c@(Config { cUnfold = us, cProcs = ps })
                                               , (PAbs v s', st) <- ps
                                               , s == s'
                                               , j <- [0..i-1]]
+
+unfoldAbs :: Config a -> Config a
+unfoldAbs c@(Config {cProcs = ps})
+  = c { cUnfold = us }
+  where
+    us = [ Conc s 1 | (PAbs v s, _) <- ps ]
 
 instStmt :: [Pid] -> Stmt a -> Stmt a
 -- Interesting Cases
@@ -373,3 +380,77 @@ freshId
 freshIds :: Config a -> Config Int
 freshIds (c @ Config { cProcs = ps })
   = c { cProcs = evalState (mapM (mapM freshId) ps) 1 }
+
+instance Pretty Var where
+  pretty (V x) = text x
+
+instance Pretty Set where
+  pretty (S x) = text x
+
+instance Pretty Pid where
+  pretty (PConc x)
+    = text "Pid@" <> int x
+  pretty (PAbs v vs)
+    = text "Pid@(" <> pretty v <> colon <> pretty vs <> text ")"
+  pretty (PVar v)
+    = pretty v
+  pretty (PUnfold _ s i)
+    = text "Pid@" <> pretty s <> brackets (int i)
+
+x $$ y  = (x <> line <> y)
+
+instance Pretty Label where
+  pretty LL     = text "inl"
+  pretty RL     = text "inr"
+  pretty (VL x) = pretty x
+
+instance Pretty MConstr where
+  pretty (MTApp tc args) = text (untycon tc) <> pretty args
+  pretty (MCaseL l t)    = pretty l <+> pretty t
+  pretty (MCaseR l t)    = pretty l <+> pretty t
+  pretty (MTProd t1 t2)  = pretty t1 <> text "*" <> pretty t2
+
+instance Pretty (Stmt a) where
+  pretty (SSkip _)
+    = text "<skip>"
+
+  pretty (SSend p tcms _)
+    = text "send" <+> pretty p <+> align (vcat (map doOneTCMS tcms))
+
+  pretty (SRecv tcms _)    
+    = text "recv" <+> align (vcat (map doOneTCMS tcms))
+
+  pretty (SIter x xs s a)
+    = text "for" <+> parens (pretty x <+> colon <+> pretty xs) <+> lbrace $$
+      (indent 2 $ pretty s) $$
+      rbrace
+
+  pretty (SCase l sl sr a)
+    = text "match" <+> pretty l <+> text "with" $$
+      indent 2
+        (align (vcat [text "| InL ->" <+> pretty sl,
+                     text "| InR ->"  <+> pretty sr]))
+
+  pretty (SDie _)
+    = text "CRASH"
+
+  pretty (SBlock ss a)
+    = vcat $ map pretty ss
+
+instance Pretty (Config a) where
+  pretty (Config {cProcs = ps})
+    = vcat $ map go ps
+    where
+      go (pid, s) = text "Proc" <+> parens (pretty pid) <> colon <$$>
+                    indent 2 (pretty s)
+
+doManyTCMS :: [(TId, CId, MConstr, Stmt a)] -> Doc
+doManyTCMS
+  = align . vcat . map doOneTCMS      
+
+doOneTCMS :: (TId, CId, MConstr, Stmt a) -> Doc
+doOneTCMS (tid, cid, m, s)
+  = braces (text "C" <> int cid <>
+            parens (pretty m) <>
+            colon <> text "T" <> int tid <+>
+            text "->" <+> (align (pretty s)))

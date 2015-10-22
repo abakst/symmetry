@@ -102,6 +102,9 @@ class Pat pat => ArbPat pat a where
 instance (ArbPat arb a, ArbPat arb b) => ArbPat arb (a :+: b) where
   arb  = liftPat1 arb `joinPat` liftPat2 arb
 
+instance (Symantics arb, ArbPat arb a, ArbPat arb b) => ArbPat arb (a, b) where
+  arb  = pair arb arb
+
 class (Symantics repr,
        ArbPat repr (),
        ArbPat repr Int,

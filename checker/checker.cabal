@@ -29,6 +29,7 @@ library
                      , containers >= 0.5.5.1
                      , directory >= 1.2.2.0
                      , filepath >= 1.3.0.2
+                     , ansi-terminal
                      , hashable
                      , mtl
                      , options

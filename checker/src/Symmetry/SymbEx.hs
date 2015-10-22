@@ -224,7 +224,7 @@ join (APid _ _) (APid _ (Pid Nothing)) = APid Nothing (Pid Nothing)
 join (APid _ _) (APid _ _)             = error "Join Pid RSing: TBD"
 
 join (AProc _ s1 a1) (AProc _ s2 a2)
-  = AProc Nothing skip (a1 `join` a2)
+  = AProc Nothing (s1 `joinStmt` s2) (a1 `join` a2)
 
 join (ASum _ l1 r1) (ASum _ l2 r2)
   = ASum Nothing (l1 `maybeJoin` l2) (r1 `maybeJoin` r2)
@@ -617,7 +617,7 @@ joinProcs :: forall a b. Maybe (Var b) -> AbsVal a -> AbsVal a -> AbsVal a
 joinProcs (Just x) (AProc _ s1 v1) (AProc _ s2 v2)
   = AProc Nothing (IL.SCase (varToIL x) s1 s2 ()) (v1 `join` v2)
 joinProcs _ t1 t2
-        = t1 `join` t2
+  = t1 `join` t2
 
 symPair :: SymbEx a
         -> SymbEx b
