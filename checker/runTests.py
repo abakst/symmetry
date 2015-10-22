@@ -31,13 +31,13 @@ def runTestsInDir(dir, expect):
     failed = []
     for i in glob.glob(os.path.join(dir, "*.hs")):
         sys.stdout.write ("[%s]: " % i)
-        return_code = subprocess.call(config["runghc"] + [i,"--verify"])
+        FNULL = open(os.devnull, 'w')
+        return_code = subprocess.call(config["runghc"] + [i,"--verify"],stdout=FNULL)
         if return_code == expect:
             print "\033[1;32mPASS\033[0;0m"
         else:
             print "\033[1;31mFAIL\033[0;0m"
             failed.append(i)
-            print ""
     return failed
 
 failed += runTestsInDir(posDir, 0)

@@ -23,7 +23,7 @@ pingServer = do myPid <- self
                 p     <- recv
                 match p
                   (lam $ \pid -> send pid (ping myPid))
-                  (lam $ \(_ :: repr (Pid RSing))   -> ret tt)
+                  (lam $ \(_ :: repr (Pid RSing))   -> die)
 
 master :: (DSL repr) => repr (RMulti -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
@@ -32,7 +32,6 @@ master = lam $ \r -> lam $ \n ->
       doMany ps (lam $ \p -> send p (ping myPid))
       doMany ps (lam $ \_ -> do (_ :: Message repr)  <- recv
                                 ret tt)
-      ret tt
 
 mainProc :: (DSL repr) => repr (Int -> ())
 mainProc = lam $ \n -> exec $ do r <- newRMulti

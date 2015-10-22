@@ -8,7 +8,6 @@ module Main where
 import Prelude hiding ((>>=), (>>), fail, return)
 import Symmetry.Language
 import Symmetry.Verify
-import GHC.Num ((+))
 import Data.Either
 import Symmetry.SymbEx
 
@@ -22,11 +21,11 @@ instance StutterSem SymbEx
 type MsgA = () -- 1
 type MsgB = () :+: () -- 2
 
-a_msg :: StutterSem repr => repr MsgA
-a_msg = tt
+aMsg :: StutterSem repr => repr MsgA
+aMsg = tt
 
-b_msg :: StutterSem repr => repr MsgB
-b_msg = inr tt
+bMsg :: StutterSem repr => repr MsgB
+bMsg = inr tt
 
 stutter :: StutterSem repr => repr (Process repr ())
 stutter  = do role <- newRSing
@@ -34,21 +33,14 @@ stutter  = do role <- newRSing
               app sendAB p
               ret tt
          
--- send the infinite sequence of ['a','b','a','b',...] messages
 sendAB :: StutterSem repr => repr (Pid RSing -> Process repr ())
 sendAB  = lam $ \pid ->
             tt |> fixM (lam $ \loop -> lam $ \_  ->
-                                       do send pid a_msg
-                                          send pid b_msg
+                                       do send pid aMsg
+                                          send pid bMsg
                                           tt |> loop)
 
 
-  -- let fix_f = lam $ \f -> lam $ \pid -> do send pid a_msg
-  --                                                  send pid a_msg
-  --                                                  app f pid
-  --          in lam $ \pid -> app (fixM fix_f) pid
-
--- get 2 messages, call dosmt on the second one, repeat
 sttr :: StutterSem repr => repr (Process repr ())
 sttr  = tt |> fixM loop
   where

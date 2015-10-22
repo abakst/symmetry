@@ -6,6 +6,7 @@ import Symmetry.SymbEx
 import Symmetry.IL.Render
 import Symmetry.IL.AST
 
+import System.Console.ANSI
 import Control.Exception
 import Control.Monad
 import Control.Applicative
@@ -16,9 +17,11 @@ import System.IO
 import System.Process hiding (runCommand)
 import Text.Printf
 import Options
+import Text.PrettyPrint.Leijen  (pretty, nest, text, (<>), line)
 
 data MainOptions = MainOptions { optVerify  :: Bool
                                , optVerbose :: Bool
+                               , optProcess :: Bool
                                , optDir     :: String
                                }
 
@@ -26,6 +29,7 @@ instance Options MainOptions where
   defineOptions
     = MainOptions <$> simpleOption "verify" False "Run Verifier"
                   <*> simpleOption "verbose" False "Verbose Output"
+                  <*> simpleOption "dump-process" False "Display Intermediate Process Description"
                   <*> simpleOption "pmlfile" ".symcheck" "Directory to store intermediate results" 
 
 spinCmd :: FilePath -> CreateProcess
@@ -52,20 +56,26 @@ runCmd verb pre wd c
                                                     }
 
        when verb $ do
-         putStrLn pre
+         setSGR [SetConsoleIntensity FaintIntensity]
+         putStr (pre ++ "...")
          output <- hGetContents hout
-         when (output /= "") $ putStrLn output
+         when (output /= "") $ 
+           putStr ("\n" ++ output)
+         setSGR [Reset]
 
        checkExit p herr
 
-       when verb $ putStrLn "DONE"
+       when verb $ do
+         setSGR [SetConsoleIntensity FaintIntensity]
+         putStr "DONE.\n"
+         setSGR [Reset]
   where
     checkExit x h = do e <- waitForProcess x
                        case e of
                          ExitSuccess -> return ()
                          _           -> do
                            putStrLn =<< hGetContents h
-                           exitWith e
+                           exitWith (ExitFailure 126)
        
 
 run1Cfg :: Bool -> FilePath -> Config () -> IO Bool
@@ -73,7 +83,7 @@ run1Cfg verb outd cfg
   = do createDirectoryIfMissing True outd
        removeFile (outTrail outd) `catch` \(_ :: IOException) ->
          return ()
-       let cfgUnfold = unfold cfg 
+       let cfgUnfold = unfoldAbs cfg 
        renderToFile (outf outd) cfgUnfold
        runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName)
        runCmd verb "COMPILING VERIFIER:" outd ccCmd
@@ -83,18 +93,37 @@ run1Cfg verb outd cfg
     fileExists f = catch (openFile f ReadMode >> return True)
                          (\(_ :: IOException) -> return False)
 
+report status
+  = if status then
+      do setSGR [SetConsoleIntensity BoldIntensity, SetColor Foreground Vivid Red]
+         putStr "UNSAFE"
+         setSGR [Reset]
+         putStr "\n"
+    else
+      do setSGR [SetConsoleIntensity BoldIntensity, SetColor Foreground Vivid Green]
+         putStr "SAFE"
+         setSGR [Reset]
+         putStr "\n"
+
 checkerMain :: SymbEx () -> IO ()
 checkerMain main
-  = runCommand $ \opts _ -> 
-      if optVerify opts then
-        do d <- getCurrentDirectory
-           let  dir  = optDir opts
-                verb = optVerbose opts
-                cfgs = stateToConfigs . runSymb $ main
-                outd = d </> dir 
-           es <- forM cfgs $ run1Cfg verb outd
-           when (or es) exitFailure 
-           exitSuccess
-      else
-        exitSuccess
+  = runCommand $ \opts _ -> do
 
+      when (optProcess opts) $
+        forM_ cfgs $ \c ->
+          print $ text "Config" <> nest 2 (line <> pretty c)
+           
+      when (optVerify opts) $ do
+        d <- getCurrentDirectory
+        let  dir  = optDir opts
+             verb = optVerbose opts
+             outd = d </> dir 
+        es <- forM cfgs $ run1Cfg verb outd
+        let status = or es
+        report status
+        when status exitFailure
+
+      exitSuccess
+
+    where
+      cfgs = stateToConfigs . runSymb $ main
