@@ -42,7 +42,7 @@ dosmt  = lam $ \msg -> match msg (lam $ \_ -> fail) (lam $ \_ -> ret tt)
 -- send the infinite sequence of ['a','b','a','b',...] messages
 sendAB :: StutterSem repr => repr ((Pid RSing) -> Process repr (Pid RSing))
 sendAB  = let fix_f = lam $ \f -> lam $ \pid -> do send pid a_msg
-                                                   send pid b_msg
+                                                   send pid a_msg
                                                    app f pid
            in lam $ \pid -> app (fixM fix_f) pid
 

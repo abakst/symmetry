@@ -54,9 +54,7 @@ class Symantics repr where
   -- Lists
   nil       :: repr [a]
   cons      :: repr a   -> repr [a] -> repr [a]
-  hd        :: repr [a] -> repr a
-  tl        :: repr [a] -> repr [a]
-  matchList :: repr [a] -> repr (() -> b) -> repr ((a, [a]) -> b) -> b
+  matchList :: repr [a] -> repr (() -> b) -> repr ((a, [a]) -> b) -> repr b
 
   -- Lambda Calculus:
   lam  :: (repr a -> repr b) -> repr (a -> b)

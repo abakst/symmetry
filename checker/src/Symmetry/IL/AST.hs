@@ -176,11 +176,11 @@ unfold :: Config a -> Config a
 unfold c@(Config { cUnfold = us, cProcs = ps })
   = c { cProcs = ps ++ ufprocs }
   where
-    mkUnfold v s stmt i = (PUnfold v s i, stmt)
-    ufprocs             = [ mkUnfold v s stmt j | Conc s i <- us
-                                                , (PAbs v s', stmt) <- ps
-                                                , s == s'
-                                                , j <- [0..i-1]]
+    mkUnfold v s st i = (PUnfold v s i, st)
+    ufprocs             = [ mkUnfold v s st j | Conc s i <- us
+                                              , (PAbs v s', st) <- ps
+                                              , s == s'
+                                              , j <- [0..i-1]]
 
 instStmt :: [Pid] -> Stmt a -> Stmt a
 -- Interesting Cases
