@@ -48,7 +48,8 @@ run1Cfg outd cfg
   = do createDirectoryIfMissing True outd
        removeFile (outTrail outd) `catch` \(_ :: IOException) ->
          return ()
-       renderToFile (outf outd) cfg
+       let cfgUnfold = unfold cfg 
+       renderToFile (outf outd) cfgUnfold
        runCmd (spinCmd outName)
        runCmd ccCmd
        runCmd panCmd
