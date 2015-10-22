@@ -4,22 +4,26 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module SrcHelper where
 
-import Prelude hiding (lookup, fail)
-
 import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 
-any_bool :: Symantics repr => repr (() -> Process Boolean)
-any_bool  = lam $ \_ -> ret repF
+import Prelude hiding (lookup, fail)
+import Data.Typeable
 
-any_nat :: Symantics repr => repr (() -> Process Int)
-any_nat  = lam $ \_ -> ret (repI 42)
+any_bool :: Symantics repr => repr (() -> Process repr Boolean)
+any_bool  = lam $ \_ -> ret (bool (Left ()))
 
-any_list :: Symantics repr => repr (() -> Process [Int])
-any_list = lam $ \_ -> ret (cons (repI 1) (cons (repI 2) nil))
+any_nat :: Symantics repr => repr (() -> Process repr Int)
+any_nat  = lam $ \_ -> ret (int 42)
 
-id :: Symantics repr => repr (a->a)
-id  = lam $ \x -> x
+any_list :: Symantics repr => repr (() -> Process repr [Int])
+any_list = lam $ \_ -> ret (cons (int 1) (cons (int 2) nil))
+
+id :: Symantics repr => repr (a-> Process repr a)
+id  = lam $ \x -> ret x
+
+reject :: Symantics repr => repr (a-> Process repr b)
+reject  = lam $ \_ -> fail
 
 app2 :: Symantics repr => repr (a->b->c) -> repr a -> repr b -> repr c
 app2 f a1 a2 = app (app f a1) a2
@@ -35,15 +39,16 @@ app5 :: Symantics repr
      -> repr a -> repr b -> repr c -> repr d -> repr e -> repr f
 app5 f a1 a2 a3 a4 a5 = app (app (app (app (app f a1) a2) a3) a4) a5
 
-ifte      :: (Symantics repr, SymMatch repr () () a)
+ifte      :: ( Symantics repr
+             , ArbPat repr ()
+             , Typeable a
+             )
           => repr Boolean -> repr a -> repr a -> repr a
 ifte b t e = match b (lam $ \_ -> t) (lam $ \_ -> e)
 
 lookup :: ( Symantics repr
-          , SymMatch repr () () (() :+: b)
-          , SymTypes repr () b
-          , SymTypes repr a b
-          , Ord a, Ord b
+          , ArbPat repr ()
+          , Ord a, Ord b, Typeable b
           )
        => repr (a -> [(a,b)] -> (Either () b))
 lookup  = lam $ \k -> lam $ \m ->
@@ -56,15 +61,17 @@ lookup  = lam $ \k -> lam $ \m ->
                      (inr v')
                      (app2 lookup k m))
 
-print :: Symantics repr => repr (a -> Process ())
+print :: Symantics repr => repr (a -> Process repr ())
 print  = undefined
 
 mod :: Symantics repr => repr (Int -> Int -> Int)
 mod  = undefined
 
 match3 :: ( Symantics repr
-          , SymMatch repr b c r
-          , SymMatch repr a (Either b c) r
+          , Typeable a, Typeable b, Typeable c
+          , ArbPat repr a
+          , ArbPat repr b
+          , ArbPat repr c
           )
        => repr (Either a (Either b c))
        -> repr (a -> r) -> repr (b -> r) -> repr (c -> r)
@@ -72,9 +79,11 @@ match3 :: ( Symantics repr
 match3 msg f1 f2 f3 = match msg f1 $ lam (\e1 -> match e1 f2 f3)
 
 match4 :: ( Symantics repr
-          , SymMatch repr c d r
-          , SymMatch repr b (Either c d) r
-          , SymMatch repr a (Either b (Either c d)) r
+          , Typeable a, Typeable b, Typeable c, Typeable d
+          , ArbPat repr a
+          , ArbPat repr b
+          , ArbPat repr c
+          , ArbPat repr d
           )
        => repr (Either a (Either b (Either c d)))
        -> repr (a -> r) -> repr (b -> r) -> repr (c -> r) -> repr (d -> r)
@@ -84,10 +93,12 @@ match4 msg f1 f2 f3 f4 = match msg f1 $ lam $ \e1 ->
                              match e2 f3 f4
 
 match5 :: ( Symantics repr
-          , SymMatch repr d e r
-          , SymMatch repr c (Either d e) r
-          , SymMatch repr b (Either c (Either d e)) r
-          , SymMatch repr a (Either b (Either c (Either d e))) r
+          , Typeable a, Typeable b, Typeable c, Typeable d, Typeable e
+          , ArbPat repr a
+          , ArbPat repr b
+          , ArbPat repr c
+          , ArbPat repr d
+          , ArbPat repr e
           )
        => repr (Either a (Either b (Either c (Either d e))))
        -> repr (a -> r) -> repr (b -> r) -> repr (c -> r) -> repr (d -> r) -> repr (e -> r)
@@ -100,28 +111,20 @@ match5 msg f1 f2 f3 f4 f5 = match msg f1 $ lam $ \e1 ->
 compare :: Symantics repr => repr (a -> a -> (Either () (Either () ())))
 compare  = undefined
 
-ret_tt  :: Symantics repr => repr (Process a) -> repr (Process ())
+ret_tt  :: Symantics repr => repr (Process repr a) -> repr (Process repr ())
 ret_tt p = p Symmetry.Language.Syntax.>> ret tt
 
 pair3 :: ( Symantics repr
-         , SymTypes repr a (b,c)
-         , SymTypes repr b c)
+         )
       => repr a -> repr b -> repr c -> repr (a,(b,c))
 pair3 a1 a2 a3 = pair a1 (pair a2 a3)
 
 pair4 :: ( Symantics repr
-         , SymTypes repr a (b, (c, d))
-         , SymTypes repr b (c, d)
-         , SymTypes repr c d
          )
       => repr a -> repr b -> repr c -> repr d -> repr (a,(b,(c,d)))
 pair4 a1 a2 a3 a4 = pair a1 $ pair a2 $ pair a3 a4
 
 pair5 :: ( Symantics repr
-         , SymTypes repr a (b,(c,(d,e)))
-         , SymTypes repr b (c,(d,e))
-         , SymTypes repr c (d,e)
-         , SymTypes repr d e
          )
       => repr a -> repr b -> repr c -> repr d -> repr e -> repr (a,(b,(c,(d,e))))
 pair5 a1 a2 a3 a4 a5 = pair a1 $ pair a2 $ pair a3 $ pair a4 a5

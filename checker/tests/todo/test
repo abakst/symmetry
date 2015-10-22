@@ -1,0 +1,13 @@
+#!/bin/zsh
+
+test_benchmark() {
+	if [[ $# -ne 1 ]]; then
+		echo "usage: test <Symmetry test file>"
+		return 1
+	fi
+
+	stack runghc -- $1 --verify
+	echo "RESULT: $?"
+}
+
+test_benchmark $@
