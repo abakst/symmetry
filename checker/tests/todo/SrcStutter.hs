@@ -5,12 +5,13 @@
 
 module Main where
 
-import Prelude hiding ((>>=), (>>), fail, return)
+import Prelude hiding ((>>=), (>>), fail, return, id)
 import Symmetry.Language
 import Symmetry.Verify
 import GHC.Num ((+))
 import Data.Either
 import Symmetry.SymbEx
+import SrcHelper
 
 class ( Symantics repr
       , ArbPat repr ()
@@ -36,13 +37,12 @@ stutter  = do role <- newRSing
 --   then fail
 --   else ()
 dosmt :: StutterSem repr => repr (Msg -> Process repr ())
-dosmt  = lam $ \msg -> match msg (lam $ \_ -> fail) (lam $ \_ -> ret tt)
--- dosmt  = lam $ \msg -> match msg (lam $ \_ -> ret tt) (lam $ \_ -> fail)
+dosmt  = lam $ \msg -> match msg reject id
 
 -- send the infinite sequence of ['a','b','a','b',...] messages
 sendAB :: StutterSem repr => repr ((Pid RSing) -> Process repr (Pid RSing))
 sendAB  = let fix_f = lam $ \f -> lam $ \pid -> do send pid a_msg
-                                                   send pid a_msg
+                                                   send pid b_msg
                                                    app f pid
            in lam $ \pid -> app (fixM fix_f) pid
 

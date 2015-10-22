@@ -24,6 +24,7 @@ library
                    Symmetry.IL.AST
                    Symmetry.SymbEx
                    Symmetry.Verify
+                   SrcHelper
   build-depends:       base >=4.7
                      , containers >= 0.5.5.1
                      , directory >= 1.2.2.0

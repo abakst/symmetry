@@ -1,13 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RebindableSyntax #-}
 module SrcHelper where
 
 import Symmetry.Language.AST
 import Symmetry.Language.Syntax
 
-import Prelude hiding (lookup, fail)
+import Prelude hiding ((>>=), (>>), fail, return)
 import Data.Typeable
 
 any_bool :: Symantics repr => repr (() -> Process repr Boolean)
@@ -41,25 +41,39 @@ app5 f a1 a2 a3 a4 a5 = app (app (app (app (app f a1) a2) a3) a4) a5
 
 ifte      :: ( Symantics repr
              , ArbPat repr ()
-             , Typeable a
              )
           => repr Boolean -> repr a -> repr a -> repr a
 ifte b t e = match b (lam $ \_ -> t) (lam $ \_ -> e)
+
+type T_lookup a b = (a, ([(a,b)], (Either () b)))
+
+f_lookup :: ( Symantics repr
+            , ArbPat repr ()
+            , Ord a, Ord b, Typeable b
+            )
+         => repr ((T_lookup a b -> Process repr (T_lookup a b))
+                  -> T_lookup a b -> Process repr (T_lookup a b))
+f_lookup  = lam $ \lookup -> lam $ \arg ->
+              let k = proj1 arg
+                  m = proj1 $ proj2 arg
+                  r = proj2 $ proj2 arg
+               in matchList m (lam $ \_  -> ret $ pair3 k m (inl tt))
+                              (lam $ \ht -> let x  = proj1 ht
+                                                tl = proj2 ht
+                                                k' = proj1 x
+                                                v' = proj2 x
+                                             in ifte (eq k k')
+                                                  (ret $ pair3 k m (inr v'))
+                                                  (app lookup $ pair3 k tl r))
 
 lookup :: ( Symantics repr
           , ArbPat repr ()
           , Ord a, Ord b, Typeable b
           )
-       => repr (a -> [(a,b)] -> (Either () b))
+       => repr (a -> [(a,b)] -> Process repr (Either () b))
 lookup  = lam $ \k -> lam $ \m ->
-            ifte (eq nil m)
-              (inl tt)
-              (let x  = hd m
-                   k' = proj1 x
-                   v' = proj2 x
-                in ifte (eq k k')
-                     (inr v')
-                     (app2 lookup k m))
+            do r <- app (fixM f_lookup) (pair3 k m (inl tt))
+               ret $ proj2 $ proj2 r
 
 print :: Symantics repr => repr (a -> Process repr ())
 print  = undefined
