@@ -3,14 +3,13 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language FlexibleContexts #-}
 
-module SrcReslock where
+module Main where
 
-import Prelude (($), undefined, String, Int, fromInteger, negate)
-import Symmetry.Language.AST
-import Symmetry.Language.Syntax
-import Data.Either
-import SrcHelper
+import Prelude hiding ((>>=), (>>), fail, return, id)
+import Symmetry.Language
+import Symmetry.Verify
 import Symmetry.SymbEx
+import SrcHelper
 
 type Cmd = Int :+: ()            -- Write Int | Read
 
@@ -45,66 +44,37 @@ unlock_msg  = lam $ \pid -> inr $ inr $ inr pid
 ans_msg :: ReslockSem repr => repr (Pid RSing -> Int -> Ans)
 ans_msg  = lam $ \pid -> lam $ \n -> pair pid n
 
-recv_lock :: ReslockSem repr => repr (Process (Pid RSing))
+recv_lock :: ReslockSem repr => repr (Process repr (Pid RSing))
 recv_lock  = do msg :: repr Msg <- recv
-                ret $ match4 msg id fail fail fail
-recv_ack :: ReslockSem repr => repr (Process (Pid RSing))
+                match4 msg id reject reject reject
+recv_ack :: ReslockSem repr => repr (Process repr (Pid RSing))
 recv_ack  = do msg :: repr Msg <- recv
-               ret $ match4 msg fail id fail fail
-recv_req :: ReslockSem repr => repr (Process (Pid RSing, Cmd))
+               match4 msg reject id reject reject
+recv_req :: ReslockSem repr => repr (Process repr (Pid RSing, Cmd))
 recv_req  = do msg :: repr Msg <- recv
-               ret $ match4 msg fail fail id fail
-recv_unlock :: ReslockSem repr => repr (Process (Pid RSing))
+               match4 msg reject reject id reject
+recv_unlock :: ReslockSem repr => repr (Process repr (Pid RSing))
 recv_unlock  = do msg :: repr Msg <- recv
-                  ret $ match4 msg fail fail fail id
+                  match4 msg reject reject reject id
 
-class ( Symantics repr
-      , SymRecv   repr Msg
-      , SymSend   repr Msg
-      , SymRecv   repr Ans
-      , SymSend   repr Ans
-      , SymRecv   repr Res
-      , SymSend   repr Res
-      , SymRecv   repr Cmd
-      , SymSend   repr Cmd
-      , SymMatch repr () () (Process ())
-      , SymMatch repr () () (Process Int)
-      , SymMatch repr () Int (Process ())
-      , SymMatch repr (Pid RSing) (Either (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing))) (Pid RSing)
-      , SymMatch repr (Pid RSing) (Either (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing))) (Pid RSing, Cmd)
-      , SymMatch repr (Pid RSing) (Either (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing))) (Process ())
-      , SymMatch repr (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing)) (Pid RSing)
-      , SymMatch repr (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing)) (Pid RSing, Cmd)
-      , SymMatch repr (Pid RSing) (Either (Pid RSing, Cmd) (Pid RSing)) (Process ())
-      , SymMatch repr (Pid RSing, Cmd) (Pid RSing) (Pid RSing)
-      , SymMatch repr (Pid RSing, Cmd) (Pid RSing) (Pid RSing, Cmd)
-      , SymMatch repr (Pid RSing, Cmd) (Pid RSing) (Process ())
-      , SymMatch repr Int () (Int, ResM)
-      , SymTypes repr () Int
-      , SymTypes repr (Pid RSing) ((Pid RSing, Cmd) :+: Pid RSing)
-      , SymTypes repr (Pid RSing) (Pid RSing :+: ((Pid RSing, Cmd) :+: Pid RSing))
-      , SymTypes repr (Pid RSing) Cmd
-      , SymTypes repr (Pid RSing) Int
-      , SymTypes repr (Pid RSing, Cmd) (Pid RSing)
-      , SymTypes repr Int ()
-      , SymTypes repr Int ResM
+class ( HelperSym repr
       ) => ReslockSem repr
 
---instance ReslockSem SymbEx
+instance ReslockSem SymbEx
 
 -- LOCKED RESOURCE
 
-res_start :: ReslockSem repr => repr (Res -> Process (Pid RSing))
+res_start :: ReslockSem repr => repr (Res -> Process repr (Pid RSing))
 res_start  = lam $ \res -> do r <- newRSing
                               spawn r (app res_free res)
 
-res_free :: ReslockSem repr => repr (Res -> Process ())
+res_free :: ReslockSem repr => repr (Res -> Process repr ())
 res_free  = lam $ \res -> do p <- recv_lock
                              me <- self
                              send p (app ack_msg me)
                              app2 res_locked res p
 
-res_locked :: ReslockSem repr => repr (Res -> Pid RSing -> Process ())
+res_locked :: ReslockSem repr => repr (Res -> Pid RSing -> Process repr ())
 res_locked  = lam $ \res -> lam $ \p ->
                 let req_h = lam $ \req -> -- req :: Req p cmd
                         let p      = proj1 req
@@ -119,29 +89,29 @@ res_locked  = lam $ \res -> lam $ \p ->
                          in match r ok_h rep_h
                     unl_h = lam $ \p -> app res_free res
                  in do msg :: repr Msg <- recv
-                       match4 msg fail fail req_h unl_h
+                       match4 msg reject reject req_h unl_h
 
 -- RES API
 
-res_lock :: ReslockSem repr => repr (Pid RSing -> Process ())
+res_lock :: ReslockSem repr => repr (Pid RSing -> Process repr ())
 res_lock  = lam $ \q -> do me <- self
                            send q (app lock_msg me)
                            ack <- recv_ack
                            ifte (eq ack q) (ret tt) fail
 
-res_unlock :: ReslockSem repr => repr (Pid RSing -> Process ())
+res_unlock :: ReslockSem repr => repr (Pid RSing -> Process repr ())
 res_unlock  = lam $ \q -> do me <- self
                              send q (app unlock_msg me)
                              ret tt
 
-res_request :: ReslockSem repr => repr (Pid RSing -> Cmd -> Process Int)
+res_request :: ReslockSem repr => repr (Pid RSing -> Cmd -> Process repr Int)
 res_request  = lam $ \q -> lam $ \cmd ->
                  do me <- self
                     send q (app2 req_msg me cmd)
                     ans :: repr Ans <- recv
                     ifte (eq (proj1 ans) q) (ret (proj2 ans)) fail
 
-res_do :: ReslockSem repr => repr (Pid RSing -> Cmd -> Process ())
+res_do :: ReslockSem repr => repr (Pid RSing -> Cmd -> Process repr ())
 res_do  = lam $ \q -> lam $ \cmd ->
             do me <- self
                send q (app2 req_msg me cmd)
@@ -151,42 +121,45 @@ res_do  = lam $ \q -> lam $ \cmd ->
 
 type Res = Int
 
-cell_start :: ReslockSem repr => repr (Process (Pid RSing))
-cell_start  = app res_start (repI 0)
+cell_start :: ReslockSem repr => repr (Process repr (Pid RSing))
+cell_start  = app res_start (int 0)
 
 query_res :: ReslockSem repr => repr (Res -> Pid RSing -> Cmd -> (Res,ResM))
 query_res  = lam $ \x -> lam $ \pid -> lam $ \cmd ->
                match cmd (lam $ \y -> pair y ok_msg) (lam $ \_ -> pair x (app reply_msg x))
 
-cell_lock :: ReslockSem repr => repr (Pid RSing -> Process ())
+cell_lock :: ReslockSem repr => repr (Pid RSing -> Process repr ())
 cell_lock  = lam $ \c -> app res_lock c
 
-cell_write :: ReslockSem repr => repr (Pid RSing -> Int -> Process ())
+cell_write :: ReslockSem repr => repr (Pid RSing -> Int -> Process repr ())
 cell_write  = lam $ \c -> lam $ \x -> app2 res_do c (app write_msg x)
 
-cell_read :: ReslockSem repr => repr (Pid RSing -> Process Int)
+cell_read :: ReslockSem repr => repr (Pid RSing -> Process repr Int)
 cell_read  = lam $ \c -> app2 res_request c read_msg
 
-cell_unlock :: ReslockSem repr => repr (Pid RSing -> Process ())
+cell_unlock :: ReslockSem repr => repr (Pid RSing -> Process repr ())
 cell_unlock  = lam $ \c -> app res_unlock c
 
 -- INCREMENT CLIENT
 
-inc :: ReslockSem repr => repr (Pid RSing -> Process ())
+inc :: ReslockSem repr => repr (Pid RSing -> Process repr ())
 inc  = lam $ \c -> do app cell_lock c
                       v <- app cell_read c
-                      app2 cell_write c (plus v (repI 1)) -- c = c + 1
+                      app2 cell_write c (plus v (int 1)) -- c = c + 1
                       app cell_unlock c
 
-reslock_main :: ReslockSem repr => repr (Process ())
+reslock_main :: ReslockSem repr => repr (Process repr ())
 reslock_main  = do c <- cell_start
                    n <- app any_nat tt -- add n to c (which is 0)
                    app2 add_to_cell c n
 
-add_to_cell :: ReslockSem repr => repr (Pid RSing -> Int -> Process ())
+add_to_cell :: ReslockSem repr => repr (Pid RSing -> Int -> Process repr ())
 add_to_cell  = lam $ \c -> lam $ \n ->
-                 ifte (eq n (repI 0))
+                 ifte (eq n (int 0))
                    (ret tt)
                    (do r <- newRSing
                        spawn r (app inc c)
                        app2 add_to_cell c n)
+
+main :: IO ()
+main  = checkerMain $ exec reslock_main

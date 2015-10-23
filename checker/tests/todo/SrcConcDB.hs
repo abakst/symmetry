@@ -3,14 +3,13 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language FlexibleContexts #-}
 
-module SrcConcDB where
+module Main where
 
-import Prelude (($), undefined, String, Int, fromInteger, negate)
-import Symmetry.Language.AST
-import Symmetry.Language.Syntax
-import Data.Either
-import SrcHelper
+import Prelude hiding ((>>=), (>>), fail, return, id, lookup)
+import Symmetry.Language
+import Symmetry.Verify
 import Symmetry.SymbEx
+import SrcHelper
 
 -- msg1 : Alloc, Lookup
 -- msg2 : Value
@@ -42,58 +41,31 @@ free_msg  = inl tt
 allocated_msg :: CDBSem repr => repr (FreeAllocated)
 allocated_msg  = inr tt
 
-recv_alloc :: CDBSem repr => repr (Process AllocT)
+recv_alloc :: CDBSem repr => repr (Process repr AllocT)
 recv_alloc  = do msg :: repr ALV <- recv
-                 return $ match msg id fail
+                 match msg id reject
 
-recv_lookup :: CDBSem repr => repr (Process LookupT)
+recv_lookup :: CDBSem repr => repr (Process repr LookupT)
 recv_lookup  = do msg :: repr ALV <- recv
-                  return $ match msg fail $ lam $ \e1 ->
-                             match e1 id fail
+                  match msg reject $ lam $ \e1 ->
+                    match e1 id reject
 
-recv_value :: CDBSem repr => repr (Process ValueT)
+recv_value :: CDBSem repr => repr (Process repr ValueT)
 recv_value  = do msg :: repr ALV <- recv
-                 return $ match msg fail $ lam $ \e1 ->
-                            match e1 fail id
+                 match msg reject $ lam $ \e1 ->
+                    match e1 reject id
 
-class ( Symantics repr
-      , SymSend repr ALV
-      , SymRecv repr ALV
-      , SymSend repr LookupResT
-      , SymRecv repr LookupResT
-      , SymSend repr FreeAllocated
-      , SymRecv repr FreeAllocated
-      , SymMatch repr () () (() :+: Int)
-      , SymMatch repr () () (Process ())
-      , SymMatch repr () () (Process (Process ()))
-      , SymMatch repr () () (Process T_db)
-      , SymMatch repr () () Int
-      , SymMatch repr () Int (Process ())
-      , SymMatch repr () Int (Process T_db)
-      , SymMatch repr (Int, Pid RSing) ValueT (Process ())
-      , SymMatch repr (Int, Pid RSing) ValueT (Process T_db)
-      , SymMatch repr AllocT (LookupT :+: ValueT) (Process ())
-      , SymMatch repr AllocT (LookupT :+: ValueT) (Process T_db)
-      , SymMatch repr AllocT (LookupT :+: ValueT) AllocT
-      , SymMatch repr LookupT ValueT LookupT
-      , SymTypes repr () ()
-      , SymTypes repr () Int
-      , SymTypes repr (Int, Pid RSing) (LookupT :+: ValueT)
-      , SymTypes repr (Int, Pid RSing) ValueT
-      , SymTypes repr Int (Pid RSing)
-      , SymTypes repr Int Int
-      , SymMatch repr () () (Process (Pid RSing))
-      , SymMatch repr () Int (Process (Pid RSing))
+class ( HelperSym repr
       ) => CDBSem repr
 
 instance CDBSem SymbEx
 
-concdb :: CDBSem repr => repr (Process ())
+concdb :: CDBSem repr => repr (Process repr ())
 concdb  = do r  <- newRSing
              db <- spawn r (app database nil)
              app spawnmany (app client db)
 
-spawnmany :: CDBSem repr => repr (Process () -> Process ())
+spawnmany :: CDBSem repr => repr (Process repr () -> Process repr ())
 spawnmany  = lam $ \f ->
                do let fix_sm = lam $ \spawnmany -> lam $ \f ->
                                  do r <- newRSing
@@ -106,12 +78,13 @@ spawnmany  = lam $ \f ->
 type T_db = [(Int,Int)]
 
 f_database :: CDBSem repr
-           => repr ((T_db -> Process T_db) -> T_db -> Process T_db)
+           => repr ((T_db -> Process repr T_db) -> T_db -> Process repr T_db)
 f_database  = lam $ \database -> lam $ \l ->
                 do let allocHandler = lam $ \msg ->
                          do let key = proj1 msg
                                 p   = proj2 msg
-                            match (app2 lookup key l)
+                            lookup_res <- app2 lookup key l
+                            match lookup_res
                               (lam $ \_ -> do send p free_msg
                                               val <- recv_value
                                               ifte (eq (proj2 val) p)
@@ -122,19 +95,20 @@ f_database  = lam $ \database -> lam $ \l ->
                    let lookupHandler = lam $ \msg ->
                          do let key = proj1 msg
                                 p   = proj2 msg
-                            send p (app2 lookup key l)
+                            lookup_res <- app2 lookup key l
+                            send p lookup_res
                             app database l
                    msg :: repr ALV <- recv
                    match msg allocHandler $ lam $ \e1 ->
-                     match e1 lookupHandler fail
+                     match e1 lookupHandler reject
 
-database :: CDBSem repr => repr ([(Int,Int)] -> Process ())
+database :: CDBSem repr => repr ([(Int,Int)] -> Process repr ())
 database  = lam $ \l ->
               do app (fixM f_database) l
                  ret tt
 
 f_client :: CDBSem repr
-         => repr ((Pid RSing -> Process (Pid RSing)) -> Pid RSing -> Process (Pid RSing))
+         => repr ((Pid RSing -> Process repr (Pid RSing)) -> Pid RSing -> Process repr (Pid RSing))
 f_client  = lam $ \client -> lam $ \db ->
               do choice <- app any_bool tt
                  me     <- self
@@ -155,6 +129,9 @@ f_client  = lam $ \client -> lam $ \db ->
                                      (lam $ \x -> app client db)
                  ifte choice insert_h lookup_h
 
-client :: CDBSem repr => repr (Pid RSing -> Process ())
+client :: CDBSem repr => repr (Pid RSing -> Process repr ())
 client  = lam $ \db -> do app (fixM f_client) db
                           ret tt
+
+main :: IO ()
+main  = checkerMain $ exec concdb

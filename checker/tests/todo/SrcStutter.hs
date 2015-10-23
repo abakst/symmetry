@@ -8,13 +8,10 @@ module Main where
 import Prelude hiding ((>>=), (>>), fail, return, id)
 import Symmetry.Language
 import Symmetry.Verify
-import GHC.Num ((+))
-import Data.Either
 import Symmetry.SymbEx
 import SrcHelper
 
-class ( Symantics repr
-      , ArbPat repr ()
+class ( HelperSym repr
       ) => StutterSem repr
 
 instance StutterSem SymbEx

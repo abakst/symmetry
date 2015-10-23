@@ -182,6 +182,8 @@ instance ArbPat SymbEx String where
 instance ArbPat SymbEx (Pid RSing) where            
   arb = SE . return $ APid Nothing (Pid Nothing)
 
+instance ArbPat SymbEx [Int]
+
 -------------------------------------------------
 -- | An instance of Send t means that t can be sent in a message
 -------------------------------------------------

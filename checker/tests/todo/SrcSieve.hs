@@ -3,14 +3,13 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language FlexibleContexts #-}
 
-module SrcSieve where
+module Main where
 
-import Prelude (($), undefined, String, Int, fromInteger, negate)
-import Symmetry.Language.AST
-import Symmetry.Language.Syntax
-import Data.Either
-import SrcHelper
+import Prelude hiding ((>>=), (>>), fail, return, id, print, mod)
+import Symmetry.Language
+import Symmetry.Verify
 import Symmetry.SymbEx
+import SrcHelper
 
 type Msg = (Pid RSing) :+:  -- Poke ProcessId
            Int              -- Ans  Int
@@ -21,60 +20,44 @@ poke_msg  = lam $ \pid -> inl pid
 ans_msg :: SieveSem repr => repr (Int -> Msg)
 ans_msg  = lam $ \n -> inr n
 
-recv_poke :: SieveSem repr => repr (Process (Pid RSing))
+recv_poke :: SieveSem repr => repr (Process repr (Pid RSing))
 recv_poke  = do msg :: repr Msg <- recv
-                return $ match msg id fail
+                match msg id reject
 
-recv_ans :: SieveSem repr => repr (Process Int)
+recv_ans :: SieveSem repr => repr (Process repr Int)
 recv_ans  = do msg :: repr Msg <- recv
-               return $ match msg fail id
+               match msg reject id
 
-class ( Symantics repr
-      , SymRecv   repr Int
-      , SymSend   repr Int
-      , SymRecv   repr Msg
-      , SymSend   repr Msg
-      , SymMatch repr () () (() :+: ())
-      , SymMatch repr () () (Process (Int -> Boolean))
-      , SymMatch repr () () (Process T_f3)
-      , SymMatch repr () (Pid RSing) (Process T_f3)
-      , SymMatch repr (Pid RSing) Int (Pid RSing)
-      , SymMatch repr (Pid RSing) Int Int
-      , SymTypes repr () ()
-      , SymTypes repr () (Pid RSing)
-      , SymTypes repr (Int -> Boolean) (Pid RSing, T_ar3)
-      , SymTypes repr (Pid RSing) (Pid RSing)
-      , SymTypes repr (Pid RSing) Int
-      , SymTypes repr (Pid RSing) T_ar3
+class ( HelperSym repr
       ) => SieveSem repr
 
 instance SieveSem SymbEx
 
-sieve_main :: SieveSem repr => repr (Process ())
+sieve_main :: SieveSem repr => repr (Process repr ())
 sieve_main  = do me    <- self
                  r_gen <- newRSing
-                 gen   <- spawn r_gen (app counter (repI 2))
+                 gen   <- spawn r_gen (app counter (int 2))
                  r_s   <- newRSing
                  spawn r_s (app2 sieve gen me)
                  dump
 
-dump :: SieveSem repr => repr (Process ())
+dump :: SieveSem repr => repr (Process repr ())
 dump  = do let f_dump = lam $ \dump -> lam $ \_ ->
                           do x :: repr Int <- recv
                              app print x
                              app dump tt
            app (fixM f_dump) tt
 
-counter :: SieveSem repr => repr (Int -> Process ())
+counter :: SieveSem repr => repr (Int -> Process repr ())
 counter  = lam $ \n ->
              do let f_counter = lam $ \counter -> lam $ \n ->
                                   do poke_from <- recv_poke
                                      send poke_from (app ans_msg n)
-                                     app counter (plus n (repI 1))
+                                     app counter (plus n (int 1))
                 app (fixM f_counter) n
                 ret tt
 
-sieve :: SieveSem repr => repr (Pid RSing -> Pid RSing -> Process ())
+sieve :: SieveSem repr => repr (Pid RSing -> Pid RSing -> Process repr ())
 sieve  = lam $ \input -> lam $ \output ->
            do let f_sieve = lam $ \sieve -> lam $ \arg ->
                               do let input  = proj1 arg
@@ -93,7 +76,7 @@ type T_ar3 = () :+: Pid RSing
 type T_f3  = ((Int->Boolean),(Pid RSing,T_ar3))
 
 f_filter :: SieveSem repr
-         => repr ((T_f3 -> Process T_f3) -> T_f3 -> Process T_f3)
+         => repr ((T_f3 -> Process repr T_f3) -> T_f3 -> Process repr T_f3)
 f_filter  = lam $ \filter -> lam $ \arg ->
               do let test     = proj1 arg
                      input    = proj1 $ proj2 arg
@@ -112,11 +95,13 @@ f_filter  = lam $ \filter -> lam $ \arg ->
                                app filter $ pair3 test input (inl tt)))
 
 filter2 :: SieveSem repr
-        => repr ((Int->Boolean) -> Pid RSing -> Process ())
+        => repr ((Int->Boolean) -> Pid RSing -> Process repr ())
 filter2  = lam $ \test -> lam $ \input ->
              do app (fixM f_filter) $ pair3 test input (inl tt)
                 ret tt
 
 divisible_by :: SieveSem repr => repr (Int -> Int -> Boolean)
-divisible_by = lam $ \x -> lam $ \y -> ifte (eq (app2 mod y x) (repI 0)) (inl tt) (inr tt)
+divisible_by = lam $ \x -> lam $ \y -> ifte (eq (app2 mod y x) (int 0)) (inl tt) (inr tt)
 
+main :: IO ()
+main  = checkerMain $ exec sieve_main

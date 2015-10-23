@@ -9,5 +9,5 @@
 | howait        | ✓     | ×       | ×   | AbsValToIL (Int -> Process Int)        |
 | concdb        | ✓     | ×       | ×   | AbsValToIL (Int, Pid RSing)            |
 | sieve         | ✓     | ×       | ×   | AbsValToIL (Int -> Boolean)            |
-| reslock       | ×     |         |     |                                        |
+| reslock       | ✓     |         |     |                                        |
 | finite leader | ×     |         |     |                                        |

@@ -3,11 +3,11 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language FlexibleContexts #-}
 
-module SrcParikh where
+module Main where
 
-import Prelude (($), undefined, String)
-import Symmetry.Language.AST
-import Symmetry.Language.Syntax
+import Prelude hiding ((>>=), (>>), fail, return, id)
+import Symmetry.Language
+import Symmetry.Verify
 import Data.Either
 import SrcHelper
 import Symmetry.SymbEx
@@ -18,11 +18,7 @@ type Msg = (Pid RSing,String) :+: -- Init (Pid RSing) String
            (() :+:                -- Ok
             () )))                -- Bye
 
-class ( Symantics repr
-      , ArbPat repr String
-      , ArbPat repr (Pid RSing, String)
-      , ArbPat repr (Pid RSing)
-      , ArbPat repr ()
+class ( HelperSym repr
       ) => ParikhSem repr
 
 instance ParikhSem SymbEx
@@ -62,15 +58,15 @@ recv_bye  = do (msg::repr Msg) <- recv
 bye_msg :: ParikhSem repr => repr Msg
 bye_msg  = inr $ inr $ inr $ inr tt
 
-parikh_main :: ParikhSem repr => repr ()
-parikh_main  = exec $ do serverRole <- newRSing
-                         s  <- spawn serverRole server
-                         me <- self
-                         send s $ (app (app init_msg me) (str "a"))
-                         recv_ok
-                         send s (app set_msg (str "b"))
-                         send s bye_msg
-                         return tt
+p_main :: ParikhSem repr => repr ()
+p_main  = exec $ do serverRole <- newRSing
+                    s  <- spawn serverRole server
+                    me <- self
+                    send s $ (app (app init_msg me) (str "a"))
+                    recv_ok
+                    send s (app set_msg (str "b"))
+                    send s bye_msg
+                    return tt
 
 server :: ParikhSem repr => repr (Process repr ())
 server  = do init_msg <- recv_init
@@ -93,3 +89,6 @@ do_serve  = lam $ \s ->
                        match5 msg init_h set_h get_h ok_h bye_h
      app (fixM helper) s
      ret tt
+
+main :: IO ()
+main  = checkerMain p_main

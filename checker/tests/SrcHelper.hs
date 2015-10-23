@@ -4,11 +4,21 @@
 {-# LANGUAGE RebindableSyntax #-}
 module SrcHelper where
 
-import Symmetry.Language.AST
-import Symmetry.Language.Syntax
+import Symmetry.Language
+import Symmetry.SymbEx
 
 import Prelude hiding ((>>=), (>>), fail, return)
 import Data.Typeable
+
+class ( Symantics repr
+      , ArbPat repr ()
+      , ArbPat repr Int
+      , ArbPat repr String
+      , ArbPat repr (Pid RSing)
+      , ArbPat repr [Int]
+      ) => HelperSym repr
+
+instance HelperSym SymbEx
 
 any_bool :: Symantics repr => repr (() -> Process repr Boolean)
 any_bool  = lam $ \_ -> ret (bool (Left ()))
@@ -126,7 +136,7 @@ compare :: Symantics repr => repr (a -> a -> (Either () (Either () ())))
 compare  = undefined
 
 ret_tt  :: Symantics repr => repr (Process repr a) -> repr (Process repr ())
-ret_tt p = p Symmetry.Language.Syntax.>> ret tt
+ret_tt p = p >> ret tt
 
 pair3 :: ( Symantics repr
          )
