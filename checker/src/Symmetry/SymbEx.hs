@@ -395,7 +395,10 @@ symBool b
 -------------------------------------------------
 symPlus :: SymbEx Int -> SymbEx Int -> SymbEx Int
 -------------------------------------------------
-symPlus _ _ = SE . return $ AInt Nothing
+symPlus _ _ = arb
+
+symNeg :: SymbEx Int -> SymbEx Int
+symNeg _ = arb
 
 -------------------------------------------------
 symEq, symGt, symLt :: Ord a
@@ -403,29 +406,22 @@ symEq, symGt, symLt :: Ord a
                     -> SymbEx a
                     -> SymbEx Boolean
 -------------------------------------------------
-symEq _ _  = nondet
-symGt _ _  = nondet
-symLt _ _  = nondet
+symEq _ _  = arb
+symGt _ _  = arb
+symLt _ _  = arb
 
 -------------------------------------------------
 symNot :: SymbEx Boolean -> SymbEx Boolean
 -------------------------------------------------
-symNot _   = nondet
+symNot _   = arb
 
 -------------------------------------------------
 symAnd, symOr :: SymbEx Boolean
               -> SymbEx Boolean
               -> SymbEx Boolean
 -------------------------------------------------
-symAnd _ _ = nondet
-symOr  _ _ = nondet
-
--------------------------------------------------
-symNonDet :: SymbEx Boolean
--------------------------------------------------
-symNonDet
-  = SE . return $ ASum Nothing (Just $ AUnit Nothing)
-                               (Just $ AUnit Nothing)
+symAnd _ _ = arb
+symOr  _ _ = arb
 
 -------------------------------------------------
 symLam :: (SymbEx a -> SymbEx b) -> SymbEx (a -> b)
@@ -654,6 +650,7 @@ instance Symantics SymbEx where
 
   -- Base Type Operations            
   plus      = symPlus
+  neg       = symNeg
   eq        = symEq
   gt        = symGt
   lt        = symLt
@@ -666,7 +663,6 @@ instance Symantics SymbEx where
   cons      = symCons
   matchList = symMatchList
 
-  nondet    = symNonDet
   lam       = symLam
   app       = symApp
   self      = symSelf

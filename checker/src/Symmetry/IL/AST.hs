@@ -425,6 +425,12 @@ instance Pretty (Stmt a) where
       (indent 2 $ pretty s) $$
       rbrace
 
+  pretty (SVar (LV v) _)
+    = text "goto" <+> pretty v
+
+  pretty (SLoop (LV v) s _)
+    = pretty v <> colon <+> parens (pretty s)
+
   pretty (SCase l sl sr a)
     = text "match" <+> pretty l <+> text "with" $$
       indent 2
