@@ -40,6 +40,28 @@ To run the verification, run:
 $ ./Prog --verify
 ~~~~
 
+## What's going on
+
+Running `./Prog --verify` as described above
+
+  1. creates a Promela abstraction of the program in `Prog` in `$CWD/.symcheck/out.pml`;
+  2. compiles a verifier `pan` from `out.pml`;
+  3. runs `./pan`.
+
+If the verifier (`pan`) finds an error trace, this is dumped in `$CWD/.symcheck/out.pml.trail`.
+
+To replay the error trace, invoke the verifier
+
+~~~~~
+$ ./pan -r [out.pml.trail]
+~~~~~
+
+Or use the "friendlier `iSpin`:
+
+~~~~
+$ ispin.tcl out.pml
+~~~~
+
 
 # Useful Model-Checking Papers
 
