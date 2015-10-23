@@ -1,1 +1,17 @@
 *~
+nohup.out
+**/.symcheck
+
+# benchmark executables
+SrcConcDB
+SrcFiniteLeader
+SrcFirewall
+SrcHowait
+SrcParikh
+SrcPipe
+SrcReslock
+SrcRing
+SrcSieve
+SrcStateFactory
+SrcStutter
+SrcStutter
