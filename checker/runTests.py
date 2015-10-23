@@ -11,7 +11,7 @@ savedPath = os.getcwd()
 def get_config():
     d = {}
     project_dir = os.path.dirname(os.path.realpath(__file__))
-    isStack = os.path.isfile(os.path.join(project_dir, "stack.yaml"))
+    isStack = os.path.isdir(os.path.join(project_dir, ".stack-work"))
     if isStack:
         runghc = ["stack", "runghc", "--"]
     else:
@@ -43,10 +43,6 @@ def runTestsInDir(dir, expect):
 
 def install_lib():
     if config["isStack"]:
-        rc = subprocess.call(["stack", "clean"])
-        if rc != 0:
-            print "\033[1;31mERROR: 'stack clean' failed\033[0;0m"
-            sys.exit(1)
         rc = subprocess.call(["stack", "install"])
         if rc != 0:
             print "\033[1;31mERROR: 'stack install' failed\033[0;0m"
