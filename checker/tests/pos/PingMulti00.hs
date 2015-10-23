@@ -11,6 +11,10 @@ import Prelude hiding ((>>=), (>>), fail, return)
 import Symmetry.Language
 import Symmetry.Verify
 
+fooDSL :: DSL repr => repr (a -> b -> c -> d)
+fooDSL = lam $ \x -> lam $ \y -> lam $ \z ->
+           undefined
+
 type Message repr = repr (Pid RSing :+: Pid RSing)
 ping :: (DSL repr) => repr (Pid RSing) -> Message repr
 ping = inl
