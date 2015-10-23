@@ -41,6 +41,7 @@ class Symantics repr where
   bool   :: Boolean -> repr Boolean
   nondet :: repr Boolean
 
+  neg    :: repr Int -> repr Int
   plus   :: repr Int -> repr Int -> repr Int
 
   eq   :: (Ord a) => repr a -> repr a -> repr Boolean

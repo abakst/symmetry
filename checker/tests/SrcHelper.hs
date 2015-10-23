@@ -7,7 +7,7 @@ module SrcHelper where
 import Symmetry.Language
 import Symmetry.SymbEx
 
-import Prelude hiding ((>>=), (>>), fail, return)
+import Prelude hiding ((>>=), (>>), fail, return, id, mod)
 import Data.Typeable
 
 class ( Symantics repr
@@ -86,10 +86,13 @@ lookup  = lam $ \k -> lam $ \m ->
                ret $ proj2 $ proj2 r
 
 print :: Symantics repr => repr (a -> Process repr ())
-print  = undefined
+print  = lam $ \_ -> ret tt
 
-mod :: Symantics repr => repr (Int -> Int -> Int)
-mod  = undefined
+mod :: ( Symantics repr
+       , ArbPat repr ()
+       ) => repr (Int -> Int -> Int)
+mod  = lam $ \a -> lam $ \b ->
+         ifte (lt a b) a (app2 mod (plus a (neg b)) b)
 
 match3 :: ( Symantics repr
           , Typeable a, Typeable b, Typeable c
@@ -132,11 +135,13 @@ match5 msg f1 f2 f3 f4 f5 = match msg f1 $ lam $ \e1 ->
                                match e2 f3 $ lam $ \e3 ->
                                  match e3 f4 f5
 
-compare :: Symantics repr => repr (a -> a -> (Either () (Either () ())))
-compare  = undefined
-
-ret_tt  :: Symantics repr => repr (Process repr a) -> repr (Process repr ())
-ret_tt p = p >> ret tt
+compare :: ( Symantics repr
+           , ArbPat repr ()
+           , Ord a
+           )
+        => repr (a -> a -> (Either () (Either () ())))
+compare  = lam $ \x -> lam $ \y -> ifte (lt x y) (inl tt)
+                                     (ifte (eq x y) (inr $ inl tt) (inr $ inr tt))
 
 pair3 :: ( Symantics repr
          )

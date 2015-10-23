@@ -50,11 +50,11 @@ finite_leader  = do testtnode
 testtnode :: FLSem repr => repr (Process repr ECM)
 testtnode = app start (lam $ \out -> lam $ \notary -> lam $ \x -> app3 tnode out notary x)
 
-testsnode :: FLSem repr => repr (Process repr ECM)
-testsnode = app start (lam $ \out -> lam $ \notary -> lam $ \x -> app3 snode out notary x)
+-- testsnode :: FLSem repr => repr (Process repr ECM)
+-- testsnode = app start (lam $ \out -> lam $ \notary -> lam $ \x -> app3 snode out notary x)
 
-testdnode :: FLSem repr => repr (Process repr ECM)
-testdnode = app start (lam $ \out -> lam $ \notary -> lam $ \x -> app3 dnode out notary x)
+-- testdnode :: FLSem repr => repr (Process repr ECM)
+-- testdnode = app start (lam $ \out -> lam $ \notary -> lam $ \x -> app3 dnode out notary x)
 
 type FunT repr = Pid RSing -> Pid RSing -> MyDat -> Process repr ()
 
@@ -88,55 +88,71 @@ ring :: FLSem repr
      => repr (FunT repr -> [MyDat] -> Pid RSing -> Pid RSing -> Pid RSing
               -> Process repr (Pid RSing))
 ring  = lam $ \fun -> lam $ \l -> lam $ \notary -> lam $ \pstop -> lam $ \pprev ->
-          matchList l
-            (lam $ \_ -> do send pstop (app out_msg pprev)
-                            ret pstop)
-            (lam $ \ht -> do r <- newRSing
-                             pnew <- spawn r (app3 fun pprev notary (proj1 ht))
-                             app5 ring fun (proj2 ht) notary pstop pnew)
+          do let fp = lam $ \ring -> lam $ \arg ->
+                        do let fun      = proj1 arg
+                               l        = proj1 $ proj2 arg
+                               notary   = proj1 $ proj2 $ proj2 arg
+                               pstop    = proj1 $ proj2 $ proj2 $ proj2 arg
+                               pprev    = proj2 $ proj2 $ proj2 $ proj2 arg
+                           matchList l
+                             (lam $ \_ ->
+                                do send pstop (app out_msg pprev)
+                                   ret arg)
+                             (lam $ \ht ->
+                                do r <- newRSing
+                                   pnew <- spawn r (app3 fun pprev notary (proj1 ht))
+                                   app ring $ pair5 fun (proj2 ht) notary pstop pnew)
+             r <- app (fixM fp) (pair5 fun l notary pstop pprev)
+             ret $ proj1 $ proj2 $ proj2 $ proj2 r
 
 -- first alg
 
 tnode :: FLSem repr => repr (Pid RSing -> Pid RSing -> MyDat -> Process repr ())
 tnode  = lam $ \out -> lam $ \notary -> lam $ \d ->
-           do send out d
-              app3 tnodeB out notary d
+           do let tb = lam $ \tnodeB -> lam $ \arg ->
+                         do let out = proj1 arg
+                                notary = proj1 $ proj2 arg
+                                d = proj2 $ proj2 arg
+                            e :: repr MyDat <- recv
+                            match3 (app2 compare e d)
+                              (lam $ \_ -> app tnodeB $ pair3 out notary d)
+                              (lam $ \_ -> do send notary elected_msg
+                                              ret arg)
+                              (lam $ \_ -> do send out e
+                                              app tnodeB $ pair3 out notary e)
 
-tnodeB :: FLSem repr => repr (Pid RSing -> Pid RSing -> MyDat -> Process repr ())
-tnodeB  = lam $ \out -> lam $ \notary -> lam $ \d ->
-            do e :: repr MyDat <- recv
-               match3 (app2 compare e d)
-                 (lam $ \_ -> app3 tnodeB out notary d)
-                 (lam $ \_ -> send notary elected_msg)
-                 (lam $ \_ -> app3 tnode out notary e)
+              send out d
+              app (fixM tb) (pair3 out notary d)
+              ret tt
 
-snode :: FLSem repr => repr (Pid RSing -> Pid RSing -> MyDat -> Process repr ())
-snode  = lam $ \out -> lam $ \notary -> lam $ \d ->
-           do send out d
-              e :: repr MyDat <- recv
-              match3 (app2 compare e d)
-                (lam $ \_ -> app c out)
-                (lam $ \_ -> send notary elected_msg)
-                (lam $ \_ -> app3 snode out notary e)
 
-c :: FLSem repr => repr (Pid RSing -> Process repr ())
-c  = lam $ \out -> do v :: repr MyDat <- recv
-                      send out v
-                      app c out
+-- snode :: FLSem repr => repr (Pid RSing -> Pid RSing -> MyDat -> Process repr ())
+-- snode  = lam $ \out -> lam $ \notary -> lam $ \d ->
+--            do send out d
+--               e :: repr MyDat <- recv
+--               match3 (app2 compare e d)
+--                 (lam $ \_ -> app c out)
+--                 (lam $ \_ -> send notary elected_msg)
+--                 (lam $ \_ -> app3 snode out notary e)
 
-dnode :: FLSem repr => repr (Pid RSing -> Pid RSing -> MyDat -> Process repr ())
-dnode  = lam $ \out -> lam $ \notary -> lam $ \d ->
-           do send out d
-              e :: repr MyDat <- recv
-              let handler = lam $ \_ -> do send out e
-                                           f :: repr MyDat <- recv
-                                           ifte (and (gt e d) (gt e f))
-                                             (app3 dnode out notary e)
-                                             (app c out)
-               in match3 (app2 compare e d)
-                    handler
-                    (lam $ \_ -> send notary elected_msg)
-                    handler
+-- c :: FLSem repr => repr (Pid RSing -> Process repr ())
+-- c  = lam $ \out -> do v :: repr MyDat <- recv
+--                       send out v
+--                       app c out
+
+-- dnode :: FLSem repr => repr (Pid RSing -> Pid RSing -> MyDat -> Process repr ())
+-- dnode  = lam $ \out -> lam $ \notary -> lam $ \d ->
+--            do send out d
+--               e :: repr MyDat <- recv
+--               let handler = lam $ \_ -> do send out e
+--                                            f :: repr MyDat <- recv
+--                                            ifte (and (gt e d) (gt e f))
+--                                              (app3 dnode out notary e)
+--                                              (app c out)
+--                in match3 (app2 compare e d)
+--                     handler
+--                     (lam $ \_ -> send notary elected_msg)
+--                     handler
 
 main :: IO ()
 main  = checkerMain $ exec finite_leader

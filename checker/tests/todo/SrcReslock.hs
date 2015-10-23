@@ -74,22 +74,33 @@ res_free  = lam $ \res -> do p <- recv_lock
                              send p (app ack_msg me)
                              app2 res_locked res p
 
+type T_rl = (Res, Pid RSing)
+f_res_locked :: ReslockSem repr
+             => repr ((T_rl -> Process repr T_rl) -> T_rl -> Process repr T_rl)
+f_res_locked  = lam $ \res_locked -> lam $ \arg ->
+                  do let res = proj1 arg
+                         p   = proj2 arg
+                         req_h = lam $ \req -> -- req :: Req p cmd
+                                   do let p      = proj1 req
+                                          cmd    = proj2 req
+                                          res'   = app3 query_res res p cmd -- res' :: (newres, r)
+                                          newres = proj1 res'
+                                          r      = proj2 res'
+                                          ok_h   = lam $ \_ -> app res_locked $ pair newres p
+                                          rep_h  = lam $ \a ->
+                                                     do me <- self
+                                                        send p (app2 ans_msg me a)
+                                                        app res_locked $ pair newres p
+                                      match r ok_h rep_h
+                         unl_h = lam $ \p -> do app res_free res
+                                                ret arg
+                     msg :: repr Msg <- recv
+                     match4 msg reject reject req_h unl_h
+
 res_locked :: ReslockSem repr => repr (Res -> Pid RSing -> Process repr ())
 res_locked  = lam $ \res -> lam $ \p ->
-                let req_h = lam $ \req -> -- req :: Req p cmd
-                        let p      = proj1 req
-                            cmd    = proj2 req
-                            res'   = app3 query_res res p cmd -- res' :: (newres, r)
-                            newres = proj1 res'
-                            r      = proj2 res'
-                            ok_h   = lam $ \_ -> app2 res_locked newres p
-                            rep_h  = lam $ \a -> do me <- self
-                                                    send p (app2 ans_msg me a)
-                                                    app2 res_locked newres p
-                         in match r ok_h rep_h
-                    unl_h = lam $ \p -> app res_free res
-                 in do msg :: repr Msg <- recv
-                       match4 msg reject reject req_h unl_h
+                do app (fixM f_res_locked) (pair res p)
+                   ret tt
 
 -- RES API
 
@@ -155,11 +166,16 @@ reslock_main  = do c <- cell_start
 
 add_to_cell :: ReslockSem repr => repr (Pid RSing -> Int -> Process repr ())
 add_to_cell  = lam $ \c -> lam $ \n ->
-                 ifte (eq n (int 0))
-                   (ret tt)
-                   (do r <- newRSing
-                       spawn r (app inc c)
-                       app2 add_to_cell c n)
+                 do let fp = lam $ \add_to_cell -> lam $ \arg ->
+                               let c = proj1 arg
+                                   n = proj2 arg
+                                in ifte (eq n (int 0))
+                                     (ret arg)
+                                     (do r <- newRSing
+                                         spawn r (app inc c)
+                                         app add_to_cell (pair c n))
+                    app (fixM fp) (pair c n)
+                    ret tt
 
 main :: IO ()
 main  = checkerMain $ exec reslock_main
