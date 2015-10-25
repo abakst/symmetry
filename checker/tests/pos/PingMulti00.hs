@@ -42,4 +42,4 @@ mainProc = lam $ \n -> exec $ do r <- newRMulti
                                  app (app master r) n
 
 main :: IO ()
-main = checkerMain (int 10 |> mainProc)
+main = checkerMain (arb |> mainProc)

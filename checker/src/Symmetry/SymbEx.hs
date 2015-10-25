@@ -291,13 +291,13 @@ sendToIL p m = do
   let cs = absToIL m
   -- (t, cs) <- unPut $ put (SE $ return m)
   case IL.lookupType g t of
-    Just i  -> return $ IL.SSend (pidAbsValToIL p) (mts i g cs) ()
+    Just i  -> return $ IL.SSend (pidAbsValToIL p) [(i, mts i g cs, skip)] ()
     Nothing -> do i <- freshTId
                   let g' = M.insert i t g
                   modify $ \s -> s { tyenv = g' }
-                  return $ IL.SSend (pidAbsValToIL p) (mts i g' cs) ()
+                  return $ IL.SSend (pidAbsValToIL p) [(i, mts i g' cs, skip)] ()
   where
-    mts i g cs = [ (i, fromMaybe (error (show c)) $ IL.lookupConstr (g M.! i) c, c, skip) | c <- cs ]
+    mts i g cs = [ (fromMaybe (error (show c)) $ IL.lookupConstr (g M.! i) c, c) | c <- cs ]
 
 recvToIL :: (Typeable a) => AbsVal a -> SymbExM (IL.Stmt ())
 recvToIL m = do
@@ -305,13 +305,13 @@ recvToIL m = do
   let t  = absToILType m
   let cs = absToIL m
   case IL.lookupType g t of
-    Just i  -> return $ IL.SRecv (mts i g cs) ()
+    Just i  -> return $ IL.SRecv [(i, (mts i g cs), skip)] ()
     Nothing -> do i <- freshTId
                   let g' = M.insert i t g
                   modify $ \s -> s { tyenv = g' }
-                  return $ IL.SRecv (mts i g' cs) ()
+                  return $ IL.SRecv [(i, mts i g' cs, skip)] ()
   where
-    mts i g cs = [ (i, fromMaybe (error (show c)) $ IL.lookupConstr (g M.! i) c, c, skip) | c <- cs ]
+    mts i g cs = [ (fromMaybe (error (show c)) $ IL.lookupConstr (g M.! i) c, c) | c <- cs ]
 
 skip :: IL.Stmt ()
 skip = IL.SSkip ()
@@ -322,10 +322,10 @@ skip = IL.SSkip ()
 seqStmt :: IL.Stmt () -> IL.Stmt () -> IL.Stmt ()
 
 seqStmt (IL.SSend p mts ()) s
-  = IL.SSend p (map (\(i, c, t, s') -> (i, c, t, seqStmt s' s)) mts) ()
+  = IL.SSend p (map (\(i, cs, s') -> (i, cs, seqStmt s' s)) mts) ()
 
 seqStmt (IL.SRecv mts ()) s
-  = IL.SRecv (map (\(i, c, t, s') -> (i, c, t, seqStmt s' s)) mts) ()
+  = IL.SRecv (map (\(i, cs, s') -> (i, cs, seqStmt s' s)) mts) ()
 
 seqStmt (IL.SSkip _) s = s
 seqStmt s (IL.SSkip _) = s

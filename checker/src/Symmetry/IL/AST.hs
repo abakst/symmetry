@@ -96,8 +96,8 @@ data Stmt a = SSkip a
             {- A Block should probably only be a sequence of
                SIters, SChoose ... -}
             | SBlock [Stmt a] a
-            | SSend Pid [(TId, CId, MConstr, Stmt a)] a
-            | SRecv     [(TId, CId, MConstr, Stmt a)] a
+            | SSend Pid [(TId, [(CId, MConstr)], Stmt a)] a
+            | SRecv     [(TId, [(CId, MConstr)], Stmt a)] a
             | SIter Var Set (Stmt a) a
             | SLoop LVar (Stmt a) a         {-used to create a loop with the given label-}
             | SChoose Var Set (Stmt a) a
@@ -192,7 +192,7 @@ unfoldAbs c@(Config {cProcs = ps})
 instStmt :: [Pid] -> Stmt a -> Stmt a
 -- Interesting Cases
 instStmt dom (SRecv mts a)
-  = SRecv (concatMap (instMS dom) mts) a
+  = SRecv   (concatMap (instMS dom) mts) a
 instStmt dom (SSend p mts a)
   = SSend p (concatMap (instMS dom) mts) a
 -- Not so interesting cases:
@@ -213,15 +213,18 @@ instStmt _ (SVar v a)
 instStmt _ (SDie a)
   = SDie a
 
-instMS :: [Pid] -> (TId, CId, MConstr, Stmt a) -> [(TId, CId, MConstr, Stmt a)]
-instMS dom (t, c, m, s)
-  = foldl' doAllSubs [(t,c,m,s)] xs
+instMS :: [Pid] -> (TId, [(CId, MConstr)], Stmt a) -> [(TId, [(CId, MConstr)], Stmt a)]
+instMS dom (t, cs, s)
+  = foldl' doAllSubs [(t, cs, s)] xs
   where
-    doAllSubs :: [(TId, CId, MConstr, Stmt a)] -> Var -> [(TId, CId, MConstr, Stmt a)]
-    doAllSubs ms x = concat [ map (substMS i) ms | i <- subs x ]
+    doAllSubs :: [(TId, [(CId, MConstr)], Stmt a)] -> Var -> [(TId, [(CId, MConstr)], Stmt a)]
+    doAllSubs ms x
+      = concat [ map (substMS i) ms | i <- subs x ]
+
+    xs = nub $ concat [ pvars c | (_, c) <- cs ]
+
     subs :: Var -> [Subst]
     subs x = [ [(x, q)] | q <- dom ]
-    xs = pvars m
 
 pvars :: MConstr -> [Var]
 pvars (MTApp _ xs)   = [v | PVar v <- xs]
@@ -260,8 +263,9 @@ substCstr sub (MCaseL l c)  = MCaseL l $ substCstr sub c
 substCstr sub (MCaseR l c)  = MCaseR l $ substCstr sub c
 substCstr sub (MTProd c c') = MTProd (substCstr sub c) (substCstr sub c')
 
-substMS :: Subst -> (TId, CId, MConstr, Stmt a) -> (TId, CId, MConstr, Stmt a)
-substMS sub (ti,cj,c,s) = (ti, cj, substCstr sub c, subst sub s)
+substMS :: Subst -> (TId, [(CId, MConstr)], Stmt a) -> (TId, [(CId, MConstr)], Stmt a)
+substMS sub (ti,cs,s)
+  = (ti, [ (ci, substCstr sub m) | (ci, m) <- cs ], subst sub s)
 
 substPid :: Subst -> Pid -> Pid
 substPid s p@(PVar v) = fromMaybe p $ lookup v s
@@ -282,24 +286,29 @@ annot (SLoop _ _ a)     = a
 annot (SCase _ _ _ a)   = a
 annot x                 = error ("annot: TBD " ++ show x)
 
-instance Functor ((,,,) a b c) where
-  fmap f (x,y,z,a) = (x,y,z,f a)
+instance Functor ((,,) a b) where
+  fmap f (x,y,a) = (x,y,f a)
 
-instance Foldable ((,,,) a b c) where
-  foldMap f (_,_,_,y) = f y
-  foldr f z (_,_,_,y) = f y z
+instance Foldable ((,,) a b) where
+  foldMap f (_,_,y) = f y
+  foldr f z (_,_,y) = f y z
 
-instance Traversable ((,,,) a b c) where
-  traverse f (x,y,z,a)= (,,,) x y z <$> f a
+instance Traversable ((,,) a b) where
+  traverse f (x,y,a)= (,,) x y <$> f a
+
+traversePat :: Applicative f => (a -> f b)
+            -> (TId, [(CId, MConstr)], Stmt a)
+            -> f (TId, [(CId, MConstr)], Stmt b)
+traversePat f pat = traverse (traverse f) pat
 
 -- | Typeclass tomfoolery
 instance Traversable Stmt where
   traverse f (SSkip a)
     = SSkip <$> f a
   traverse f (SSend p ms a)
-    = flip (SSend p) <$> f a <*> traverse (traverse (traverse f)) ms
+    = flip (SSend p) <$> f a <*> traverse (traversePat f) ms
   traverse f (SRecv ms a)
-    = flip SRecv <$> f a <*> traverse (traverse (traverse f)) ms
+    = flip SRecv <$> f a <*> traverse (traversePat f) ms
   traverse f (SIter v s ss a)
     = flip (SIter v s) <$> f a <*> traverse f ss
   traverse f (SLoop v ss a)
@@ -328,8 +337,8 @@ joinMaps = M.unionWith (++)
 addNext :: Int -> [a] -> M.Map Int [a] -> M.Map Int [a]
 addNext i is = M.alter (fmap (++is)) i
 
-stmt :: (TId, CId, MConstr, Stmt a) -> Stmt a
-stmt (_,_,_,s) = s
+stmt :: (TId, [(CId, MConstr)], Stmt a) -> Stmt a
+stmt (_,_,s) = s
 
 lastStmts :: Stmt a -> [Stmt a]
 lastStmts s@(SSkip _)       = [s]
@@ -345,9 +354,11 @@ lastStmts s@(SDie a)        = [s]
 
 nextStmts :: Stmt Int -> M.Map Int [Int]
 nextStmts (SSend _ ms i)
-  = foldl (\m -> joinMaps m . nextStmts) (M.fromList [(i, map (annot . stmt) ms)])$ map stmt ms
+  = foldl (\m -> joinMaps m . nextStmts)
+          (M.fromList [(i, map (annot . stmt) ms)])$ map stmt ms
 nextStmts (SRecv ms i)
-  = foldl (\m -> joinMaps m . nextStmts) (M.fromList [(i, map (annot . stmt) ms)])$ map stmt ms
+  = foldl (\m -> joinMaps m . nextStmts)
+          (M.fromList [(i, map (annot . stmt) ms)])$ map stmt ms
 nextStmts (SIter _ _ s i)
   = M.fromList ((i, [annot s]):[(annot j, [i]) | j <- lastStmts s])  `joinMaps` nextStmts s
 nextStmts (SLoop v s i)
@@ -415,10 +426,10 @@ instance Pretty (Stmt a) where
     = text "<skip>"
 
   pretty (SSend p tcms _)
-    = text "send" <+> pretty p <+> align (vcat (map doOneTCMS tcms))
+    = text "send" <+> pretty p <+> align (doManyTCMS tcms)
 
   pretty (SRecv tcms _)    
-    = text "recv" <+> align (vcat (map doOneTCMS tcms))
+    = text "recv" <+> align (doManyTCMS tcms)
 
   pretty (SIter x xs s a)
     = text "for" <+> parens (pretty x <+> colon <+> pretty xs) <+> lbrace $$
@@ -450,13 +461,16 @@ instance Pretty (Config a) where
       go (pid, s) = text "Proc" <+> parens (pretty pid) <> colon <$$>
                     indent 2 (pretty s)
 
-doManyTCMS :: [(TId, CId, MConstr, Stmt a)] -> Doc
+doManyTCMS :: [(TId, [(CId, MConstr)], Stmt a)] -> Doc
 doManyTCMS
   = align . vcat . map doOneTCMS      
 
-doOneTCMS :: (TId, CId, MConstr, Stmt a) -> Doc
-doOneTCMS (tid, cid, m, s)
-  = braces (text "C" <> int cid <>
-            parens (pretty m) <>
-            colon <> text "T" <> int tid <+>
-            text "->" <+> (align (pretty s)))
+doOneTCMS :: (TId, [(CId, MConstr)], Stmt a) -> Doc
+doOneTCMS (tid, cms, s)
+  = text "T" <> int tid <> text "@" <>
+    braces ((hcat (punctuate punc (map doCMS cms))) <+>
+            text "->" <+> align (pretty s))
+  where
+    punc = space <> text "&" <> space
+    doCMS (ci, m)
+      = text "C" <> int ci <> parens (pretty m) 

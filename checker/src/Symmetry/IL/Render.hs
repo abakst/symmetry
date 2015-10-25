@@ -225,19 +225,23 @@ renderStmt p s                  = renderStmtAbs  p s
 --   where
 --     ss = listify (\(_::Stmt Int) -> True) s
         
-sendMsg :: Pid -> Pid -> (TId, CId, MConstr) -> RenderM
-sendMsg p q (t,c,m)
+sendMsg :: Pid -> Pid -> (TId, [(CId, MConstr)]) -> RenderM
+sendMsg p q (t,cms)
   = do f <- asks chanMap
-       return $ f p q (t,c,m) <> text "!" <> renderSendMsg m
+       return . ifs $ map (send1 f) cms
+  where
+    send1 f (c,m) = f p q (t,c,m) <> text "!" <> renderSendMsg m
 
-recvMsg :: Pid -> Pid -> (TId, CId, MConstr) -> RenderM 
-recvMsg p q (t,c,m)
+recvMsg :: Pid -> Pid -> (TId, [(CId, MConstr)]) -> RenderM 
+recvMsg p q (t,cms)
   = do f <- asks chanMap
-       return $ text "__RECV" <> tupled [f p q (t,c,m) , renderRecvMsg m]
+       return . ifs $ map (recv1 f) cms
+  where
+    recv1 f (c,m) = text "__RECV" <> tupled [f p q (t,c,m) , renderRecvMsg m]
                    
 renderStmtConc :: Pid -> Stmt Int -> RenderM
-renderStmtConc me (SSend p [(t,c,m,s)] _)
-  = do send <- sendMsg me p (t,c,m)
+renderStmtConc me (SSend p [(t,cms,s)] _)
+  = do send <- sendMsg me p (t,cms)
        d <- renderStmt me s
        return $ align (send <> semi <$> d)
 
@@ -245,25 +249,26 @@ renderStmtConc me (SSend p ms _)
   = do ds <- mapM go ms
        return $ ifs ds
   where 
-    go (t, c, m, SSkip _) = sendMsg me p (t,c,m)
-    go (t, c, m, s)       = do send <- sendMsg me p (t,c,m)
-                               d    <- renderStmt me s
-                               return $ block [send, d]
+    go (t, cms, SSkip _) = sendMsg me p (t,cms)
+    go (t, cms, s)       = do send <- sendMsg me p (t,cms)
+                              d   <- renderStmt me s
+                              return $ block [send, d]
       
-renderStmtConc me (SRecv [(t,c,m,s)] _)
-  = do pm <- asks pidMap
-       d  <- renderStmt me s
-       rs <- mapM go $ M.keys pm
-       return $ align (ifs rs <> semi <$> d)
-  where
-    go p     = recvMsg p me (t,c,m)
+-- renderStmtConc me (SRecv [(t,c,m,s)] _)
+-- renderStmtConc me (SRecv [(t,cs)] _)
+--   = do pm <- asks pidMap
+--        d  <- renderStmt me s
+--        rs <- mapM go $ M.keys pm
+--        return $ align (ifs rs <> semi <$> d)
+--   where
+--     go p     = recvMsg p me (t,c,m)
 
 renderStmtConc me (SRecv ms _)
   = do rs <- foldM f [] ms
        return $ ifs rs
   where 
-    f l ms              = fmap (l ++) $ recvs ms
-    recvs (t, c, m, s)  = asks pidMap >>= mapM (go (t,c,m) s) . M.keys
+    f l ms              = fmap (l ++) $ recvTy ms
+    recvTy (t, cs, s)   = asks pidMap >>= mapM (go (t,cs) s) . M.keys
     go m (SSkip _) p    = recvMsg p me m
     go m s p            = do recv <- recvMsg p me m
                              d    <- renderStmt me s
@@ -347,15 +352,18 @@ renderStmtAbs :: Pid
               -> Stmt Int 
               -> RenderM
 renderStmtAbs me (SSend p ms i)
-  = do recv <- renderStmtConc me (SSend p [(t,c,mt,SNull) | (t,c,mt,_) <- ms] i)
+  = do recv <- renderStmtConc me (SSend p [(t,cs,SNull) | (t,cs,_) <- ms] i)
        cfg <- asks stmtMap
        return $ block (recv : inOutCounters cfg i)
+  where
+    newCs cs = [ (c,m,SNull) | (c,m,_) <- cs ]
     
 renderStmtAbs me (SRecv ms i)
   = do cfg       <- asks stmtMap
-       let outms = assert (length ms == length outcs) $ zip ms outcs
-           outcs = outCounters cfg i
-       rs        <- mapM render1 [ ((t, c, mt, SNull), oc) | ((t, c, mt, _), oc) <- outms]
+       let outms  = assert (length ms == length outcs) $ zip nullms outcs
+           outcs  = outCounters cfg i
+           nullms =  [(t, cs, SNull) | (t, cs, _) <- ms]
+       rs        <- mapM render1 outms
        return $ ifs rs
   where
     render1 (m, oc) = do d <- renderStmtConc me $ SRecv [m] i
@@ -411,15 +419,15 @@ gotoStmt :: Int -> Doc
 gotoStmt i
   = text "goto" <+> stmtLabel i
 
-recvGuard :: Pid -> [(TId, CId, MConstr, a)] -> RenderM
+recvGuard :: Pid -> [(TId, [(CId, MConstr)], a)] -> RenderM
 recvGuard me ms
   = do pm <- asks pidMap 
        f <- asks chanMap
        return . hcat . punctuate (text "||") $
-         concatMap (\p -> map (go f p) ms) $ M.keys pm
+         concatMap (\p -> concatMap (go f p) ms) $ M.keys pm
   where
-    go f them (t, c, v, _) = text "nempty" <> 
-                             parens (f them me (t,c,v))
+    go f them (t, cs, s)
+      = [ text "nempty" <> parens (f them me (t,c,v)) | (c,v) <- cs]
 
 stmtGuard :: Pid -> Stmt Int -> RenderM
 stmtGuard me (SRecv mts i)
@@ -717,17 +725,17 @@ macros =
 render :: Show a => Config a -> Doc
 render c@(Config { cTypes = ts })
   = mtype
-    <$$> (align $ vcat macros)
+    <$$> align (vcat macros)
     <$$> declProcVars pMap
     <$$> declChannels pMap ts
     <$$> declSwitchboards pMap ts
     <$$> procs
     <$$> renderMain pMap unfolded
   where
-    unfolded                 = freshIds . instAbs $ unfold c
-    pMap                   = buildPidMap unfolded
-    mtype                    = renderMConstrs ts
-    procs                    = renderProcs (unfolded) pMap sMap
+    unfolded               = freshIds . instAbs $ unfold c
+    pMap                   = debug ("OK" ++ show (pretty unfolded)) () `seq` buildPidMap unfolded
+    mtype                  = renderMConstrs ts
+    procs                  = renderProcs unfolded pMap sMap
     sMap                   = M.foldrWithKey goKey M.empty pMap
     goKey (PAbs _ s) (_,n) m = M.insert s n m
     goKey _          _     m = m
