@@ -23,12 +23,6 @@ debug msg x =
 byte :: Doc                          
 byte = text "byte"
 
-setSize :: Int
-setSize = infty
-          
-infty :: Int
-infty = 2
-
 ($$) :: Doc -> Doc -> Doc
 x $$ y = align (x <$> y)
 
@@ -94,7 +88,7 @@ renderEvalPids
   = map go . tyargs
   where 
     go p@(PVar _) = renderProcName p
-    go p@(PUnfold _ _ i) = evalExp (renderProcPrefix p <> brackets (int (i+setSize)))
+    go p@(PUnfold _ _ i) = evalExp (renderProcPrefix p <> brackets (int i))
     go p = evalExp (renderProcName p)
 
 renderPids  :: MConstr -> [Doc]
@@ -193,7 +187,7 @@ renderChanName p q ti cj
            = renderProcName pid
          renderProcChanName pid@(PAbs _ _) 
            = renderProcPrefix pid
-         renderProcChanName pid@(PUnfold _ _ i) 
+         renderProcChanName pid@(PUnfold (V v) (S s) i) 
            = renderProcPrefix pid <> text "_Unfold" <> int i
                                    
 renderProcDecl :: Doc -> Doc     
@@ -221,6 +215,7 @@ renderStmt :: Pid -> Stmt Int -> RenderM
 renderStmt (p @ (PConc _)) s    = renderStmtConc p s
 renderStmt (p @ (PUnfold {})) s = renderStmtConc p s
 renderStmt p s                  = renderStmtAbs  p s
+
 -- renderStmt f p s               = nonDetStmts $ map (renderStmtAbs f p) ss
 --   where
 --     ss = listify (\(_::Stmt Int) -> True) s
@@ -268,7 +263,7 @@ renderStmtConc me (SRecv ms _)
        return $ ifs rs
   where 
     f l ms              = fmap (l ++) $ recvTy ms
-    recvTy (t, cs, s)   = asks pidMap >>= mapM (go (t,cs) s) . filter (/= me) . M.keys
+    recvTy (t, cs, s)   = asks pidMap >>= mapM (go (t,cs) s . subUnfoldIdx) . filter (/= me) . M.keys
     go m (SSkip _) p    = recvMsg p me m
     go m s p            = do recv <- recvMsg p me m
                              d    <- renderStmt me s
@@ -536,7 +531,7 @@ renderProcs (Config { cTypes = ts, cProcs = ps }) pm sm
     cfg = M.unions (map (nextStmts . snd) psfilter)
     
 renderMain :: PidMap -> Config a -> Doc
-renderMain m (Config { cTypes = ts, cProcs = ps})
+renderMain m (Config { cTypes = ts, cProcs = ps, cSets = bs })
   = text "init" <+> block body
   where
     body        = declAbsVars ++
@@ -551,9 +546,9 @@ renderMain m (Config { cTypes = ts, cProcs = ps})
                      (t,cm)   <- M.toList ts
                      (c,m)    <- M.toList cm
                      -- t        <- ts
-                     return $ initSwitchboard (length ps) p q (t,c)
+                     return $ initSwitchboard (length ps) (subUnfoldIdx p) (subUnfoldIdx q) (t,c)
     procInits   = map (runProc m . fst) ps
-    pidInits    = map ((\p -> assignProcVar p (sz p)) . fst) ps
+    pidInits    = map ((\p -> assignProcVar bs p (sz p)) . fst) ps
     sz p        = fromMaybe (err p) $ M.lookup p m
     err p       = error ("Unknown pid (renderMain): " ++ show p)
 
@@ -568,27 +563,33 @@ runProc _ p@(PAbs _ _)
   where
               
 runProc _ p@(PUnfold _ _ i)
-  = text "run" <+> renderProcTypeName p <> parens (int (setSize + i))
+  = text "run" <+> renderProcTypeName p <> parens (int i)
     
 renderProcVar :: Pid -> Doc
 renderProcVar (PAbs _ (S s))
   = text s <> brackets (int 0)
-renderProcVar p@(PUnfold _ _ _)
-  = unfoldProcVar p
+renderProcVar p@(PUnfold _ (S s) i)
+  = text s <> brackets (int i)
+  -- = text s <> brackets (text v)
+  -- = unfoldProcVar p
 renderProcVar p
   = renderProcName p
 
-assignProcVar :: Pid -> (Int, Int) -> Doc                  
-assignProcVar p@(PConc _) (i, _)
+assignProcVar :: [SetBound] -> Pid -> (Int, Int) -> Doc                  
+assignProcVar _ p@(PConc _) (i, _)
   = renderProcVar p <+> equals <+> (int i)
-assignProcVar (PAbs _ (S s)) (i, sz)
+assignProcVar _ (PAbs _ (S s)) (i, sz)
   = seqStmts $ map (uncurry go) (zip [0..setSize-1] (repeat i) ++
                                  zip [setSize..sz-1] [(i+1)..(i+sz-setSize)])
   where
     go j k = text s <> brackets (int j) <+> equals <+> int k
 
-assignProcVar p@(PUnfold _ _ i) (v, _)
-  = unfoldProcVar p <+> equals <+> int (v + i)
+assignProcVar bs p@(PUnfold _ s i) (v, _)
+  = unfoldProcVar p <+> equals <+> pid <$>
+    renderProcVar (subUnfoldIdx p) <+> equals <+> unfoldProcVar p
+      where
+        pid = int v
+        -- pid = if Bounded s `elem` bs then int v else int (v + i)
 
 unfoldProcVar :: Pid -> Doc
 unfoldProcVar p@(PUnfold _ _ i)
@@ -603,10 +604,16 @@ declProcVar p@(PUnfold (V _) (S _) _) _
   = renderProcDecl (unfoldProcVar p) <> semi 
              
 declProcVars :: PidMap -> Doc
-declProcVars m
-  = M.foldrWithKey go empty m
+declProcVars
+  = M.foldrWithKey go empty
   where
     go pid k d = declProcVar pid k <$> d
+
+declSets :: [SetBound] -> Doc
+declSets
+  = foldr go empty
+  where
+    go (Bounded (S s)) d = renderProcDecl (text s <> brackets (int 3)) <> semi <$> d
                 
 chanMsgType :: MConstr -> Doc
 chanMsgType
@@ -646,15 +653,18 @@ declChannels pm te
     go tid m docs = declChannelsOfType pm tid m : docs
 
 buildPidMap :: Config a -> PidMap
-buildPidMap (Config { cUnfold = us, cProcs = ps })
+buildPidMap (Config { cUnfold = us, cProcs = ps, cSets = bs})
   = fst $ foldl' go (foldl' go (M.empty, 0) (snd pids)) (fst pids)
   where 
     pids                      = partition isUnfold $ map fst ps
     go (m, i) p@(PConc _)     = (M.insert p (i, 1) m, succ i)
-    go (m, i) p@(PAbs _ set)  = let s = setSize + unfolds set
+    go (m, i) p@(PAbs _ set)  = let s = unfolds set + setSize
                                 in (M.insert p (i, s) m, i + s)
-    go (m, i) p@(PUnfold _ _ _) = updUnfold (m, i) p
-    unfolds s                 = sum $ [ x | Conc s' x <- us, s == s' ]
+    go (m, i) p@(PUnfold _ s _) = if Bounded s `elem` bs then
+                                    (M.insert p (i, 1) m, succ i)
+                                  else
+                                    updUnfold (m, i) p
+    unfolds s                 = sum [ x | Conc s' x <- us, s == s' ]
                              
 updUnfold :: (PidMap, Int) -> Pid -> (PidMap, Int)
 updUnfold (m, i) p@(PUnfold v s _)
@@ -688,6 +698,8 @@ declSwitchboards pm te
     nprocs = M.foldrWithKey (\p v s -> s + count p v) 0 pm
     count (PAbs _ _) (_, n) = n - setSize + 1
     count (PConc _) (_,n) = n
+    count p@(PUnfold v s _) (_,n) =
+      maybe n (const 0) $ M.lookup (PAbs v s) pm
     count _ _          = 0
 
 macrify = intercalate " \\\n"
@@ -724,18 +736,19 @@ macros =
   ]
   
 render :: (Eq a, Show a) => Config a -> Doc
-render c@(Config { cTypes = ts })
+render c@(Config { cTypes = ts, cSets = bs })
   = mtype
     <$$> align (vcat macros)
-    <$$> declProcVars pMap
+    <$$> declProcVars pMap <> declSets bs
     <$$> declChannels pMap ts
     <$$> declSwitchboards pMap ts
     <$$> procs
     <$$> renderMain pMap unfolded
   where
-    unfolded               = freshIds . instAbs $ unfold c
+    unfolded               = filterBoundedAbs $ freshIds . instAbs $ unfold c
+    filterBoundedAbs c     = c { cProcs = [ p | p <- cProcs c, not (isBounded bs (fst p)) ] }
     pMap                   = {- debug ("OK" ++ show (pretty unfolded)) () `seq` -}
-                             buildPidMap unfolded
+                             debug "PidMap" $ buildPidMap unfolded
     mtype                  = renderMConstrs ts
     procs                  = renderProcs unfolded pMap sMap
     sMap                   = M.foldrWithKey goKey M.empty pMap

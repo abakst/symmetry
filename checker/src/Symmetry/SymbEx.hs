@@ -42,7 +42,7 @@ stateToConfigs state
       mkVars vs = map (IL.PVar . IL.V . ("x_"++) . show) [1..length vs]
       mk1Config renv
                 = IL.Config { IL.cTypes = types
-                            , IL.cSets  = sets
+                            , IL.cSets  = []
                             , IL.cProcs = procs
                             , IL.cUnfold = []
                             }
