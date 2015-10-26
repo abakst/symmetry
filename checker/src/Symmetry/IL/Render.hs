@@ -747,8 +747,7 @@ render c@(Config { cTypes = ts, cSets = bs })
   where
     unfolded               = filterBoundedAbs $ freshIds . instAbs $ unfold c
     filterBoundedAbs c     = c { cProcs = [ p | p <- cProcs c, not (isBounded bs (fst p)) ] }
-    pMap                   = {- debug ("OK" ++ show (pretty unfolded)) () `seq` -}
-                             debug "PidMap" $ buildPidMap unfolded
+    pMap                   = buildPidMap unfolded
     mtype                  = renderMConstrs ts
     procs                  = renderProcs unfolded pMap sMap
     sMap                   = M.foldrWithKey goKey M.empty pMap
