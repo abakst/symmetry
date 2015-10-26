@@ -162,17 +162,17 @@ switchBase :: TId -> CId -> Doc
 switchBase t c = text "tcs_" <> int t <> text "_" <> int c
           
 -- | Addressing Process Channels
-switchboard :: Int -> Pid -> Pid -> (TId, CId, MConstr) -> Doc 
-switchboard np from p (t,c,_) = 
+switchboard :: Int -> Pid -> Pid -> (TId, CId) -> Doc 
+switchboard np from p (t,c) = 
   switchBase t c <+> brackets (
                           (renderProcVar from <> text "*" <> int np)
                           <+> text "+"
                           <+> renderProcVar p
                      )
 
-initSwitchboard :: Int -> Pid -> Pid -> (TId, CId, MConstr) -> Doc
-initSwitchboard np p q (t, c, m)
-  = switchboard np p q (t, c, m) <+> 
+initSwitchboard :: Int -> Pid -> Pid -> (TId, CId) -> Doc
+initSwitchboard np p q (t, c)
+  = switchboard np p q (t, c) <+> 
     equals <+> 
     renderChanName p q t c
                
@@ -205,7 +205,7 @@ renderProcAssn n rhs
   = renderProcDecl n <+> equals <+> rhs
     
 type SetMap  = M.Map Set Int
-type ChanMap = Pid -> Pid -> (TId, CId, MConstr) -> Doc
+type ChanMap = Pid -> Pid -> (TId, CId) -> Doc
 type StmtMap = M.Map Int [Int]
 
 -- | Emit Promela code for each statement    
@@ -230,14 +230,14 @@ sendMsg p q (t,cms)
   = do f <- asks chanMap
        return . ifs $ map (send1 f) cms
   where
-    send1 f (c,m) = f p q (t,c,m) <> text "!" <> renderSendMsg m
+    send1 f (c,m) = f p q (t,c) <> text "!" <> renderSendMsg m
 
 recvMsg :: Pid -> Pid -> (TId, [(CId, MConstr)]) -> RenderM 
 recvMsg p q (t,cms)
   = do f <- asks chanMap
        return . ifs $ map (recv1 f) cms
   where
-    recv1 f (c,m) = text "__RECV" <> tupled [f p q (t,c,m) , renderRecvMsg m]
+    recv1 f (c,m) = text "__RECV" <> tupled [f p q (t,c) , renderRecvMsg m]
                    
 renderStmtConc :: Pid -> Stmt Int -> RenderM
 renderStmtConc me (SSend p [(t,cms,s)] _)
@@ -268,7 +268,7 @@ renderStmtConc me (SRecv ms _)
        return $ ifs rs
   where 
     f l ms              = fmap (l ++) $ recvTy ms
-    recvTy (t, cs, s)   = asks pidMap >>= mapM (go (t,cs) s) . M.keys
+    recvTy (t, cs, s)   = asks pidMap >>= mapM (go (t,cs) s) . filter (/= me) . M.keys
     go m (SSkip _) p    = recvMsg p me m
     go m s p            = do recv <- recvMsg p me m
                              d    <- renderStmt me s
@@ -424,11 +424,12 @@ recvGuard me ms
   = do pm <- asks pidMap 
        f <- asks chanMap
        return . hcat . punctuate (text "||") $
-         concatMap (\p -> concatMap (go f p) ms) $ M.keys pm
+         concatMap (\p -> map (go f p) $ nub [ (t,c) | (t, cs, _) <- ms, (c,v) <- cs ]) $ M.keys pm
+         -- concatMap (\p -> concatMap (go f p) ms) $ M.keys pm
   where
-    go f them (t, cs, s)
-      = [ text "nempty" <> parens (f them me (t,c,v)) | (c,v) <- cs]
-
+    go f them (t, c)
+      = text "nempty" <> parens (f them me (t,c))
+ 
 stmtGuard :: Pid -> Stmt Int -> RenderM
 stmtGuard me (SRecv mts i)
   = do rg <- recvGuard me mts
@@ -550,7 +551,7 @@ renderMain m (Config { cTypes = ts, cProcs = ps})
                      (t,cm)   <- M.toList ts
                      (c,m)    <- M.toList cm
                      -- t        <- ts
-                     return $ initSwitchboard (length ps) p q (t,c,m)
+                     return $ initSwitchboard (length ps) p q (t,c)
     procInits   = map (runProc m . fst) ps
     pidInits    = map ((\p -> assignProcVar p (sz p)) . fst) ps
     sz p        = fromMaybe (err p) $ M.lookup p m
@@ -722,7 +723,7 @@ macros =
   , text recvMacro
   ]
   
-render :: Show a => Config a -> Doc
+render :: (Eq a, Show a) => Config a -> Doc
 render c@(Config { cTypes = ts })
   = mtype
     <$$> align (vcat macros)
@@ -733,13 +734,14 @@ render c@(Config { cTypes = ts })
     <$$> renderMain pMap unfolded
   where
     unfolded               = freshIds . instAbs $ unfold c
-    pMap                   = debug ("OK" ++ show (pretty unfolded)) () `seq` buildPidMap unfolded
+    pMap                   = {- debug ("OK" ++ show (pretty unfolded)) () `seq` -}
+                             buildPidMap unfolded
     mtype                  = renderMConstrs ts
     procs                  = renderProcs unfolded pMap sMap
     sMap                   = M.foldrWithKey goKey M.empty pMap
     goKey (PAbs _ s) (_,n) m = M.insert s n m
     goKey _          _     m = m
 
-renderToFile :: Show a => FilePath -> Config a -> IO ()
+renderToFile :: (Eq a, Show a) => FilePath -> Config a -> IO ()
 renderToFile fn c
   = withFile fn WriteMode $ flip hPutDoc (render c)

@@ -13,14 +13,13 @@ module Symmetry.Language.AST where
 import Data.Hashable
 import Data.Typeable
 
-data RSing  = RS Int deriving (Ord, Eq, Show, Typeable)
+data RSing  = RS Int
+            | RSelf Role
+              deriving (Ord, Eq, Show, Typeable)
 data RMulti = RM Int deriving (Ord, Eq, Show, Typeable)
-
-instance Hashable RSing where
-  hashWithSalt s (RS i) = hashWithSalt s i
-
-instance Hashable RMulti where
-  hashWithSalt s (RM i) = hashWithSalt s i
+data Role = S RSing
+          | M RMulti
+            deriving (Ord, Eq, Show)
 
 data Pid r = Pid r deriving (Typeable)
 

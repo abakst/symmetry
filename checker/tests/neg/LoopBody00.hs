@@ -25,6 +25,6 @@ mainProc = do r <- newRSing
 
     loop2 = lam $ \p ->
             do me <- self
-               (match nondet
+               (match (arb :: dsl (Pid RSing :+: ()))
                  (lam $ \_ -> send p (inl me :: dsl (Pid RSing :+: ())))
                  (lam $ \_ -> send p (inr tt :: dsl (Pid RSing :+: ()))))

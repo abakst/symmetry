@@ -24,13 +24,6 @@ import           Control.Applicative ((<$>))
 data Var a = V Int deriving (Ord, Eq, Show)
 
 type REnv = M.Map Role (IL.Stmt ())
-data Role = S RSing
-          | M RMulti
-            deriving (Ord, Eq, Show)
-
-instance Hashable Role where
-  hashWithSalt s (S r) = hashWithSalt s r
-  hashWithSalt s (M r) = hashWithSalt s r
 
 data SymbState = SymbState { renv   :: REnv
                            , ctr    :: Int
@@ -267,9 +260,11 @@ absToIL (AUnit _) = [mkVal "Unit" []]
 absToIL (AInt  _) = [mkVal "Int" []]
 absToIL (AString _) = [mkVal "String" []]
 
-absToIL (APid Nothing (Pid (Just (RS r)))) = [mkVal "Pid" [IL.PConc r]]
-absToIL (APid (Just x) _)                  = [mkVal "Pid" [IL.PVar $ varToIL x]]
-absToIL (APid Nothing (Pid Nothing))       = error "wut"
+absToIL (APid Nothing (Pid (Just (RS r))))    = [mkVal "Pid" [IL.PConc r]]
+absToIL (APid Nothing (Pid (Just (RSelf (S (RS r)))))) = [mkVal "Pid" [IL.PConc r]]
+absToIL (APid Nothing (Pid (Just (RSelf (M r))))) = [mkVal "Pid" [IL.PAbs (IL.V "i") (roleToSet r)]]
+absToIL (APid (Just x) _)                     = [mkVal "Pid" [IL.PVar $ varToIL x]]
+absToIL (APid Nothing (Pid Nothing))          = error "wut"
 
 absToIL (ASum _ (Just a) Nothing)  = IL.MCaseL IL.LL <$> absToIL a
 absToIL (ASum _ Nothing (Just b))  = IL.MCaseR IL.RL <$> absToIL b
@@ -344,8 +339,10 @@ insRoleM :: Role -> SymbEx (Process SymbEx a) -> SymbExM ()
 insRoleM k p = do m <- gets renv
                   case M.lookup k m of
                     Nothing -> do
+                      oldMe <- gets me
+                      modify $ \s -> s { me = k }
                       AProc _ st _ <- runSE p
-                      modify $ \s -> s { renv = M.insert k st (renv s) }
+                      modify $ \s -> s { renv = M.insert k st (renv s), me = oldMe }
                     Just _  ->
                       error $ "insRoleM attempting to spawn already spawned role" ++ show k
 
@@ -469,8 +466,9 @@ symMatchList l nilCase consCase
 symSelf :: SymbEx (Process SymbEx (Pid RSing))
 -------------------------------------------------
 symSelf
-  = SE $ do S r <- gets me
-            return . AProc Nothing skip $ APid Nothing (Pid (Just r))
+  = SE $ do r <- gets me
+            let role = RSelf r
+            return . AProc Nothing skip $ APid Nothing (Pid (Just role))
 
 -------------------------------------------------
 symRet :: SymbEx a -> SymbEx (Process SymbEx a)

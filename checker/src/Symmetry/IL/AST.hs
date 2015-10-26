@@ -189,7 +189,7 @@ unfoldAbs c@(Config {cProcs = ps})
   where
     us = [ Conc s 1 | (PAbs v s, _) <- ps ]
 
-instStmt :: [Pid] -> Stmt a -> Stmt a
+instStmt :: Eq a => [Pid] -> Stmt a -> Stmt a
 -- Interesting Cases
 instStmt dom (SRecv mts a)
   = SRecv   (concatMap (instMS dom) mts) a
@@ -213,13 +213,15 @@ instStmt _ (SVar v a)
 instStmt _ (SDie a)
   = SDie a
 
-instMS :: [Pid] -> (TId, [(CId, MConstr)], Stmt a) -> [(TId, [(CId, MConstr)], Stmt a)]
+instMS :: Eq a => [Pid] -> (TId, [(CId, MConstr)], Stmt a) -> [(TId, [(CId, MConstr)], Stmt a)]
 instMS dom (t, cs, s)
-  = foldl' doAllSubs [(t, cs, s)] xs
+  = foldl' doAllSubs i xs
   where
-    doAllSubs :: [(TId, [(CId, MConstr)], Stmt a)] -> Var -> [(TId, [(CId, MConstr)], Stmt a)]
+    i = [ (t,[(c,v)],s)  | (c, v) <- cs ]
+
+    doAllSubs :: Eq a => [(TId, [(CId, MConstr)], Stmt a)] -> Var -> [(TId, [(CId, MConstr)], Stmt a)]
     doAllSubs ms x
-      = concat [ map (substMS i) ms | i <- subs x ]
+      = nub $ concat [ map (substMS i) ms | i <- subs x ]
 
     xs = nub $ concat [ pvars c | (_, c) <- cs ]
 
@@ -232,7 +234,7 @@ pvars (MCaseL _ c)   = pvars c
 pvars (MCaseR _ c)   = pvars c
 pvars (MTProd c1 c2) = nub (pvars c1 ++ pvars c2)
 
-instAbs :: Config a -> Config a
+instAbs :: Eq a => Config a -> Config a
 instAbs c@(Config { cProcs = ps })
   = c { cProcs = map (inst1Abs dom) ps }
   where
