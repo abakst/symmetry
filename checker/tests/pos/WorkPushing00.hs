@@ -24,6 +24,7 @@ slave =  lam $ \pid ->
 
  
 -- | Wait for n integers and sum them all up
+{- 
 sumIntegers :: (DSL repr) => repr (Int -> Process repr Int)
 sumIntegers = app go 0
   where
@@ -33,20 +34,21 @@ sumIntegers = app go 0
        (lam $ \0 -> ret (int acc))
        (lam $ \n -> do m <- recv
                        app (app go (acc + m)) (n - 1)) 
-     
+-}     
 
-master :: (DSL repr) => repr (RMulti -> Int -> Process repr Int)
+master :: (DSL repr) => repr (RMulti -> Int -> Process repr [Int])
 master = lam $ \r -> lam $ \n ->
    do myPid <- self
       ps <- spawnMany r n (app slave myPid)      
-      doMany ps (lam $ \p -> send p (int 4) )
-      --doMany ps (lam $ \p -> do recv p
-      --	                        ret 1)
-      app sumIntegers n
+      doMany ps (lam $ \p -> send p (int 4))
+      doMany ps (lam $ \p -> do recv)
+    
+      --app sumIntegers n
 
-mainProc :: (DSL repr) => repr (Int -> Int)
+mainProc :: (DSL repr) => repr (Int -> ())
 mainProc = lam $ \n -> exec $ do r <- newRMulti
                                  app (app master r) n
+                                 ret tt
 
 main :: IO ()
 main = checkerMain (int 10 |> mainProc)
