@@ -514,14 +514,14 @@ symNewRMulti
 -------------------------------------------------
 symDoMany :: SymbEx (Pid RMulti)
           -> SymbEx (Pid RSing -> Process SymbEx a)
-          -> SymbEx (Process SymbEx ())
+          -> SymbEx (Process SymbEx [a])
 -------------------------------------------------
 symDoMany p f
   = SE $ do v <- freshVar
             APidMulti _ (Pid (Just r)) <- runSE p
             AArrow _ g                 <- runSE f
             AProc _ s _                <- runSE (g (APid (Just v) (Pid Nothing)))
-            return (AProc Nothing (iter v r s) (AUnit Nothing))
+            return (AProc Nothing (iter v r s) (error "TBD: symDoMany"))
     where
       iter v r s = IL.SIter (varToIL v) (roleToSet r) s ()
 
