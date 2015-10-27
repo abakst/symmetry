@@ -169,13 +169,15 @@ instance ArbPat SymbEx () where
 instance ArbPat SymbEx Int where            
   arb = SE . return $ AInt Nothing
 
-instance ArbPat SymbEx String where            
+instance {-# OVERLAPPING #-} ArbPat SymbEx String where            
   arb = SE . return $ AString Nothing
 
 instance ArbPat SymbEx (Pid RSing) where            
   arb = SE . return $ APid Nothing (Pid Nothing)
 
-instance ArbPat SymbEx [Int]
+instance {-# OVERLAPPABLE #-} ArbPat SymbEx a => ArbPat SymbEx [a] where
+  arb = SE $ do a <- runSE arb
+                return $ AList Nothing (Just a)
 
 -------------------------------------------------
 -- | An instance of Send t means that t can be sent in a message
@@ -249,7 +251,9 @@ varToIL (V x) = IL.V ("x_" ++ show x)
 pidAbsValToIL :: AbsVal (Pid RSing) -> IL.Pid
 pidAbsValToIL (APid Nothing (Pid (Just (RS r)))) = IL.PConc r
 pidAbsValToIL (APid (Just x) _) = IL.PVar $ varToIL x
-pidAbsValToIL _                 = error "pidAbsValToIL: back to the drawing board"
+-- Oy
+pidAbsValToIL (APid Nothing (Pid (Just (RSelf (S (RS r)))))) = IL.PConc r
+pidAbsValToIL _                 = error "pidAbsValToIL: back to the drawing board "
 
 
 mkVal :: String -> [IL.Pid] -> IL.MConstr
