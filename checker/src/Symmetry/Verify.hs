@@ -86,7 +86,7 @@ run1Cfg opt outd cfg
        removeFile (outTrail outd) `catch` \(_ :: IOException) ->
          return ()
        let cfgOut = if setsz > 0 then
-                      boundAbs cfg
+                      boundAbs setsz cfg
                     else
                       unfoldAbs cfg
        renderToFile (outf outd) cfgOut

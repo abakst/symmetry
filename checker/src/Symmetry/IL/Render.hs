@@ -568,28 +568,26 @@ runProc _ p@(PUnfold _ _ i)
 renderProcVar :: Pid -> Doc
 renderProcVar (PAbs _ (S s))
   = text s <> brackets (int 0)
-renderProcVar p@(PUnfold _ (S s) i)
-  = text s <> brackets (int i)
-  -- = text s <> brackets (text v)
-  -- = unfoldProcVar p
+renderProcVar (PUnfold (V v) (S s) _)
+  = text s <> brackets (text v)
 renderProcVar p
   = renderProcName p
 
 assignProcVar :: [SetBound] -> Pid -> (Int, Int) -> Doc                  
 assignProcVar _ p@(PConc _) (i, _)
-  = renderProcVar p <+> equals <+> (int i)
+  = renderProcVar p <+> equals <+> int i
 assignProcVar _ (PAbs _ (S s)) (i, sz)
   = seqStmts $ map (uncurry go) (zip [0..setSize-1] (repeat i) ++
                                  zip [setSize..sz-1] [(i+1)..(i+sz-setSize)])
   where
     go j k = text s <> brackets (int j) <+> equals <+> int k
-
-assignProcVar bs p@(PUnfold _ s i) (v, _)
+assignProcVar _ p@(PUnfold {}) (v, _)
   = unfoldProcVar p <+> equals <+> pid <$>
     renderProcVar (subUnfoldIdx p) <+> equals <+> unfoldProcVar p
       where
         pid = int v
-        -- pid = if Bounded s `elem` bs then int v else int (v + i)
+assignProcVar _ _ _ = error "Attempt to assign to invalid ProcVar"
+
 
 unfoldProcVar :: Pid -> Doc
 unfoldProcVar p@(PUnfold _ _ i)
@@ -613,7 +611,7 @@ declSets :: [SetBound] -> Doc
 declSets
   = foldr go empty
   where
-    go (Bounded (S s)) d = renderProcDecl (text s <> brackets (int 3)) <> semi <$> d
+    go (Bounded (S s) n) d = renderProcDecl (text s <> brackets (int n)) <> semi <$> d
                 
 chanMsgType :: MConstr -> Doc
 chanMsgType
@@ -660,11 +658,12 @@ buildPidMap (Config { cUnfold = us, cProcs = ps, cSets = bs})
     go (m, i) p@(PConc _)     = (M.insert p (i, 1) m, succ i)
     go (m, i) p@(PAbs _ set)  = let s = unfolds set + setSize
                                 in (M.insert p (i, s) m, i + s)
-    go (m, i) p@(PUnfold _ s _) = if Bounded s `elem` bs then
+    go (m, i) p@(PUnfold _ s _) = if isBound s bs then
                                     (M.insert p (i, 1) m, succ i)
                                   else
                                     updUnfold (m, i) p
     unfolds s                 = sum [ x | Conc s' x <- us, s == s' ]
+
                              
 updUnfold :: (PidMap, Int) -> Pid -> (PidMap, Int)
 updUnfold (m, i) p@(PUnfold v s _)

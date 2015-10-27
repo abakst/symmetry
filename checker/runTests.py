@@ -28,17 +28,17 @@ failed = []
 posDir = "tests/pos"
 negDir = "tests/neg"
 
-def runTestsInDir(dir, expect):
+def runTestsInDir(dir, expect, opts=[]):
     failed = []
     for i in glob.glob(os.path.join(dir, "*.hs")):
         sys.stdout.write ("[%s]: " % i)
         FNULL = open(os.devnull, 'w')
-        return_code = subprocess.call(config["runghc"] + [i,"--verify"],stdout=FNULL)
+        return_code = subprocess.call(config["runghc"] + [i,"--verify"]+opts,stdout=FNULL)
         if return_code == expect:
             print "\033[1;32mPASS\033[0;0m"
         else:
             print "\033[1;31mFAIL\033[0;0m"
-            failed.append(i)
+            failed.append((i, opts))
     return failed
 
 def install_lib():
@@ -52,6 +52,8 @@ install_lib()
 
 failed += runTestsInDir(posDir, 0)
 failed += runTestsInDir(negDir, 1)
+failed += runTestsInDir(posDir, 0, ["--set-size", str(3)])
+failed += runTestsInDir(negDir, 1, ["--set-size", str(3)])
 
 os.chdir(savedPath)
 
@@ -60,6 +62,6 @@ if failed == []:
     exit(0)
 else:
     print "Failed Tests:"
-    for t in failed:
-        print t
+    for (t, o) in failed:
+        print "%s with options: %s" % (t, o)
     exit(1)

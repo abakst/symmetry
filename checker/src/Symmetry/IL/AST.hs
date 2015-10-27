@@ -51,7 +51,7 @@ isAbs (PAbs _ _) = True
 isAbs _          = False
 
 isBounded :: [SetBound] -> Pid -> Bool
-isBounded bs (PAbs _ s) = s `elem` [ s | Bounded s <- bs ]
+isBounded bs (PAbs _ s) = s `elem` [ s' | Bounded s' _ <- bs ]
 isBounded _ _           = False
 
 subUnfoldIdx (PUnfold _ s i) = PUnfold (V (show i)) s i
@@ -187,11 +187,11 @@ endLabels = nub . listify (isPrefixOf "end" . unlv)
 
 -- | Unfold
 unfold :: Config a -> Config a
-unfold c@(Config { cUnfold = us, cProcs = ps })
+unfold c@(Config { cUnfold = us, cProcs = ps, cSets = bs })
   = c { cProcs = ps ++ ufprocs }
   where
     mkUnfold v s st i = (PUnfold v s i, st)
-    ufprocs           = [ mkUnfold v s st (j + setSize)
+    ufprocs           = [ mkUnfold v s st (j + if isBound s bs then 0 else setSize)
                         | Conc s i <- us
                         , (PAbs v s', st) <- ps
                         , s == s'
@@ -203,12 +203,16 @@ unfoldAbs c@(Config {cProcs = ps})
   = c { cUnfold = us }
   where
     us = [ Conc s 1 | (PAbs v s, _) <- ps ]
+         
+isBound :: Set -> [SetBound] -> Bool
+isBound s = any p
+  where p (Bounded s' _) = s == s'
 
-boundAbs :: Config a -> Config a
-boundAbs c@(Config {cProcs = ps})
+boundAbs :: Int -> Config a -> Config a
+boundAbs n c@(Config {cProcs = ps})
   = c { cUnfold = us, cSets = bs }
   where
-    (us, bs) = unzip [ (Conc s 3, Bounded s) | (PAbs v s, _) <- ps ]
+    (us, bs) = unzip [ (Conc s n, Bounded s n) | (PAbs v s, _) <- ps ]
 
 instStmt :: Eq a => [Pid] -> Stmt a -> Stmt a
 -- Interesting Cases
@@ -395,7 +399,7 @@ nextStmts (SCase _ sl sr i)
 nextStmts _
   = M.empty
 
-data SetBound = Bounded Set
+data SetBound = Bounded Set Int
                 deriving (Eq, Read, Show, Typeable)
 
 data Config a = Config {
