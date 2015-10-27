@@ -74,7 +74,7 @@ class Symantics repr where
 
   newRMulti :: repr (Process repr RMulti)
   spawnMany :: repr RMulti -> repr Int -> repr (Process repr ()) -> repr (Process repr (Pid RMulti))
-  doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process repr a) -> repr (Process repr ())
+  doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process repr a) -> repr (Process repr [a])
 
   die       :: repr (Process repr a)
 
