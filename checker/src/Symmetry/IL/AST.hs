@@ -12,6 +12,13 @@ import           Data.Typeable
 import           Data.Generics
 import           Data.List (nub, isPrefixOf)
 import qualified Data.Map.Strict as M
+import Text.PrettyPrint.Leijen as P hiding ((<$>))
+
+setSize :: Int
+setSize = infty
+          
+infty :: Int
+infty = 2
 
 data Set = S String
            deriving (Ord, Eq, Read, Show, Typeable, Data)
@@ -42,6 +49,13 @@ isUnfold _         = False
 isAbs :: Pid -> Bool
 isAbs (PAbs _ _) = True
 isAbs _          = False
+
+isBounded :: [SetBound] -> Pid -> Bool
+isBounded bs (PAbs _ s) = s `elem` [ s' | Bounded s' _ <- bs ]
+isBounded _ _           = False
+
+subUnfoldIdx (PUnfold _ s i) = PUnfold (V (show i)) s i
+subUnfoldIdx p = p
 
 data Label = LL | RL | VL Var
              deriving (Ord, Eq, Read, Show, Typeable, Data)
@@ -95,13 +109,14 @@ data Stmt a = SSkip a
             {- A Block should probably only be a sequence of
                SIters, SChoose ... -}
             | SBlock [Stmt a] a
-            | SSend Pid [(TId, CId, MConstr, Stmt a)] a
-            | SRecv     [(TId, CId, MConstr, Stmt a)] a
+            | SSend Pid [(TId, [(CId, MConstr)], Stmt a)] a
+            | SRecv     [(TId, [(CId, MConstr)], Stmt a)] a
             | SIter Var Set (Stmt a) a
             | SLoop LVar (Stmt a) a         {-used to create a loop with the given label-}
             | SChoose Var Set (Stmt a) a
             | SVar LVar a
             | SCase Var (Stmt a) (Stmt a) a
+            | SDie a
             {- These do not appear in the source: -}
             | SNull
             | SVarDecl Var a
@@ -172,19 +187,37 @@ endLabels = nub . listify (isPrefixOf "end" . unlv)
 
 -- | Unfold
 unfold :: Config a -> Config a
-unfold c@(Config { cUnfold = us, cProcs = ps })
+unfold c@(Config { cUnfold = us, cProcs = ps, cSets = bs })
   = c { cProcs = ps ++ ufprocs }
   where
-    mkUnfold v s stmt i = (PUnfold v s i, stmt)
-    ufprocs             = [ mkUnfold v s stmt j | Conc s i <- us
-                                                , (PAbs v s', stmt) <- ps
-                                                , s == s'
-                                                , j <- [0..i-1]]
+    mkUnfold v s st i = (PUnfold v s i, st)
+    ufprocs           = [ mkUnfold v s st (j + if isBound s bs then 0 else setSize)
+                        | Conc s i <- us
+                        , (PAbs v s', st) <- ps
+                        , s == s'
+                        , j <- [0..i-1]
+                        ]
 
-instStmt :: [Pid] -> Stmt a -> Stmt a
+unfoldAbs :: Config a -> Config a
+unfoldAbs c@(Config {cProcs = ps})
+  = c { cUnfold = us }
+  where
+    us = [ Conc s 1 | (PAbs v s, _) <- ps ]
+         
+isBound :: Set -> [SetBound] -> Bool
+isBound s = any p
+  where p (Bounded s' _) = s == s'
+
+boundAbs :: Int -> Config a -> Config a
+boundAbs n c@(Config {cProcs = ps})
+  = c { cUnfold = us, cSets = bs }
+  where
+    (us, bs) = unzip [ (Conc s n, Bounded s n) | (PAbs v s, _) <- ps ]
+
+instStmt :: Eq a => [Pid] -> Stmt a -> Stmt a
 -- Interesting Cases
 instStmt dom (SRecv mts a)
-  = SRecv (concatMap (instMS dom) mts) a
+  = SRecv   (concatMap (instMS dom) mts) a
 instStmt dom (SSend p mts a)
   = SSend p (concatMap (instMS dom) mts) a
 -- Not so interesting cases:
@@ -202,16 +235,23 @@ instStmt dom (SCase v sl sr a)
   = SCase v (instStmt dom sl) (instStmt dom sr) a
 instStmt _ (SVar v a)
   = SVar v a
+instStmt _ (SDie a)
+  = SDie a
 
-instMS :: [Pid] -> (TId, CId, MConstr, Stmt a) -> [(TId, CId, MConstr, Stmt a)]
-instMS dom (t, c, m, s)
-  = foldl' doAllSubs [(t,c,m,s)] xs
+instMS :: Eq a => [Pid] -> (TId, [(CId, MConstr)], Stmt a) -> [(TId, [(CId, MConstr)], Stmt a)]
+instMS dom (t, cs, s)
+  = foldl' doAllSubs i xs
   where
-    doAllSubs :: [(TId, CId, MConstr, Stmt a)] -> Var -> [(TId, CId, MConstr, Stmt a)]
-    doAllSubs ms x = concat [ map (substMS i) ms | i <- subs x ]
+    i = [ (t,[(c,v)],s)  | (c, v) <- cs ]
+
+    doAllSubs :: Eq a => [(TId, [(CId, MConstr)], Stmt a)] -> Var -> [(TId, [(CId, MConstr)], Stmt a)]
+    doAllSubs ms x
+      = nub $ concat [ map (substMS i) ms | i <- subs x ]
+
+    xs = nub $ concat [ pvars c | (_, c) <- cs ]
+
     subs :: Var -> [Subst]
     subs x = [ [(x, q)] | q <- dom ]
-    xs = pvars m
 
 pvars :: MConstr -> [Var]
 pvars (MTApp _ xs)   = [v | PVar v <- xs]
@@ -219,7 +259,7 @@ pvars (MCaseL _ c)   = pvars c
 pvars (MCaseR _ c)   = pvars c
 pvars (MTProd c1 c2) = nub (pvars c1 ++ pvars c2)
 
-instAbs :: Config a -> Config a
+instAbs :: Eq a => Config a -> Config a
 instAbs c@(Config { cProcs = ps })
   = c { cProcs = map (inst1Abs dom) ps }
   where
@@ -250,8 +290,9 @@ substCstr sub (MCaseL l c)  = MCaseL l $ substCstr sub c
 substCstr sub (MCaseR l c)  = MCaseR l $ substCstr sub c
 substCstr sub (MTProd c c') = MTProd (substCstr sub c) (substCstr sub c')
 
-substMS :: Subst -> (TId, CId, MConstr, Stmt a) -> (TId, CId, MConstr, Stmt a)
-substMS sub (ti,cj,c,s) = (ti, cj, substCstr sub c, subst sub s)
+substMS :: Subst -> (TId, [(CId, MConstr)], Stmt a) -> (TId, [(CId, MConstr)], Stmt a)
+substMS sub (ti,cs,s)
+  = (ti, [ (ci, substCstr sub m) | (ci, m) <- cs ], subst sub s)
 
 substPid :: Subst -> Pid -> Pid
 substPid s p@(PVar v) = fromMaybe p $ lookup v s
@@ -267,28 +308,34 @@ annot (SRecv _ a)       = a
 annot (SIter _ _ _ a)   = a
 annot (SChoose _ _ _ a) = a
 annot (SVar _ a)        = a
+annot (SDie a)          = a
 annot (SLoop _ _ a)     = a
 annot (SCase _ _ _ a)   = a
 annot x                 = error ("annot: TBD " ++ show x)
 
-instance Functor ((,,,) a b c) where
-  fmap f (x,y,z,a) = (x,y,z,f a)
+instance Functor ((,,) a b) where
+  fmap f (x,y,a) = (x,y,f a)
 
-instance Foldable ((,,,) a b c) where
-  foldMap f (_,_,_,y) = f y
-  foldr f z (_,_,_,y) = f y z
+instance Foldable ((,,) a b) where
+  foldMap f (_,_,y) = f y
+  foldr f z (_,_,y) = f y z
 
-instance Traversable ((,,,) a b c) where
-  traverse f (x,y,z,a)= (,,,) x y z <$> f a
+instance Traversable ((,,) a b) where
+  traverse f (x,y,a)= (,,) x y <$> f a
+
+traversePat :: Applicative f => (a -> f b)
+            -> (TId, [(CId, MConstr)], Stmt a)
+            -> f (TId, [(CId, MConstr)], Stmt b)
+traversePat f pat = traverse (traverse f) pat
 
 -- | Typeclass tomfoolery
 instance Traversable Stmt where
   traverse f (SSkip a)
     = SSkip <$> f a
   traverse f (SSend p ms a)
-    = flip (SSend p) <$> f a <*> traverse (traverse (traverse f)) ms
+    = flip (SSend p) <$> f a <*> traverse (traversePat f) ms
   traverse f (SRecv ms a)
-    = flip SRecv <$> f a <*> traverse (traverse (traverse f)) ms
+    = flip SRecv <$> f a <*> traverse (traversePat f) ms
   traverse f (SIter v s ss a)
     = flip (SIter v s) <$> f a <*> traverse f ss
   traverse f (SLoop v ss a)
@@ -297,6 +344,8 @@ instance Traversable Stmt where
     = flip (SChoose v s) <$> f a <*> traverse f ss
   traverse f (SVar v a)
     = SVar v <$> f a
+  traverse f (SDie a)
+    = SDie <$> f a
   traverse f (SBlock ss a)
     = flip SBlock <$> f a <*> traverse (traverse f) ss
   traverse f (SCase v sl sr a)
@@ -315,8 +364,8 @@ joinMaps = M.unionWith (++)
 addNext :: Int -> [a] -> M.Map Int [a] -> M.Map Int [a]
 addNext i is = M.alter (fmap (++is)) i
 
-stmt :: (TId, CId, MConstr, Stmt a) -> Stmt a
-stmt (_,_,_,s) = s
+stmt :: (TId, [(CId, MConstr)], Stmt a) -> Stmt a
+stmt (_,_,s) = s
 
 lastStmts :: Stmt a -> [Stmt a]
 lastStmts s@(SSkip _)       = [s]
@@ -328,12 +377,15 @@ lastStmts (SChoose _ _ s _) = lastStmts s
 lastStmts (SIter _ _ s _)   = lastStmts s
 lastStmts (SLoop _ s _)     = lastStmts s
 lastStmts (SCase _ sl sr _) = lastStmts sl ++ lastStmts sr
+lastStmts s@(SDie a)        = [s]
 
 nextStmts :: Stmt Int -> M.Map Int [Int]
 nextStmts (SSend _ ms i)
-  = foldl (\m -> joinMaps m . nextStmts) (M.fromList [(i, map (annot . stmt) ms)])$ map stmt ms
+  = foldl (\m -> joinMaps m . nextStmts)
+          (M.fromList [(i, map (annot . stmt) ms)])$ map stmt ms
 nextStmts (SRecv ms i)
-  = foldl (\m -> joinMaps m . nextStmts) (M.fromList [(i, map (annot . stmt) ms)])$ map stmt ms
+  = foldl (\m -> joinMaps m . nextStmts)
+          (M.fromList [(i, map (annot . stmt) ms)])$ map stmt ms
 nextStmts (SIter _ _ s i)
   = M.fromList ((i, [annot s]):[(annot j, [i]) | j <- lastStmts s])  `joinMaps` nextStmts s
 nextStmts (SLoop v s i)
@@ -347,9 +399,12 @@ nextStmts (SCase _ sl sr i)
 nextStmts _
   = M.empty
 
+data SetBound = Bounded Set Int
+                deriving (Eq, Read, Show, Typeable)
+
 data Config a = Config {
     cTypes  :: MTypeEnv
-  , cSets   :: [Set]
+  , cSets   :: [SetBound]
   , cUnfold :: [Unfold]
   , cProcs  :: [Process a]
   } deriving (Eq, Read, Show, Typeable)
@@ -366,3 +421,86 @@ freshId
 freshIds :: Config a -> Config Int
 freshIds (c @ Config { cProcs = ps })
   = c { cProcs = evalState (mapM (mapM freshId) ps) 1 }
+
+instance Pretty Var where
+  pretty (V x) = text x
+
+instance Pretty Set where
+  pretty (S x) = text x
+
+instance Pretty Pid where
+  pretty (PConc x)
+    = text "Pid@" <> int x
+  pretty (PAbs v vs)
+    = text "Pid@(" <> pretty v <> colon <> pretty vs <> text ")"
+  pretty (PVar v)
+    = pretty v
+  pretty (PUnfold _ s i)
+    = text "Pid@" <> pretty s <> brackets (int i)
+
+x $$ y  = (x <> line <> y)
+
+instance Pretty Label where
+  pretty LL     = text "inl"
+  pretty RL     = text "inr"
+  pretty (VL x) = pretty x
+
+instance Pretty MConstr where
+  pretty (MTApp tc args) = text (untycon tc) <> pretty args
+  pretty (MCaseL l t)    = pretty l <+> pretty t
+  pretty (MCaseR l t)    = pretty l <+> pretty t
+  pretty (MTProd t1 t2)  = pretty t1 <> text "*" <> pretty t2
+
+instance Pretty (Stmt a) where
+  pretty (SSkip _)
+    = text "<skip>"
+
+  pretty (SSend p tcms _)
+    = text "send" <+> pretty p <+> align (doManyTCMS tcms)
+
+  pretty (SRecv tcms _)    
+    = text "recv" <+> align (doManyTCMS tcms)
+
+  pretty (SIter x xs s a)
+    = text "for" <+> parens (pretty x <+> colon <+> pretty xs) <+> lbrace $$
+      (indent 2 $ pretty s) $$
+      rbrace
+
+  pretty (SVar (LV v) _)
+    = text "goto" <+> pretty v
+
+  pretty (SLoop (LV v) s _)
+    = pretty v <> colon <+> parens (pretty s)
+
+  pretty (SCase l sl sr a)
+    = text "match" <+> pretty l <+> text "with" $$
+      indent 2
+        (align (vcat [text "| InL ->" <+> pretty sl,
+                     text "| InR ->"  <+> pretty sr]))
+
+  pretty (SDie _)
+    = text "CRASH"
+
+  pretty (SBlock ss a)
+    = vcat $ map pretty ss
+
+instance Pretty (Config a) where
+  pretty (Config {cProcs = ps})
+    = vcat $ map go ps
+    where
+      go (pid, s) = text "Proc" <+> parens (pretty pid) <> colon <$$>
+                    indent 2 (pretty s)
+
+doManyTCMS :: [(TId, [(CId, MConstr)], Stmt a)] -> Doc
+doManyTCMS
+  = align . vcat . map doOneTCMS      
+
+doOneTCMS :: (TId, [(CId, MConstr)], Stmt a) -> Doc
+doOneTCMS (tid, cms, s)
+  = text "T" <> int tid <> text "@" <>
+    braces ((hcat (punctuate punc (map doCMS cms))) <+>
+            text "->" <+> align (pretty s))
+  where
+    punc = space <> text "&" <> space
+    doCMS (ci, m)
+      = text "C" <> int ci <> parens (pretty m) 

@@ -16,11 +16,11 @@ m >>= f = bind m (lam f)
       => repr (Process repr a)
       -> repr (Process repr b)
       -> repr (Process repr b)
-m >> n = do {_ <- m; n}
+m >> n = bind m (lam (\_ ->  n))
                  
 
-fail :: a
-fail = error "TBD: Language.Syntax.fail"
+fail :: Symantics repr => repr (Process repr a)
+fail = die
 
 return :: Symantics repr => repr a -> repr (Process repr a)
 return = ret

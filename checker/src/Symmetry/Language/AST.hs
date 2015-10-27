@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# Language GADTs #-}
-{-# Language FunctionalDependencies #-}
+{-# Language RankNTypes #-}
 {-# Language FlexibleInstances #-}
 {-# Language FlexibleContexts #-}
 {-# Language UndecidableInstances #-}
@@ -13,14 +13,13 @@ module Symmetry.Language.AST where
 import Data.Hashable
 import Data.Typeable
 
-data RSing  = RS Int deriving (Ord, Eq, Show, Typeable)
+data RSing  = RS Int
+            | RSelf Role
+              deriving (Ord, Eq, Show, Typeable)
 data RMulti = RM Int deriving (Ord, Eq, Show, Typeable)
-
-instance Hashable RSing where
-  hashWithSalt s (RS i) = hashWithSalt s i
-
-instance Hashable RMulti where
-  hashWithSalt s (RM i) = hashWithSalt s i
+data Role = S RSing
+          | M RMulti
+            deriving (Ord, Eq, Show)
 
 data Pid r = Pid r deriving (Typeable)
 
@@ -35,25 +34,26 @@ class Symantics repr where
   -- Process Type
   data Process repr :: * -> *
   -- Value Injection:
-  tt   :: repr ()
-  int  :: Int    -> repr Int
-  str  :: String -> repr String
-  bool :: Bool   -> repr Bool
+  tt     :: repr ()
+  int    :: Int     -> repr Int
+  str    :: String  -> repr String
+  bool   :: Boolean -> repr Boolean
 
+  neg    :: repr Int -> repr Int
   plus   :: repr Int -> repr Int -> repr Int
 
-  eq   :: (Ord a) => repr a -> repr a -> repr Bool
-  gt   :: (Ord a) => repr a -> repr a -> repr Bool
-  lt   :: (Ord a) => repr a -> repr a -> repr Bool
+  eq   :: (Ord a) => repr a -> repr a -> repr Boolean
+  gt   :: (Ord a) => repr a -> repr a -> repr Boolean
+  lt   :: (Ord a) => repr a -> repr a -> repr Boolean
 
-  not  :: repr Bool -> repr Bool
-  and  :: repr Bool -> repr Bool -> repr Bool
-  or   :: repr Bool -> repr Bool -> repr Bool
+  not  :: repr Boolean -> repr Boolean
+  and  :: repr Boolean -> repr Boolean -> repr Boolean
+  or   :: repr Boolean -> repr Boolean -> repr Boolean
 
-  nil  :: repr [a]
-  cons :: repr a   -> repr [a] -> repr [a]
-  hd   :: repr [a] -> repr a
-  tl   :: repr [a] -> repr [a]
+  -- Lists
+  nil       :: repr [a]
+  cons      :: repr a   -> repr [a] -> repr [a]
+  matchList :: repr [a] -> repr (() -> b) -> repr ((a, [a]) -> b) -> repr b
 
   -- Lambda Calculus:
   lam  :: (repr a -> repr b) -> repr (a -> b)
@@ -101,8 +101,17 @@ class Pat pat => ArbPat pat a where
 instance (ArbPat arb a, ArbPat arb b) => ArbPat arb (a :+: b) where
   arb  = liftPat1 arb `joinPat` liftPat2 arb
 
--- foo :: (SymMatch repr, ArbPat repr Int, ArbPat repr (Pid RSing)) =>
---     repr (Pid RSing :+: (Int :+: Pid RSing) -> ())
--- foo = lam $ \x -> match x
---                    (lam $ \y -> tt)
---                    (lam $ \z -> match z (lam $ \_ -> tt) (lam $ \_ -> tt))
+instance (Symantics arb, ArbPat arb a, ArbPat arb b) => ArbPat arb (a, b) where
+  arb  = pair arb arb
+
+class (Symantics repr,
+       ArbPat repr (),
+       ArbPat repr Int,
+       ArbPat repr String,
+       ArbPat repr (Pid RSing)) => DSL repr where         
+
+instance (Symantics repr,
+          ArbPat repr (),
+          ArbPat repr Int,
+          ArbPat repr String,
+          ArbPat repr (Pid RSing)) => DSL repr where
