@@ -14,15 +14,17 @@ import Symmetry.Language
 import Symmetry.Verify
 
 
-factorial :: Int -> Int
-factorial n = foldl (*) 1 [1..n]
+--factorial :: Int -> Int
+--factorial n = foldl (*) 1 [1..n]
 
 slave :: (DSL repr) => repr (Pid RSing -> Process repr ())
 slave =  lam $ \pid ->  
                 do (num :: repr Int)  <- recv
+                   -- perform some local computation on num
                    send pid num
 
  
+ workQueue
 -- | Wait for n integers and sum them all up
 {- 
 sumIntegers :: (DSL repr) => repr (Int -> Process repr Int)
