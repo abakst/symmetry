@@ -115,8 +115,8 @@ match4 :: ( Symantics repr
        => repr (Either a (Either b (Either c d)))
        -> repr (a -> r) -> repr (b -> r) -> repr (c -> r) -> repr (d -> r)
        -> repr r
-match4 msg f1 f2 f3 f4 = match msg f1 $ lam $ \e1 ->
-                           match e1 f2 $ lam $ \e2 ->
+match4 msg f1 f2 f3 f4 = match msg f1 . lam $ \e1 ->
+                           match e1 f2 . lam $ \e2 ->
                              match e2 f3 f4
 
 match5 :: ( Symantics repr

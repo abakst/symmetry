@@ -54,6 +54,7 @@ isBounded :: [SetBound] -> Pid -> Bool
 isBounded bs (PAbs _ s) = s `elem` [ s' | Bounded s' _ <- bs ]
 isBounded _ _           = False
 
+subUnfoldIdx :: Pid -> Pid
 subUnfoldIdx (PUnfold _ s i) = PUnfold (V (show i)) s i
 subUnfoldIdx p = p
 
@@ -68,12 +69,12 @@ data MConstr = MTApp  { tycon :: MTyCon, tyargs :: [Pid] }
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 eqConstr :: MConstr -> MConstr -> Bool
-eqConstr (MCaseL _ c) (MCaseL _ c') = eqConstr c c'
-eqConstr (MCaseR _ c) (MCaseR _ c') = eqConstr c c'
+eqConstr (MCaseL _ c) (MCaseL _ c')      = eqConstr c c'
+eqConstr (MCaseR _ c) (MCaseR _ c')      = eqConstr c c'
 eqConstr (MTProd p1 p2) (MTProd p1' p2') = eqConstr p1 p1' && eqConstr p2 p2'
-eqConstr a1@(MTApp{}) a2@MTApp{} = tycon a1 == tycon a2 &&
-                                   length (tyargs a1) == length (tyargs a2)
-eqConstr _ _                     = False
+eqConstr a1@(MTApp{}) a2@MTApp{}         = tycon a1 == tycon a2 &&
+                                           length (tyargs a1) == length (tyargs a2)
+eqConstr _ _                             = False
 
 lookupConstr :: MType -> MConstr -> Maybe CId
 lookupConstr m c
@@ -82,6 +83,7 @@ lookupConstr m c
     go Nothing i c' = if eqConstr c c' then Just i else Nothing
     go a       _ _  = a
 
+                      
 lookupType m t
   = M.foldlWithKey go Nothing m
   where
@@ -481,8 +483,8 @@ instance Pretty (Stmt a) where
   pretty (SDie _)
     = text "CRASH"
 
-  pretty (SBlock ss a)
-    = vcat $ map pretty ss
+  pretty (SBlock ss _)
+    = braces $ vcat $ punctuate semi (map pretty ss)
 
 instance Pretty (Config a) where
   pretty (Config {cProcs = ps})
@@ -493,14 +495,14 @@ instance Pretty (Config a) where
 
 doManyTCMS :: [(TId, [(CId, MConstr)], Stmt a)] -> Doc
 doManyTCMS
-  = align . vcat . map doOneTCMS      
+  = align . braces . vcat . map doOneTCMS      
 
 doOneTCMS :: (TId, [(CId, MConstr)], Stmt a) -> Doc
 doOneTCMS (tid, cms, s)
   = text "T" <> int tid <> text "@" <>
-    braces ((hcat (punctuate punc (map doCMS cms))) <+>
-            text "->" <+> align (pretty s))
+    angles (align (vcat (punctuate punc (map doCMS cms))) <+>
+            text "->" $$ align (pretty s))
   where
-    punc = space <> text "&" <> space
+    punc = space <> text "+" <> space
     doCMS (ci, m)
       = text "C" <> int ci <> parens (pretty m) 

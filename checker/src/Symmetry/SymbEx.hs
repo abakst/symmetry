@@ -6,20 +6,13 @@
 {-# Language ScopedTypeVariables #-}
 module Symmetry.SymbEx where
 
-import           Data.List (nub)
-import           Data.Tuple (swap)
 import           Data.Generics
-import           Data.Typeable
 import           Data.Maybe
-import           Data.Dynamic
 
-import           Data.Hashable
 import qualified Data.Map.Strict as M
 import           Control.Monad.State hiding (join, get, put)
 import           Symmetry.Language.AST as L
 import qualified Symmetry.IL.AST       as IL
-
-import           Control.Applicative ((<$>))
 
 data Var a = V Int deriving (Ord, Eq, Show)
 
@@ -107,6 +100,8 @@ fresh (AProc _ s a) = do v <- Just <$> freshVar
 newtype SymbEx a = SE { runSE :: SymbExM (AbsVal a) }
 
 data AbsVal t where
+  ABot       :: AbsVal t
+  --
   AUnit      :: Maybe (Var ()) -> AbsVal ()
   AInt       :: Maybe (Var Int) -> AbsVal Int
   AString    :: Maybe (Var String) -> AbsVal String
@@ -114,12 +109,19 @@ data AbsVal t where
   AProd      :: Maybe (Var (a,b)) -> AbsVal a -> AbsVal b -> AbsVal (a, b)
   AList      :: Maybe (Var [a]) -> Maybe (AbsVal a) -> AbsVal [a]
   AArrow     :: Maybe (Var (a -> b)) -> (AbsVal a -> SymbEx b) -> AbsVal (a -> b)
-  -- "Process" related(
   APid       :: Maybe (Var (Pid RSing)) -> L.Pid (Maybe RSing) -> AbsVal (Pid RSing)
   APidMulti  :: Maybe (Var (Pid RMulti)) -> L.Pid (Maybe RMulti) -> AbsVal (Pid RMulti)
   ARoleSing  :: Maybe (Var RSing) -> RSing -> AbsVal RSing
   ARoleMulti :: Maybe (Var RMulti) -> RMulti -> AbsVal RMulti
   AProc      :: Maybe (Var (Process SymbEx a)) -> IL.Stmt () -> AbsVal a -> AbsVal (Process SymbEx a)
+
+instance Show (AbsVal t) where
+  show (AUnit _) = "AUnit"
+  show (AInt _) = "AInt"
+  show (AString _) = "AString"
+  show (ASum _ l r) = show l ++ "+" ++ show r
+  show (AProd _ l r) = show l ++ "*" ++ show r
+  show (APid x p) = show p ++ "@" ++ show x 
 
 setVar :: Var t -> AbsVal t -> AbsVal t                
 setVar v (AUnit _)       = AUnit (Just v)
@@ -213,6 +215,9 @@ instance Pure (Pid RSing) where
 
 join :: AbsVal t -> AbsVal t -> AbsVal t          
 
+join ABot x = x
+join x    ABot = x
+
 join (AUnit _) (AUnit _) = AUnit Nothing
 join (AInt _)  (AInt _)  = AInt Nothing
 
@@ -230,6 +235,9 @@ join (ASum _ l1 r1) (ASum _ l2 r2)
     maybeJoin (Just x) (Just y) = Just (x `join` y)
     maybeJoin (Just x) Nothing  = Just x
     maybeJoin _  y              = y
+
+join (AProd _ l1 r1) (AProd _ l2 r2)
+  = AProd Nothing l1 r1
 
 -------------------------------------------------
 -- | Helpers for generating IL from AbsValtractions
@@ -304,7 +312,7 @@ recvToIL m = do
   let t  = absToILType m
   let cs = absToIL m
   case IL.lookupType g t of
-    Just i  -> return $ IL.SRecv [(i, (mts i g cs), skip)] ()
+    Just i  -> return $ IL.SRecv [(i, mts i g cs, skip)] ()
     Nothing -> do i <- freshTId
                   let g' = M.insert i t g
                   modify $ \s -> s { tyenv = g' }
@@ -453,7 +461,8 @@ symCons x l
                        Nothing  -> AList Nothing (Just xv)
                        Just xv' -> AList Nothing (Just $ xv `join` xv')
 
-symMatchList :: SymbEx [a]
+symMatchList :: forall a b.
+                SymbEx [a]
              -> SymbEx (() -> b)
              -> SymbEx ((a, [a]) -> b)
              -> SymbEx b         
@@ -461,10 +470,11 @@ symMatchList l nilCase consCase
   = SE $ do nilv  <- runSE (app nilCase tt)
             lv    <- runSE l
             case lv of
-              AList _ (Just v) -> error "TBD: MatchList"
-              AList _ Nothing  -> error "TBD: MatchList"
-                   
-
+              AList _ (Just v) -> do
+                      let tl = SE . return $ AList Nothing Nothing
+                      cv <- runSE $ symApp consCase (pair (SE . return $ v) tl)
+                      return (cv `join` nilv)
+              AList _ Nothing  -> return nilv
 
 -------------------------------------------------
 symSelf :: SymbEx (Process SymbEx (Pid RSing))
@@ -498,8 +508,8 @@ symFixM f
                 sv = IL.SVar v  ()
                 g = SE . return . AArrow Nothing $
                        \a -> SE $ return (AProc Nothing sv a)
-            return $ AArrow Nothing $ \a -> SE $ do AArrow _ h <- runSE (app f g)
-                                                    AProc b s r <- runSE (h a)
+            AArrow _ h <- runSE (app f g)
+            return . AArrow Nothing $ \a -> SE $ do AProc b s r <- runSE (h a)
                                                     return $ AProc b (IL.SLoop v s ()) r
 -------------------------------------------------
 symNewRSing :: SymbEx (Process SymbEx RSing)
@@ -569,7 +579,7 @@ symSend pidM mM
 symDie :: SymbEx (Process SymbEx a)
 -------------------------------------------------
 symDie 
-  = SE $ return (AProc Nothing s undefined)
+  = SE $ return (AProc Nothing s ABot)
     where
       s = IL.SDie ()
 

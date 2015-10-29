@@ -8,7 +8,6 @@ module Main where
 import Prelude hiding ((>>=), (>>), fail, return, id)
 import Symmetry.Language
 import Symmetry.Verify
-import Symmetry.SymbEx
 import SrcHelper
 
 type Msg = (Pid RSing, Int)  :+: -- Reply   Pid Int
@@ -18,11 +17,9 @@ type Msg = (Pid RSing, Int)  :+: -- Reply   Pid Int
 class ( HelperSym repr
       ) => HowaitSem repr
 
-instance HowaitSem SymbEx
-
 recv_reply :: HowaitSem repr => repr (Process repr (Pid RSing, Int))
 recv_reply = do msg :: repr Msg <- recv
-                match msg id reject
+                match msg id (lam $ \_ -> die)
 
 reply_msg :: HowaitSem repr => repr (Pid RSing -> Int -> Msg)
 reply_msg  = lam $ \pid -> lam $ \n -> inl $ pair pid n

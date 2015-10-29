@@ -12,32 +12,20 @@
 module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return)
-import Symmetry.Language.AST
-import Symmetry.Language.Syntax
-import GHC.Num ((+))
-import Data.Either
 import SrcHelper
 import Symmetry.Language
 import Symmetry.Verify
-import Symmetry.SymbEx
 
-class ( Symantics repr
-      , ArbPat repr ()
-      , ArbPat repr Int
-      ) => PipeSem repr
-
-instance PipeSem SymbEx
-
-pipe :: PipeSem repr => repr (Process repr ())
+pipe :: DSL repr => repr (Process repr ())
 pipe  = do me   <- self
-           n    <- app any_nat tt
+           let n = arb
            head <- app3 init_pipe (lam $ \x -> plus (int 1) x) n me
            send head (int 0)
            sink
 
 type T_p = ((Int->Int),(Int,(Pid RSing)))
 
-fix_init_pipe :: PipeSem repr
+fix_init_pipe :: DSL repr
               => repr ((T_p -> Process repr T_p) -> T_p -> Process repr T_p)
 fix_init_pipe  = lam $ \init_pipe -> lam $ \arg ->
                    let f    = proj1 arg
@@ -50,20 +38,20 @@ fix_init_pipe  = lam $ \init_pipe -> lam $ \arg ->
                          app init_pipe $ pair3 f (plus n (int (-1))) new)
 
 
-init_pipe :: PipeSem repr => repr ((Int->Int) -> Int -> (Pid RSing) -> Process repr (Pid RSing))
+init_pipe :: DSL repr => repr ((Int->Int) -> Int -> (Pid RSing) -> Process repr (Pid RSing))
 init_pipe  = lam $ \f -> lam $ \n -> lam $ \next ->
                do let p = pair3 f n next
                   p' <- app (fixM fix_init_pipe) p
                   let pid' = proj2 $ proj2 p'
                   return pid'
 
-sink :: PipeSem repr => repr (Process repr ())
+sink :: DSL repr => repr (Process repr ())
 sink  = do i :: repr Int <- recv
            die
 
 type T_p2 = ((Int->Int),(Pid RSing))
 
-pipe_node :: PipeSem repr
+pipe_node :: DSL repr
           => repr ((Int->Int) -> (Pid RSing) -> Process repr ())
 pipe_node  = lam $ \f -> lam $ \next ->
                do let fix_pn = lam $ \pipe_node -> lam $ \p ->

@@ -21,7 +21,7 @@ data Role = S RSing
           | M RMulti
             deriving (Ord, Eq, Show)
 
-data Pid r = Pid r deriving (Typeable)
+data Pid r = Pid r deriving (Typeable, Show)
 
 deriving instance Eq a  => Eq (Pid a)
 deriving instance Ord a => Ord (Pid a)
