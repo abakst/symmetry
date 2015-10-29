@@ -100,7 +100,10 @@ fresh (AProc _ s a) = do v <- Just <$> freshVar
 newtype SymbEx a = SE { runSE :: SymbExM (AbsVal a) }
 
 data AbsVal t where
-  ABot       :: AbsVal t
+  ABot        :: AbsVal t
+  APidCompare :: (Maybe (Var (Pid RSing)), L.Pid (Maybe RSing))
+              -> (Maybe (Var (Pid RSing)), L.Pid (Maybe RSing))
+              -> AbsVal Boolean
   --
   AUnit      :: Maybe (Var ()) -> AbsVal ()
   AInt       :: Maybe (Var Int) -> AbsVal Int
@@ -415,7 +418,14 @@ symEq, symGt, symLt :: Ord a
                     -> SymbEx a
                     -> SymbEx Boolean
 -------------------------------------------------
-symEq _ _  = arb
+symEq a b  = SE $ do av <- runSE a
+                     bv <- runSE b
+                     case (av, bv) of
+                       (APid ax apid, APid bx bpid) ->
+                         return $ APidCompare (ax, apid) (bx, bpid)
+                       _ ->
+                         runSE arb
+                       
 symGt _ _  = arb
 symLt _ _  = arb
 
@@ -608,29 +618,56 @@ symMatch :: forall a b c.
          -> SymbEx (b -> c)
          -> SymbEx c
 symMatch s l r
-  = SE $ do ASum x vl vr <- runSE s
-            case (vl, vr) of
-              (Just a, Nothing) -> runSE . app l . SE $ return a
-              (Nothing, Just b) -> runSE . app r . SE $ return b
-              (Nothing, Nothing) -> do
-                (v1, v2) <- case x of
-                              Nothing -> error "does this happen?" -- return (Nothing, Nothing)
-                              _       -> do v1 <- freshVar
-                                            v2 <- freshVar
-                                            return (v1, v2)
-                val1 <- setVar v1 <$> runSE arb
-                val2 <- setVar v2 <$> runSE arb
-                c1 <- runSE . app l . SE . return $ val1
-                c2 <- runSE . app r . SE . return $ val2
-                return $ joinProcs x c1 c2
-              (Just a, Just b)  -> do 
-                c1 <- runSE . app l . SE . return $ a
-                c2 <- runSE . app r . SE . return $ b
-                case x of
-                  Nothing -> 
-                    return $ joinProcs Nothing c1 c2
-                  Just v -> 
-                    return $ joinProcs (Just v) c1 c2
+  = SE $ do sum <- runSE s
+            case sum of
+              s@(APidCompare _ _) -> symMatchCompare s l r
+              _                   -> symMatchSum sum l r
+
+symMatchCompare :: forall a b c.
+                   (Typeable a, Typeable b, ArbPat SymbEx a, ArbPat SymbEx b) =>
+                   AbsVal (a :+: b)
+                -> SymbEx (a -> c)
+                -> SymbEx (b -> c)
+                -> SymbExM (AbsVal c)
+symMatchCompare (APidCompare (x,p) (y,q)) l r 
+  = do v <- freshVar
+       m <- symMatchSum (ASum (Just v) Nothing Nothing) l r
+       case m of
+         AProc px s a -> do
+           let p1 = pidAbsValToIL $ APid x p
+           let p2 = pidAbsValToIL $ APid y q
+           return $ AProc px (IL.SCompare (varToIL v) p1 p2 () `seqStmt` s) a
+         _ -> error "TBD: matchcompare"
+
+symMatchSum :: forall a b c.
+               (Typeable a, Typeable b, ArbPat SymbEx a, ArbPat SymbEx b) =>
+               AbsVal (a :+: b)
+            -> SymbEx (a -> c)
+            -> SymbEx (b -> c)
+            -> SymbExM (AbsVal c)
+symMatchSum (ASum x vl vr) l r
+  = case (vl, vr) of
+      (Just a, Nothing) -> runSE . app l . SE $ return a
+      (Nothing, Just b) -> runSE . app r . SE $ return b
+      (Nothing, Nothing) -> do
+        (v1, v2) <- case x of
+                      Nothing -> error "does this happen?" -- return (Nothing, Nothing)
+                      _       -> do v1 <- freshVar
+                                    v2 <- freshVar
+                                    return (v1, v2)
+        val1 <- setVar v1 <$> runSE arb
+        val2 <- setVar v2 <$> runSE arb
+        c1 <- runSE . app l . SE . return $ val1
+        c2 <- runSE . app r . SE . return $ val2
+        return $ joinProcs x c1 c2
+      (Just a, Just b)  -> do 
+        c1 <- runSE . app l . SE . return $ a
+        c2 <- runSE . app r . SE . return $ b
+        case x of
+          Nothing -> 
+            return $ joinProcs Nothing c1 c2
+          Just v -> 
+            return $ joinProcs (Just v) c1 c2
 
 joinProcs :: forall a b. Maybe (Var b) -> AbsVal a -> AbsVal a -> AbsVal a
 joinProcs (Just x) (AProc _ s1 v1) (AProc _ s2 v2)
