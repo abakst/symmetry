@@ -23,8 +23,6 @@ slave =  lam $ \pid ->
                    -- perform some local computation on num
                    send pid num
 
- 
- workQueue
 -- | Wait for n integers and sum them all up
 {- 
 sumIntegers :: (DSL repr) => repr (Int -> Process repr Int)
