@@ -42,7 +42,7 @@ stateToConfigs state
       mkVars vs = map (IL.PVar . IL.V . ("x_"++) . show) [1..length vs]
       mk1Config renv
                 = IL.Config { IL.cTypes = types
-                            , IL.cSets  = sets
+                            , IL.cSets  = []
                             , IL.cProcs = procs
                             , IL.cUnfold = []
                             }
@@ -169,13 +169,15 @@ instance ArbPat SymbEx () where
 instance ArbPat SymbEx Int where            
   arb = SE . return $ AInt Nothing
 
-instance ArbPat SymbEx String where            
+instance {-# OVERLAPPING #-} ArbPat SymbEx String where            
   arb = SE . return $ AString Nothing
 
 instance ArbPat SymbEx (Pid RSing) where            
   arb = SE . return $ APid Nothing (Pid Nothing)
 
-instance ArbPat SymbEx [Int]
+instance {-# OVERLAPPABLE #-} ArbPat SymbEx a => ArbPat SymbEx [a] where
+  arb = SE $ do a <- runSE arb
+                return $ AList Nothing (Just a)
 
 -------------------------------------------------
 -- | An instance of Send t means that t can be sent in a message
@@ -249,7 +251,9 @@ varToIL (V x) = IL.V ("x_" ++ show x)
 pidAbsValToIL :: AbsVal (Pid RSing) -> IL.Pid
 pidAbsValToIL (APid Nothing (Pid (Just (RS r)))) = IL.PConc r
 pidAbsValToIL (APid (Just x) _) = IL.PVar $ varToIL x
-pidAbsValToIL _                 = error "pidAbsValToIL: back to the drawing board"
+-- Oy
+pidAbsValToIL (APid Nothing (Pid (Just (RSelf (S (RS r)))))) = IL.PConc r
+pidAbsValToIL _                 = error "pidAbsValToIL: back to the drawing board "
 
 
 mkVal :: String -> [IL.Pid] -> IL.MConstr
@@ -514,14 +518,14 @@ symNewRMulti
 -------------------------------------------------
 symDoMany :: SymbEx (Pid RMulti)
           -> SymbEx (Pid RSing -> Process SymbEx a)
-          -> SymbEx (Process SymbEx ())
+          -> SymbEx (Process SymbEx [a])
 -------------------------------------------------
 symDoMany p f
   = SE $ do v <- freshVar
             APidMulti _ (Pid (Just r)) <- runSE p
             AArrow _ g                 <- runSE f
             AProc _ s _                <- runSE (g (APid (Just v) (Pid Nothing)))
-            return (AProc Nothing (iter v r s) (AUnit Nothing))
+            return (AProc Nothing (iter v r s) (error "TBD: symDoMany"))
     where
       iter v r s = IL.SIter (varToIL v) (roleToSet r) s ()
 

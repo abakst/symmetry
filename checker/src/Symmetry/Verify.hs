@@ -20,6 +20,7 @@ import Options
 import Text.PrettyPrint.Leijen  (pretty, nest, text, (<>), line)
 
 data MainOptions = MainOptions { optVerify  :: Bool
+                               , optBounded :: Int
                                , optVerbose :: Bool
                                , optProcess :: Bool
                                , optDir     :: String
@@ -28,6 +29,7 @@ data MainOptions = MainOptions { optVerify  :: Bool
 instance Options MainOptions where
   defineOptions
     = MainOptions <$> simpleOption "verify" False "Run Verifier"
+                  <*> simpleOption "set-size" 0 "Concrete set size"
                   <*> simpleOption "verbose" False "Verbose Output"
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
                   <*> simpleOption "pmlfile" ".symcheck" "Directory to store intermediate results"
@@ -78,18 +80,23 @@ runCmd verb pre wd c
                            exitWith (ExitFailure 126)
 
 
-run1Cfg :: Bool -> FilePath -> Config () -> IO Bool
-run1Cfg verb outd cfg
+run1Cfg :: MainOptions -> FilePath -> Config () -> IO Bool
+run1Cfg opt outd cfg
   = do createDirectoryIfMissing True outd
        removeFile (outTrail outd) `catch` \(_ :: IOException) ->
          return ()
-       let cfgUnfold = unfoldAbs cfg
-       renderToFile (outf outd) cfgUnfold
+       let cfgOut = if setsz > 0 then
+                      boundAbs setsz cfg
+                    else
+                      unfoldAbs cfg
+       renderToFile (outf outd) cfgOut
        runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName)
        runCmd verb "COMPILING VERIFIER:" outd ccCmd
        runCmd verb "CHECKING MODEL:" outd panCmd
        fileExists (outTrail outd)
   where
+    verb = optVerbose opt
+    setsz = optBounded opt
     fileExists f = catch (openFile f ReadMode >> return True)
                          (\(_ :: IOException) -> return False)
 
@@ -118,7 +125,7 @@ checkerMain main
         let  dir  = optDir opts
              verb = optVerbose opts
              outd = d </> dir
-        es <- forM cfgs $ run1Cfg verb outd
+        es <- forM cfgs $ run1Cfg opts outd
         let status = or es
         report status
         when status exitFailure

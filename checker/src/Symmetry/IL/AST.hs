@@ -14,6 +14,12 @@ import           Data.List (nub, isPrefixOf)
 import qualified Data.Map.Strict as M
 import Text.PrettyPrint.Leijen as P hiding ((<$>))
 
+setSize :: Int
+setSize = infty
+          
+infty :: Int
+infty = 2
+
 data Set = S String
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
@@ -43,6 +49,13 @@ isUnfold _         = False
 isAbs :: Pid -> Bool
 isAbs (PAbs _ _) = True
 isAbs _          = False
+
+isBounded :: [SetBound] -> Pid -> Bool
+isBounded bs (PAbs _ s) = s `elem` [ s' | Bounded s' _ <- bs ]
+isBounded _ _           = False
+
+subUnfoldIdx (PUnfold _ s i) = PUnfold (V (show i)) s i
+subUnfoldIdx p = p
 
 data Label = LL | RL | VL Var
              deriving (Ord, Eq, Read, Show, Typeable, Data)
@@ -174,20 +187,32 @@ endLabels = nub . listify (isPrefixOf "end" . unlv)
 
 -- | Unfold
 unfold :: Config a -> Config a
-unfold c@(Config { cUnfold = us, cProcs = ps })
+unfold c@(Config { cUnfold = us, cProcs = ps, cSets = bs })
   = c { cProcs = ps ++ ufprocs }
   where
     mkUnfold v s st i = (PUnfold v s i, st)
-    ufprocs             = [ mkUnfold v s st j | Conc s i <- us
-                                              , (PAbs v s', st) <- ps
-                                              , s == s'
-                                              , j <- [0..i-1]]
+    ufprocs           = [ mkUnfold v s st (j + if isBound s bs then 0 else setSize)
+                        | Conc s i <- us
+                        , (PAbs v s', st) <- ps
+                        , s == s'
+                        , j <- [0..i-1]
+                        ]
 
 unfoldAbs :: Config a -> Config a
 unfoldAbs c@(Config {cProcs = ps})
   = c { cUnfold = us }
   where
     us = [ Conc s 1 | (PAbs v s, _) <- ps ]
+         
+isBound :: Set -> [SetBound] -> Bool
+isBound s = any p
+  where p (Bounded s' _) = s == s'
+
+boundAbs :: Int -> Config a -> Config a
+boundAbs n c@(Config {cProcs = ps})
+  = c { cUnfold = us, cSets = bs }
+  where
+    (us, bs) = unzip [ (Conc s n, Bounded s n) | (PAbs v s, _) <- ps ]
 
 instStmt :: Eq a => [Pid] -> Stmt a -> Stmt a
 -- Interesting Cases
@@ -374,9 +399,12 @@ nextStmts (SCase _ sl sr i)
 nextStmts _
   = M.empty
 
+data SetBound = Bounded Set Int
+                deriving (Eq, Read, Show, Typeable)
+
 data Config a = Config {
     cTypes  :: MTypeEnv
-  , cSets   :: [Set]
+  , cSets   :: [SetBound]
   , cUnfold :: [Unfold]
   , cProcs  :: [Process a]
   } deriving (Eq, Read, Show, Typeable)
