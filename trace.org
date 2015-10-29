@@ -1,49 +1,51 @@
 * Definitions
 
-Process ID    : PId
-Var Type      : TId
-Message Type  : T   = TId × CId × Value
-Message       : M_i = P × T
-Message Queue : Q_i ⊆ (M_i)*
-Local Vars    : X_i = Var → Value
-Process State : C_i = Q_i × X_i × S_i
-General State : C   ⊆ C_1 × C_1 × ... × C_n
+- Process ID    : PId
+- Var Type      : TId
+- Message Type  : T = TId × CId × Value
+- Message       : M_{i} = P × T
+- Message Queue : Q_{i} ⊆ (M_{i})*
+- Local Vars    : X_{i} = Var → Value
+- Process State : C_{i} = Q_{i} × X_{i} × S_{i}
+- General State : C   ⊆ C_{1} × C_{1} × ... × C_{n}
 
-Stmt : S = SSend PId [(TId, [(CId, Value)], Stmt)]
-         ¦ SRecv     [(TId, [(CId, Value)], Stmt)]
-
-x ∈ Var   → x : Expr
-x ∈ Value → x : Expr
-x : Expr  → L x : Expr
-x : Expr  → R x : Expr
+- x ∈ Var   → x : Expr
+- x ∈ Value → x : Expr
+- x : Expr  → L x : Expr
+- x : Expr  → R x : Expr
 
 * Actions
 
-state before action : c  = (Q_1,  X_1,  S_1,  ..., Q_n,  X_n,  S_n)
-state after action  : c' = (Q_1', X_1', S_1', ..., Q_n', X_n', S_n')
+- state before action : c  = (Q_{1},  X_{1},  S_{1},  ..., Q_{n},  X_{n},  S_{n})
+- state after action  : c' = (Q_{1}', X_{1}', S_{1}', ..., Q_{n}', X_{n}', S_{n}')
 
 ** SSend Pid [(TId, [(CId, MConstr)], Stmt a)] a
 
-S_j = SSend p [..., (t_k, [..., (con_{kl}, v_{kl}), ...], S_{jk}), ...]
+S_{j} = SSend p [..., (t_{k}, [..., (con_{kl}, v_{kl}), ...], S_{jk}), ...]
 
-IF   ∃k,l : (1)        Q_p' = Q_p . (j, (t_k, con_{kl}, v_{kl}))
-            (2) ∀i≠j : Q_i' = Q_i
-            (3)        S_j' = S_{jk}
-            (4) ∀i≠j : S_i' = S_i
-            (5) ∀i   : X_i' = X_i
+IF   ∃k,l such that
+- Q_{p}' = Q_{p} . (j, (t_{k}, con_{kl}, v_{kl}))
+- ∀i≠j : Q_{i}' = Q_{i}
+- S_{j}' = S_{jk}
+- ∀i≠j : S_{i}' = S_{i}
+- ∀i   : X_{i}' = X_{i}
+
 THEN c → c'
 
 ** SRecv [(TId, [(CId, MConstr)], Stmt a)] a
 
 S_j = SRecv [..., (t_k, [..., (con_{kl}, var_{kl}), ...], S_{jk}), ...]
 
-IF   ∃p,k,l : (1) ∃val,θ : Q_j  = (p, (t_k, con_{kl}, val)) . Q_j' ∧
-                           θ(var_{kl}) = val ∧
-                           X_j' = X_j ∪ {var_{kl} → val}
-              (2) ∀i≠j   : Q_i' = Q_i
-              (3)          S_j' = S_{jk}
-              (4) ∀i≠j   : S_i' = S_i
-              (6) ∀i≠j   : X_i' = X_i
+IF   ∃p,k,l such that
+- ∃val,θ such that
+  - Q_{j}  = (p, (t_{k}, con_{kl}, val)) . Q_{j}' ∧
+  - θ(var_{kl}) = val ∧
+  - X_{j}' = X_{j} ∪ {var_{kl} → val}
+- ∀i≠j : Q_{i}' = Q_{i}
+- S_{j}' = S_{jk}
+- ∀i≠j : S_{i}' = S_{i}
+- ∀i≠j : X_{i}' = X_{i}
+
 THEN c → c'
 
 ** TODO SCase Var (Stmt a) (Stmt a) a
