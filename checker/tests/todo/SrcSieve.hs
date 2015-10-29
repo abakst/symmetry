@@ -67,41 +67,47 @@ sieve  = lam $ \input -> lam $ \output ->
                                  x <- recv_ans
                                  send output x
                                  r <- newRSing
-                                 f <- spawn r (app2 filter2 (app divisible_by x) input)
+                                 f <- spawn r (app2 filter2 x input)
                                  app sieve $ pair f output
               app (fixM f_sieve) $ pair input output
               ret tt
 
 type T_ar3 = () :+: Pid RSing
-type T_f3  = ((Int->Boolean),(Pid RSing,T_ar3))
+type T_f3  = (Int,(Pid RSing,T_ar3))
 
 f_filter :: SieveSem repr
          => repr ((T_f3 -> Process repr T_f3) -> T_f3 -> Process repr T_f3)
 f_filter  = lam $ \filter -> lam $ \arg ->
-              do let test     = proj1 arg
+              do let test_n   = proj1 arg
                      input    = proj1 $ proj2 arg
                      m_output = proj2 $ proj2 arg
                  match m_output
                    (lam $ \_ ->
                       do from <- recv_poke -- filter2
-                         app filter $ pair3 test input (inr from))
+                         app filter $ pair3 test_n input (inr from))
                    (lam $ \output ->
                       do me <- self -- filter3
                          send input (app poke_msg me)
                          y <- recv_ans
-                         ifte (app test y)
-                           (app filter $ pair3 test input (inr output))
+                         test_v <- app2 divisible_by test_n y
+                         ifte test_v
+                           (app filter $ pair3 test_n input (inr output))
                            (do send output (app ans_msg y)
-                               app filter $ pair3 test input (inl tt)))
+                               app filter $ pair3 test_n input (inl tt)))
 
 filter2 :: SieveSem repr
-        => repr ((Int->Boolean) -> Pid RSing -> Process repr ())
-filter2  = lam $ \test -> lam $ \input ->
-             do app (fixM f_filter) $ pair3 test input (inl tt)
+        => repr (Int -> Pid RSing -> Process repr ())
+filter2  = lam $ \test_n -> lam $ \input ->
+             do app (fixM f_filter) $ pair3 test_n input (inl tt)
                 ret tt
 
-divisible_by :: SieveSem repr => repr (Int -> Int -> Boolean)
-divisible_by = lam $ \x -> lam $ \y -> ifte (eq (app2 mod y x) (int 0)) (inl tt) (inr tt)
+divisible_by :: SieveSem repr
+             => repr (Int -> Int -> Process repr Boolean)
+divisible_by = lam $ \x -> lam $ \y ->
+                 do r <- app2 mod y x
+                    ifte (eq r (int 0))
+                      (ret $ inl tt)
+                      (ret $ inr tt)
 
 main :: IO ()
 main  = checkerMain $ exec sieve_main

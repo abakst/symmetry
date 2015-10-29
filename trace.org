@@ -1,0 +1,63 @@
+* Definitions
+
+Process ID    : PId
+Var Type      : TId
+Message Type  : T   = TId × CId × Value
+Message       : M_i = P × T
+Message Queue : Q_i ⊆ (M_i)*
+Local Vars    : X_i = Var → Value
+Process State : C_i = Q_i × X_i × S_i
+General State : C   ⊆ C_1 × C_1 × ... × C_n
+
+Stmt : S = SSend PId [(TId, [(CId, Value)], Stmt)]
+         ¦ SRecv     [(TId, [(CId, Value)], Stmt)]
+
+x ∈ Var   → x : Expr
+x ∈ Value → x : Expr
+x : Expr  → L x : Expr
+x : Expr  → R x : Expr
+
+* Actions
+
+state before action : c  = (Q_1,  X_1,  S_1,  ..., Q_n,  X_n,  S_n)
+state after action  : c' = (Q_1', X_1', S_1', ..., Q_n', X_n', S_n')
+
+** SSend Pid [(TId, [(CId, MConstr)], Stmt a)] a
+
+S_j = SSend p [..., (t_k, [..., (con_{kl}, v_{kl}), ...], S_{jk}), ...]
+
+IF   ∃k,l : (1)        Q_p' = Q_p . (j, (t_k, con_{kl}, v_{kl}))
+            (2) ∀i≠j : Q_i' = Q_i
+            (3)        S_j' = S_{jk}
+            (4) ∀i≠j : S_i' = S_i
+            (5) ∀i   : X_i' = X_i
+THEN c → c'
+
+** SRecv [(TId, [(CId, MConstr)], Stmt a)] a
+
+S_j = SRecv [..., (t_k, [..., (con_{kl}, var_{kl}), ...], S_{jk}), ...]
+
+IF   ∃p,k,l : (1) ∃val,θ : Q_j  = (p, (t_k, con_{kl}, val)) . Q_j' ∧
+                           θ(var_{kl}) = val ∧
+                           X_j' = X_j ∪ {var_{kl} → val}
+              (2) ∀i≠j   : Q_i' = Q_i
+              (3)          S_j' = S_{jk}
+              (4) ∀i≠j   : S_i' = S_i
+              (6) ∀i≠j   : X_i' = X_i
+THEN c → c'
+
+** TODO SCase Var (Stmt a) (Stmt a) a
+
+** TODO SIter Var Set (Stmt a) a
+
+** TODO SLoop LVar (Stmt a) a
+
+** TODO SChoose Var Set (Stmt a) a
+
+** TODO SVar LVar a
+
+** TODO SDie a
+
+** TODO SBlock [Stmt a] a
+
+** TODO SSkip a
