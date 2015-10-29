@@ -513,10 +513,10 @@ symFixM f
                                                     return $ AProc b (IL.SLoop v s ()) r
   where
     prohibitSpawn m
-      = do envs <- gets renvs
+      = do env <- gets renv
            r    <- m
-           envs' <- gets renvs
-           when (envs /= envs') err
+           env' <- gets renv
+           when (env /= env') err
            return r
     err
       = error "Spawning inside a loop prohibited! Use SpawnMany instead"
