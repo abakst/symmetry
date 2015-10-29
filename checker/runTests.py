@@ -33,12 +33,18 @@ def runTestsInDir(dir, expect, opts=[]):
     for i in glob.glob(os.path.join(dir, "*.hs")):
         sys.stdout.write ("[%s]: " % i)
         FNULL = open(os.devnull, 'w')
-        return_code = subprocess.call(config["runghc"] + [i,"--verify"]+opts,stdout=FNULL)
+
+        # Read options that may be in the first line of the file:
+        fileopts = subprocess.Popen("head -n 1 %s | grep '\-\-runwith:' | cut -d' ' -f 2-" % i,
+                                    shell=True,
+                                    stdout=subprocess.PIPE).stdout.read().split()
+
+        return_code = subprocess.call(config["runghc"] + [i,"--verify"]+fileopts+opts,stdout=FNULL)
         if return_code == expect:
             print "\033[1;32mPASS\033[0;0m"
         else:
             print "\033[1;31mFAIL\033[0;0m"
-            failed.append((i, opts))
+            failed.append((i, fileopts+opts))
     return failed
 
 def install_lib():
@@ -52,8 +58,6 @@ install_lib()
 
 failed += runTestsInDir(posDir, 0)
 failed += runTestsInDir(negDir, 1)
-failed += runTestsInDir(posDir, 0, ["--set-size", str(3)])
-failed += runTestsInDir(negDir, 1, ["--set-size", str(3)])
 
 os.chdir(savedPath)
 
