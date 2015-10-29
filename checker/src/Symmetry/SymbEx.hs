@@ -509,8 +509,17 @@ symFixM f
                 g = SE . return . AArrow Nothing $
                        \a -> SE $ return (AProc Nothing sv a)
             AArrow _ h <- runSE (app f g)
-            return . AArrow Nothing $ \a -> SE $ do AProc b s r <- runSE (h a)
+            return . AArrow Nothing $ \a -> SE $ do AProc b s r <- prohibitSpawn $ runSE (h a)
                                                     return $ AProc b (IL.SLoop v s ()) r
+  where
+    prohibitSpawn m
+      = do envs <- gets renvs
+           r    <- m
+           envs' <- gets renvs
+           when (envs /= envs') err
+           return r
+    err
+      = error "Spawning inside a loop prohibited! Use SpawnMany instead"
 -------------------------------------------------
 symNewRSing :: SymbEx (Process SymbEx RSing)
 -------------------------------------------------
