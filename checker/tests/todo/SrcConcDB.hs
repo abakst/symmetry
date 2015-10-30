@@ -63,17 +63,9 @@ instance CDBSem SymbEx
 concdb :: CDBSem repr => repr (Process repr ())
 concdb  = do r  <- newRSing
              db <- spawn r (app database nil)
-             app spawnmany (app client db)
-
-spawnmany :: CDBSem repr => repr (Process repr () -> Process repr ())
-spawnmany  = lam $ \f ->
-               do let fix_sm = lam $ \spawnmany -> lam $ \f ->
-                                 do r <- newRSing
-                                    spawn r f
-                                    b <- app any_bool tt
-                                    ifte b (app spawnmany f) (ret f)
-                  app (fixM fix_sm) f
-                  ret tt
+             rs <- newRMulti
+             spawnMany rs arb (app client db)
+             return tt
 
 type T_db = [(Int,Int)]
 
