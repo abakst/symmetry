@@ -1,6 +1,7 @@
 *~
 nohup.out
 **/.symcheck
+trace.html
 
 # benchmark executables
 SrcConcDB
