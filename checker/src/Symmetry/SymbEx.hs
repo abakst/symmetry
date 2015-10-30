@@ -513,14 +513,14 @@ symBind mm mf
 symFixM :: SymbEx ((a -> Process SymbEx a) -> a -> Process SymbEx a) -> SymbEx (a -> Process SymbEx a)
 -------------------------------------------------
 symFixM f
-  = SE $ do n <- freshInt
-            let v = IL.LV $ "L" ++ show n
-                sv = IL.SVar v  ()
-                g = SE . return . AArrow Nothing $
-                       \a -> SE $ return (AProc Nothing sv a)
-            AArrow _ h <- runSE (app f g)
-            return . AArrow Nothing $ \a -> SE $ do AProc b s r <- prohibitSpawn $ runSE (h a)
-                                                    return $ AProc b (IL.SLoop v s ()) r
+  = SE . return . AArrow Nothing $ \a ->
+          SE $ do n <- freshInt
+                  let v = IL.LV $ "L" ++ show n
+                      sv = IL.SVar v  ()
+                      g = SE . return . AArrow Nothing $ \a -> SE $ return (AProc Nothing sv a)
+                  AArrow _ h <- runSE (app f g)
+                  AProc b s r <- prohibitSpawn $ runSE (h a)
+                  return $ AProc b (IL.SLoop v s ()) r
   where
     prohibitSpawn m
       = do env <- gets renv
