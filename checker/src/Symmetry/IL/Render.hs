@@ -35,6 +35,8 @@ block ds
   = lbrace <$> indent 2 (seqStmts ds) <$> rbrace
     
 ifs :: [Doc] -> Doc
+ifs []
+  = int 0 <+> text "/* No Alternatives (perhaps nobody to receive from?) */"
 ifs ss 
   = text "if" <$> indent 2 (nonDetStmts ss) <$> text "fi"
     
@@ -285,7 +287,7 @@ renderStmtConc me (SIter (V v) (S s) ss _)
                         (text v <+> equals <+> renderProcName (PAbs (V ("__" ++ v)) (S s)) <> semi <$> d)
 renderStmtConc me (SLoop (LV v) ss _)
   = do d <- renderStmt me ss
-       return $ text v <> text ":" <$> d
+       return $ int 1 <> semi <+> text v <> text ":" <+> block [d]
      
 renderStmtConc _ (SVar (LV v) _)
   = return $ text "goto" <+> text v 
@@ -303,7 +305,7 @@ renderStmtConc me (SChoose (V v) s ss _)
     err = error ("Unknown set (renderStmtConc): " ++ show s)
     
 renderStmtConc me (SBlock ss _)
-  = fmap block $ mapM (renderStmt me) ss
+  = fmap seqStmts $ mapM (renderStmt me) ss
 
 renderStmtConc _ (SDie _)
   = return $ text "assert(0 == 1)"
