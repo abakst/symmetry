@@ -224,6 +224,8 @@ instStmt dom (SRecv mts a)
 instStmt dom (SSend p mts a)
   = SSend p (concatMap (instMS dom) mts) a
 -- Not so interesting cases:
+instStmt _ s@(SCompare _ _ _ _)
+  = s
 instStmt _ (SSkip a)
   = SSkip a
 instStmt dom (SBlock ss a)
@@ -284,6 +286,7 @@ subst s (SRecv ms a)     = SRecv (map (substMS s) ms) a
 subst s (SIter v xs t a) = SIter v xs (subst s' t) a
   where s'               = restrict v s
 subst s (SLoop v t a)    = SLoop v (subst s t) a
+subst s (SCompare v p1 p2 a) = SCompare v (substPid s p1) (substPid s p2) a
 subst s (SCase v l r a)  = SCase v (subst s l) (subst s r) a
 subst _ stmt             = stmt
 
@@ -304,17 +307,18 @@ substPid _ p          = p
 
 -- | Statement Annotations
 annot :: Show a => Stmt a -> a
-annot (SSkip a)         = a
-annot (SBlock _ a)      = a
-annot (SSend _ _ a)     = a
-annot (SRecv _ a)       = a
-annot (SIter _ _ _ a)   = a
-annot (SChoose _ _ _ a) = a
-annot (SVar _ a)        = a
-annot (SDie a)          = a
-annot (SLoop _ _ a)     = a
-annot (SCase _ _ _ a)   = a
-annot x                 = error ("annot: TBD " ++ show x)
+annot (SSkip a)          = a
+annot (SBlock _ a)       = a
+annot (SSend _ _ a)      = a
+annot (SRecv _ a)        = a
+annot (SIter _ _ _ a)    = a
+annot (SChoose _ _ _ a)  = a
+annot (SVar _ a)         = a
+annot (SDie a)           = a
+annot (SCompare _ _ _ a) = a
+annot (SLoop _ _ a)      = a
+annot (SCase _ _ _ a)    = a
+annot x                  = error ("annot: TBD " ++ show x)
 
 instance Functor ((,,) a b) where
   fmap f (x,y,a) = (x,y,f a)
@@ -347,6 +351,8 @@ instance Traversable Stmt where
     = flip (SChoose v s) <$> f a <*> traverse f ss
   traverse f (SVar v a)
     = SVar v <$> f a
+  traverse f (SCompare v p1 p2 a)
+    = SCompare v p1 p2 <$> f a
   traverse f (SDie a)
     = SDie <$> f a
   traverse f (SBlock ss a)
@@ -373,6 +379,7 @@ stmt (_,_,s) = s
 lastStmts :: Stmt a -> [Stmt a]
 lastStmts s@(SSkip _)       = [s]
 lastStmts s@(SVar _ _)      = [s]
+lastStmts s@(SCompare _ _ _ _) = [s]
 lastStmts (SBlock ss _)     = [last ss]
 lastStmts (SSend _ ms _)    = concatMap (lastStmts . stmt) ms
 lastStmts (SRecv ms _)      = concatMap (lastStmts . stmt) ms
