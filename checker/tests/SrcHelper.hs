@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RebindableSyntax #-}
+{-# LANGUAGE ImplicitParams #-}
 module SrcHelper where
 
 import Symmetry.Language
@@ -9,6 +10,7 @@ import Symmetry.SymbEx
 
 import Prelude hiding ((>>=), (>>), fail, return, id, mod)
 import Data.Typeable
+import GHC.Stack
 
 class ( Symantics repr
       , ArbPat repr ()
@@ -49,7 +51,8 @@ app5 :: Symantics repr
      -> repr a -> repr b -> repr c -> repr d -> repr e -> repr f
 app5 f a1 a2 a3 a4 a5 = app (app (app (app (app f a1) a2) a3) a4) a5
 
-ifte      :: ( Symantics repr
+ifte      :: ( ?callStack :: CallStack
+             , Symantics repr
              , ArbPat repr ()
              )
           => repr Boolean -> repr a -> repr a -> repr a
@@ -57,7 +60,8 @@ ifte b t e = match b (lam $ \_ -> t) (lam $ \_ -> e)
 
 type T_lookup a b = (a, ([(a,b)], (Either () b)))
 
-f_lookup :: ( Symantics repr
+f_lookup :: ( ?callStack :: CallStack
+            , Symantics repr
             , ArbPat repr ()
             , Ord a, Ord b, Typeable b
             )
@@ -76,7 +80,8 @@ f_lookup  = lam $ \lookup -> lam $ \arg ->
                                                   (ret $ pair3 k m (inr v'))
                                                   (app lookup $ pair3 k tl r))
 
-lookup :: ( Symantics repr
+lookup :: ( ?callStack :: CallStack
+          , Symantics repr
           , ArbPat repr ()
           , Ord a, Ord b, Typeable b
           )
@@ -88,13 +93,15 @@ lookup  = lam $ \k -> lam $ \m ->
 print :: Symantics repr => repr (a -> Process repr ())
 print  = lam $ \_ -> ret tt
 
-mod :: ( Symantics repr
+mod :: ( ?callStack :: CallStack
+       , Symantics repr
        , ArbPat repr ()
        ) => repr (Int -> Int -> Int)
 mod  = lam $ \a -> lam $ \b ->
          ifte (lt a b) a (app2 mod (plus a (neg b)) b)
 
-match3 :: ( Symantics repr
+match3 :: ( ?callStack :: CallStack
+          , Symantics repr
           , Typeable a, Typeable b, Typeable c
           , ArbPat repr a
           , ArbPat repr b
@@ -105,7 +112,8 @@ match3 :: ( Symantics repr
        -> repr r
 match3 msg f1 f2 f3 = match msg f1 $ lam (\e1 -> match e1 f2 f3)
 
-match4 :: ( Symantics repr
+match4 :: ( ?callStack :: CallStack
+          , Symantics repr
           , Typeable a, Typeable b, Typeable c, Typeable d
           , ArbPat repr a
           , ArbPat repr b
@@ -119,7 +127,8 @@ match4 msg f1 f2 f3 f4 = match msg f1 . lam $ \e1 ->
                            match e1 f2 . lam $ \e2 ->
                              match e2 f3 f4
 
-match5 :: ( Symantics repr
+match5 :: ( ?callStack :: CallStack
+          , Symantics repr
           , Typeable a, Typeable b, Typeable c, Typeable d, Typeable e
           , ArbPat repr a
           , ArbPat repr b
@@ -135,7 +144,8 @@ match5 msg f1 f2 f3 f4 f5 = match msg f1 $ lam $ \e1 ->
                                match e2 f3 $ lam $ \e3 ->
                                  match e3 f4 f5
 
-compare :: ( Symantics repr
+compare :: ( ?callStack :: CallStack
+           , Symantics repr
            , ArbPat repr ()
            , Ord a
            )

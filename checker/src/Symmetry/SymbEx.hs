@@ -4,10 +4,16 @@
 {-# Language TypeOperators #-}
 {-# Language TypeFamilies #-}
 {-# Language ScopedTypeVariables #-}
+{-# Language ImplicitParams #-}
 module Symmetry.SymbEx where
 
+import           Prelude hiding (error, undefined)
 import           Data.Generics
 import           Data.Maybe
+import           Text.PrettyPrint.Leijen (pretty)
+
+import           GHC.Stack (CallStack)
+import           GHC.Err.Located
 
 import qualified Data.Map.Strict as M
 import           Control.Monad.State hiding (join, get, put)
@@ -219,7 +225,8 @@ instance Pure (Pid RSing) where
 -- class Join t where
 --   join :: AbsVal t -> AbsVal t -> AbsVal t
 
-join :: AbsVal t -> AbsVal t -> AbsVal t          
+join :: (?callStack :: CallStack)
+     => AbsVal t -> AbsVal t -> AbsVal t          
 
 join ABot x = x
 join x    ABot = x
@@ -248,7 +255,8 @@ join (AProd _ l1 r1) (AProd _ l2 r2)
 -------------------------------------------------
 -- | Helpers for generating IL from AbsValtractions
 -------------------------------------------------
-joinStmt :: IL.Stmt () -> IL.Stmt () -> IL.Stmt ()
+joinStmt :: (?callStack :: CallStack)
+         => IL.Stmt () -> IL.Stmt () -> IL.Stmt ()
 joinStmt (IL.SSend p1 mts1 _) (IL.SSend p2 mts2 _)
   | p1 == p2 = IL.SSend p1 (mts1 ++ mts2) ()
 
@@ -257,12 +265,13 @@ joinStmt (IL.SRecv mts1 _) (IL.SRecv mts2 _)
 
 joinStmt s1 s2
   | s1 == s2  = s1
-  | otherwise = error $ "joinStmt: " ++ show s1 ++ "&" ++ show s2
+  | otherwise = error $ "joinStmt: " ++ (show $ pretty s1) ++ " && " ++ (show $ pretty s2)
 
 varToIL :: Var a -> IL.Var
 varToIL (V x) = IL.V ("x_" ++ show x)
 
-pidAbsValToIL :: AbsVal (Pid RSing) -> IL.Pid
+pidAbsValToIL :: (?callStack :: CallStack)
+              => AbsVal (Pid RSing) -> IL.Pid
 pidAbsValToIL (APid Nothing (Pid (Just (RS r)))) = IL.PConc r
 pidAbsValToIL (APid (Just x) _) = IL.PVar $ varToIL x
 -- Oy
@@ -273,7 +282,8 @@ pidAbsValToIL _                 = error "pidAbsValToIL: back to the drawing boar
 mkVal :: String -> [IL.Pid] -> IL.MConstr
 mkVal s = IL.MTApp (IL.MTyCon s)
 
-absToIL :: AbsVal a -> [IL.MConstr]
+absToIL :: (?callStack :: CallStack)
+        => AbsVal a -> [IL.MConstr]
 absToIL (AUnit _) = [mkVal "Unit" []]
 absToIL (AInt  _) = [mkVal "Int" []]
 absToIL (AString _) = [mkVal "String" []]
@@ -297,7 +307,8 @@ absToIL (AProd _ a b) = do x <- absToIL a
 -------------------------------------------------
 -- | Generate IL from primitive Processes
 -------------------------------------------------
-sendToIL :: (Typeable a) => AbsVal (Pid RSing) -> AbsVal a -> SymbExM (IL.Stmt ())
+sendToIL :: (?callStack :: CallStack)
+         => (Typeable a) => AbsVal (Pid RSing) -> AbsVal a -> SymbExM (IL.Stmt ())
 sendToIL p m = do
   g <- gets tyenv 
   let t  = absToILType m
@@ -312,7 +323,8 @@ sendToIL p m = do
   where
     mts i g cs = [ (fromMaybe (error ("send:" ++ show c)) $ IL.lookupConstr (g M.! i) c, c) | c <- cs ]
 
-recvToIL :: (Typeable a) => AbsVal a -> SymbExM (IL.Stmt ())
+recvToIL :: (?callStack :: CallStack)
+         => (Typeable a) => AbsVal a -> SymbExM (IL.Stmt ())
 recvToIL m = do
   g <- gets tyenv 
   let t  = absToILType m
@@ -353,7 +365,8 @@ seqStmt s1 s2 = IL.SBlock [s1, s2] ()
 -------------------------------------------------
 -- | Updates to roles
 -------------------------------------------------
-insRoleM :: Role -> SymbEx (Process SymbEx a) -> SymbExM ()
+insRoleM :: (?callStack :: CallStack)
+         => Role -> SymbEx (Process SymbEx a) -> SymbExM ()
 insRoleM k p = do m <- gets renv
                   case M.lookup k m of
                     Nothing -> do
@@ -364,12 +377,19 @@ insRoleM k p = do m <- gets renv
                     Just _  ->
                       error $ "insRoleM attempting to spawn already spawned role" ++ show k
 
-symSpawnSingle :: SymbEx RSing -> SymbEx (Process SymbEx a) -> SymbEx (Process SymbEx (Pid RSing))
+symSpawnSingle :: (?callStack :: CallStack)
+               => SymbEx RSing
+               -> SymbEx (Process SymbEx a)
+               -> SymbEx (Process SymbEx (Pid RSing))
 symSpawnSingle r p = SE $ do (ARoleSing _ r') <- runSE r
                              insRoleM (S r') p
                              return $ AProc Nothing skip (APid Nothing (Pid (Just r')))
 
-symSpawnMany :: SymbEx RMulti -> SymbEx Int -> SymbEx (Process SymbEx a) -> SymbEx (Process SymbEx (Pid RMulti))
+symSpawnMany :: (?callStack :: CallStack)
+             => SymbEx RMulti
+             -> SymbEx Int
+             -> SymbEx (Process SymbEx a)
+             -> SymbEx (Process SymbEx (Pid RMulti))
 symSpawnMany r _ p = SE $ do (ARoleMulti _ r') <- runSE r
                              insRoleM (M r') p
                              return $ AProc Nothing skip (APidMulti Nothing (Pid (Just r')))
@@ -513,7 +533,9 @@ symBind mm mf
             return $ AProc Nothing (st `seqStmt` st') b
 
 -------------------------------------------------
-symFixM :: SymbEx ((a -> Process SymbEx a) -> a -> Process SymbEx a) -> SymbEx (a -> Process SymbEx a)
+symFixM :: (?callStack :: CallStack)
+        => SymbEx ((a -> Process SymbEx a) -> a -> Process SymbEx a)
+        -> SymbEx (a -> Process SymbEx a)
 -------------------------------------------------
 symFixM f
   = SE . return . AArrow Nothing $ \a ->
@@ -575,7 +597,7 @@ symExec p
             return a
 
 -------------------------------------------------
-symRecv :: (Typeable a, ArbPat SymbEx a)
+symRecv :: (?callStack :: CallStack, Typeable a, ArbPat SymbEx a)
         => SymbEx (Process SymbEx a)
 -------------------------------------------------
 symRecv
@@ -587,7 +609,7 @@ freshVal :: ArbPat SymbEx a => SymbExM (AbsVal a)
 freshVal = runSE arb >>= fresh
 
 -------------------------------------------------
-symSend :: Typeable a
+symSend :: (?callStack :: CallStack, Typeable a)
         => SymbEx (Pid RSing)
         -> SymbEx a
         -> SymbEx (Process SymbEx ())
@@ -615,7 +637,8 @@ symInR b = SE $ do bv <- runSE b
                    return $ ASum Nothing Nothing (Just bv)
 
 symMatch :: forall a b c.
-            (Typeable a, Typeable b, ArbPat SymbEx a, ArbPat SymbEx b) =>
+            (?callStack :: CallStack,
+             Typeable a, Typeable b, ArbPat SymbEx a, ArbPat SymbEx b) =>
             SymbEx (a :+: b)
          -> SymbEx (a -> c)
          -> SymbEx (b -> c)
@@ -627,8 +650,9 @@ symMatch s l r
               _                   -> symMatchSum sum l r
 
 symMatchCompare :: forall a b c.
-                   (Typeable a, Typeable b, ArbPat SymbEx a, ArbPat SymbEx b) =>
-                   AbsVal (a :+: b)
+                   (?callStack :: CallStack, Typeable a, Typeable b,
+                    ArbPat SymbEx a, ArbPat SymbEx b)
+                => AbsVal (a :+: b)
                 -> SymbEx (a -> c)
                 -> SymbEx (b -> c)
                 -> SymbExM (AbsVal c)
@@ -643,7 +667,7 @@ symMatchCompare (APidCompare (x,p) (y,q)) l r
          _ -> error "TBD: matchcompare"
 
 symMatchSum :: forall a b c.
-               (Typeable a, Typeable b, ArbPat SymbEx a, ArbPat SymbEx b) =>
+               (?callStack :: CallStack, Typeable a, Typeable b, ArbPat SymbEx a, ArbPat SymbEx b) =>
                AbsVal (a :+: b)
             -> SymbEx (a -> c)
             -> SymbEx (b -> c)
@@ -672,7 +696,9 @@ symMatchSum (ASum x vl vr) l r
           Just v -> 
             return $ joinProcs (Just v) c1 c2
 
-joinProcs :: forall a b. Maybe (Var b) -> AbsVal a -> AbsVal a -> AbsVal a
+joinProcs :: forall a b.
+             (?callStack :: CallStack)
+          => Maybe (Var b) -> AbsVal a -> AbsVal a -> AbsVal a
 joinProcs (Just x) (AProc _ s1 v1) (AProc _ s2 v2)
   = AProc Nothing (IL.SCase (varToIL x) s1 s2 ()) (v1 `join` v2)
 joinProcs _ t1 t2
