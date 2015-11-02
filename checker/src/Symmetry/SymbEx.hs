@@ -142,6 +142,9 @@ absToILType x = M.fromList $ zip [0..] $ go (typeRep x)
       | tyConName (typeRepTyCon a) == "Pid" &&
         "RSing" == (tyConName . typeRepTyCon $ head as)
         = [IL.MTApp (IL.MTyCon "Pid") [IL.PVar (IL.V "x")]]
+      | tyConName (typeRepTyCon a) == "[]" &&
+        tyConName (typeRepTyCon $ head as) == "Char"
+        = [IL.MTApp (IL.MTyCon "String") []]
       | tyConName (typeRepTyCon a) == "[]"
         = [IL.MTApp (IL.MTyCon ("List" ++ concat [ tyConName $ typeRepTyCon a | a <- as ])) []]
       | tyConName (typeRepTyCon a) == "Either"
@@ -307,7 +310,7 @@ sendToIL p m = do
                   modify $ \s -> s { tyenv = g' }
                   return $ IL.SSend (pidAbsValToIL p) [(i, mts i g' cs, skip)] ()
   where
-    mts i g cs = [ (fromMaybe (error (show c)) $ IL.lookupConstr (g M.! i) c, c) | c <- cs ]
+    mts i g cs = [ (fromMaybe (error ("send:" ++ show c)) $ IL.lookupConstr (g M.! i) c, c) | c <- cs ]
 
 recvToIL :: (Typeable a) => AbsVal a -> SymbExM (IL.Stmt ())
 recvToIL m = do
@@ -321,7 +324,7 @@ recvToIL m = do
                   modify $ \s -> s { tyenv = g' }
                   return $ IL.SRecv [(i, mts i g' cs, skip)] ()
   where
-    mts i g cs = [ (fromMaybe (error (show c)) $ IL.lookupConstr (g M.! i) c, c) | c <- cs ]
+    mts i g cs = [ (fromMaybe (error ("recv:" ++ show c)) $ IL.lookupConstr (g M.! i) c, c) | c <- cs ]
 
 skip :: IL.Stmt ()
 skip = IL.SSkip ()

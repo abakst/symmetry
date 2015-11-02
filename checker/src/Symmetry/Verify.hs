@@ -38,7 +38,7 @@ spinCmd :: FilePath -> CreateProcess
 spinCmd f = shell ("spin -m -a " ++ f)
 
 ccCmd :: CreateProcess
-ccCmd     = shell ("cc -O3 -DSAFETY -DNOBOUNDCHECK -DNOCOMP -DSFH -DNOFAIR"
+ccCmd     = shell ("cc -O2 -DVECTORSZ=2048 -DSAFETY -DNOBOUNDCHECK -DNOCOMP -DSFH -DNOFAIR"
                    ++ " -o pan pan.c")
 
 panCmd :: CreateProcess
