@@ -1,3 +1,4 @@
+--runwith: --set-size=2
 {-# Language RebindableSyntax #-}
 {-# Language TypeOperators #-}
 {-# Language FlexibleContexts #-}
@@ -5,8 +6,6 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
-
-
 module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return) 

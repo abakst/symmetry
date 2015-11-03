@@ -83,7 +83,7 @@ do_serve  = lam $ \s ->
                        let set_h = lam $ \s' -> app do_serve s'
                        let get_h = lam $ \p -> do send p s
                                                   app do_serve s
-                       let bye_h = lam $ \_ -> die
+                       let bye_h = lam $ \_ -> return s
                        let ok_h = reject
                        msg :: repr Msg <- recv
                        match5 msg init_h set_h get_h ok_h bye_h

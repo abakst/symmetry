@@ -54,6 +54,7 @@ isBounded :: [SetBound] -> Pid -> Bool
 isBounded bs (PAbs _ s) = s `elem` [ s' | Bounded s' _ <- bs ]
 isBounded _ _           = False
 
+subUnfoldIdx :: Pid -> Pid
 subUnfoldIdx (PUnfold _ s i) = PUnfold (V (show i)) s i
 subUnfoldIdx p = p
 
@@ -68,12 +69,12 @@ data MConstr = MTApp  { tycon :: MTyCon, tyargs :: [Pid] }
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 eqConstr :: MConstr -> MConstr -> Bool
-eqConstr (MCaseL _ c) (MCaseL _ c') = eqConstr c c'
-eqConstr (MCaseR _ c) (MCaseR _ c') = eqConstr c c'
+eqConstr (MCaseL _ c) (MCaseL _ c')      = eqConstr c c'
+eqConstr (MCaseR _ c) (MCaseR _ c')      = eqConstr c c'
 eqConstr (MTProd p1 p2) (MTProd p1' p2') = eqConstr p1 p1' && eqConstr p2 p2'
-eqConstr a1@(MTApp{}) a2@MTApp{} = tycon a1 == tycon a2 &&
-                                   length (tyargs a1) == length (tyargs a2)
-eqConstr _ _                     = False
+eqConstr a1@(MTApp{}) a2@MTApp{}         = tycon a1 == tycon a2 &&
+                                           length (tyargs a1) == length (tyargs a2)
+eqConstr _ _                             = False
 
 lookupConstr :: MType -> MConstr -> Maybe CId
 lookupConstr m c
@@ -82,6 +83,7 @@ lookupConstr m c
     go Nothing i c' = if eqConstr c c' then Just i else Nothing
     go a       _ _  = a
 
+                      
 lookupType m t
   = M.foldlWithKey go Nothing m
   where
@@ -115,6 +117,7 @@ data Stmt a = SSkip a
             | SLoop LVar (Stmt a) a         {-used to create a loop with the given label-}
             | SChoose Var Set (Stmt a) a
             | SVar LVar a
+            | SCompare Var Pid Pid a -- x := p1 == p2;
             | SCase Var (Stmt a) (Stmt a) a
             | SDie a
             {- These do not appear in the source: -}
@@ -221,6 +224,8 @@ instStmt dom (SRecv mts a)
 instStmt dom (SSend p mts a)
   = SSend p (concatMap (instMS dom) mts) a
 -- Not so interesting cases:
+instStmt _ s@(SCompare _ _ _ _)
+  = s
 instStmt _ (SSkip a)
   = SSkip a
 instStmt dom (SBlock ss a)
@@ -281,6 +286,7 @@ subst s (SRecv ms a)     = SRecv (map (substMS s) ms) a
 subst s (SIter v xs t a) = SIter v xs (subst s' t) a
   where s'               = restrict v s
 subst s (SLoop v t a)    = SLoop v (subst s t) a
+subst s (SCompare v p1 p2 a) = SCompare v (substPid s p1) (substPid s p2) a
 subst s (SCase v l r a)  = SCase v (subst s l) (subst s r) a
 subst _ stmt             = stmt
 
@@ -301,17 +307,18 @@ substPid _ p          = p
 
 -- | Statement Annotations
 annot :: Show a => Stmt a -> a
-annot (SSkip a)         = a
-annot (SBlock _ a)      = a
-annot (SSend _ _ a)     = a
-annot (SRecv _ a)       = a
-annot (SIter _ _ _ a)   = a
-annot (SChoose _ _ _ a) = a
-annot (SVar _ a)        = a
-annot (SDie a)          = a
-annot (SLoop _ _ a)     = a
-annot (SCase _ _ _ a)   = a
-annot x                 = error ("annot: TBD " ++ show x)
+annot (SSkip a)          = a
+annot (SBlock _ a)       = a
+annot (SSend _ _ a)      = a
+annot (SRecv _ a)        = a
+annot (SIter _ _ _ a)    = a
+annot (SChoose _ _ _ a)  = a
+annot (SVar _ a)         = a
+annot (SDie a)           = a
+annot (SCompare _ _ _ a) = a
+annot (SLoop _ _ a)      = a
+annot (SCase _ _ _ a)    = a
+annot x                  = error ("annot: TBD " ++ show x)
 
 instance Functor ((,,) a b) where
   fmap f (x,y,a) = (x,y,f a)
@@ -344,6 +351,8 @@ instance Traversable Stmt where
     = flip (SChoose v s) <$> f a <*> traverse f ss
   traverse f (SVar v a)
     = SVar v <$> f a
+  traverse f (SCompare v p1 p2 a)
+    = SCompare v p1 p2 <$> f a
   traverse f (SDie a)
     = SDie <$> f a
   traverse f (SBlock ss a)
@@ -370,6 +379,7 @@ stmt (_,_,s) = s
 lastStmts :: Stmt a -> [Stmt a]
 lastStmts s@(SSkip _)       = [s]
 lastStmts s@(SVar _ _)      = [s]
+lastStmts s@(SCompare _ _ _ _) = [s]
 lastStmts (SBlock ss _)     = [last ss]
 lastStmts (SSend _ ms _)    = concatMap (lastStmts . stmt) ms
 lastStmts (SRecv ms _)      = concatMap (lastStmts . stmt) ms
@@ -446,10 +456,11 @@ instance Pretty Label where
   pretty (VL x) = pretty x
 
 instance Pretty MConstr where
+  pretty (MTApp tc [])   = text (untycon tc)
   pretty (MTApp tc args) = text (untycon tc) <> pretty args
   pretty (MCaseL l t)    = pretty l <+> pretty t
   pretty (MCaseR l t)    = pretty l <+> pretty t
-  pretty (MTProd t1 t2)  = pretty t1 <> text "*" <> pretty t2
+  pretty (MTProd t1 t2)  = parens (pretty t1 <> text ", " <> pretty t2)
 
 instance Pretty (Stmt a) where
   pretty (SSkip _)
@@ -472,7 +483,7 @@ instance Pretty (Stmt a) where
   pretty (SLoop (LV v) s _)
     = pretty v <> colon <+> parens (pretty s)
 
-  pretty (SCase l sl sr a)
+  pretty (SCase l sl sr _)
     = text "match" <+> pretty l <+> text "with" $$
       indent 2
         (align (vcat [text "| InL ->" <+> pretty sl,
@@ -481,8 +492,11 @@ instance Pretty (Stmt a) where
   pretty (SDie _)
     = text "CRASH"
 
-  pretty (SBlock ss a)
-    = vcat $ map pretty ss
+  pretty (SBlock ss _)
+    = braces (line <> indent 2 (vcat $ punctuate semi (map pretty ss)) <> line)
+
+  pretty (SCompare v p1 p2 _)
+    = pretty v <+> colon <> equals <+> pretty p1 <+> equals <> equals <+> pretty p2
 
 instance Pretty (Config a) where
   pretty (Config {cProcs = ps})
@@ -492,15 +506,17 @@ instance Pretty (Config a) where
                     indent 2 (pretty s)
 
 doManyTCMS :: [(TId, [(CId, MConstr)], Stmt a)] -> Doc
-doManyTCMS
-  = align . vcat . map doOneTCMS      
+doManyTCMS [x]
+  = align (doOneTCMS x)
+doManyTCMS xs
+  = align . braces . vcat $ map doOneTCMS xs
 
 doOneTCMS :: (TId, [(CId, MConstr)], Stmt a) -> Doc
 doOneTCMS (tid, cms, s)
   = text "T" <> int tid <> text "@" <>
-    braces ((hcat (punctuate punc (map doCMS cms))) <+>
-            text "->" <+> align (pretty s))
+    (align (vcat (punctuate punc (map doCMS cms))) <+>
+           text "->" $$ align (pretty s))
   where
-    punc = space <> text "&" <> space
+    punc = space <> text "+" <> space
     doCMS (ci, m)
       = text "C" <> int ci <> parens (pretty m) 

@@ -35,6 +35,8 @@ block ds
   = lbrace <$> indent 2 (seqStmts ds) <$> rbrace
     
 ifs :: [Doc] -> Doc
+ifs []
+  = int 0 <+> text "/* No Alternatives (perhaps nobody to receive from?) */"
 ifs ss 
   = text "if" <$> indent 2 (nonDetStmts ss) <$> text "fi"
     
@@ -263,11 +265,18 @@ renderStmtConc me (SRecv ms _)
        return $ ifs rs
   where 
     f l ms              = fmap (l ++) $ recvTy ms
-    recvTy (t, cs, s)   = asks pidMap >>= mapM (go (t,cs) s . subUnfoldIdx) . filter (/= me) . M.keys
-    go m (SSkip _) p    = recvMsg p me m
-    go m s p            = do recv <- recvMsg p me m
-                             d    <- renderStmt me s
-                             return $ seqStmts [recv, d]
+    recvTy (t, cs, s)   = do pm <- asks pidMap
+                             rs <- mapM (go (t,cs) . subUnfoldIdx) . filter (/= me) $ M.keys pm
+                             case s of
+                               SSkip _ -> return rs
+                               _       -> do d <- renderStmt me s
+                                             return $ [seqStmts [ifs rs, d]]
+                                       
+    go m p = recvMsg p me m
+    -- go m p    = recvMsg p me m
+    -- go m p    = do recv <- recvMsg p me m
+    --                -- d    <- renderStmt me s
+    --                return $ seqStmts [recv, d]
 
 renderStmtConc me (SCase l sl sr _)
   = do dl <- renderStmtConc me sl
@@ -285,7 +294,7 @@ renderStmtConc me (SIter (V v) (S s) ss _)
                         (text v <+> equals <+> renderProcName (PAbs (V ("__" ++ v)) (S s)) <> semi <$> d)
 renderStmtConc me (SLoop (LV v) ss _)
   = do d <- renderStmt me ss
-       return $ text v <> text ":" <$> d
+       return $ int 1 <> semi <+> text v <> text ":" <+> block [d]
      
 renderStmtConc _ (SVar (LV v) _)
   = return $ text "goto" <+> text v 
@@ -303,17 +312,23 @@ renderStmtConc me (SChoose (V v) s ss _)
     err = error ("Unknown set (renderStmtConc): " ++ show s)
     
 renderStmtConc me (SBlock ss _)
-  = fmap block $ mapM (renderStmt me) ss
+  = fmap seqStmts $ mapM (renderStmt me) ss
 
 renderStmtConc _ (SDie _)
-  = return $ text "assert(0 == 1)"
+  = return $ text "assert(0 == 1) /* CRASH! */"
+
+renderStmtConc _ (SCompare (V v) p1 p2 _)
+  = return $ text v <+> equals <+>
+    parens (renderProcVar p1 <+> eq <+> renderProcVar p2 <+>
+                          text "->" <+> inlCstr <+> colon <+> inrCstr)
+                          
           
 renderStmtConc _ _
   = return $ text "assert(0 == 1) /* TBD */"
 
 eq = equals <> equals
-isLeftLabel (V x) s  = text x <+> eq <+> inlCstr <+> text "->" <$> s
-isRightLabel (V x) s = text x <+> eq <+> inrCstr <+> text "->" <$> s
+isLeftLabel (V x) s  = align (text x <+> eq <+> inlCstr <+> text "->" <$> s)
+isRightLabel (V x) s = align (text x <+> eq <+> inrCstr <+> text "->" <$> s)
 
 stmtLabel :: Int -> Doc 
 stmtLabel i = 

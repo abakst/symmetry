@@ -31,7 +31,7 @@ workQueueProcess =  let fix_f = lam $ \f -> lam $ \m ->
                                                 (ret (int 0))
                                                 (do slavePid <- recv
                                                     send slavePid m
-                                                    app f (plus m (neg (int 1))))                                                              
+                                                    app f (plus m (neg (int 1))))
                       in lam $ \n -> do app (fixM fix_f) n
                                         ret tt
 

@@ -8,10 +8,11 @@
 {-# Language TypeOperators #-}
 {-# Language StandaloneDeriving #-}
 {-# Language TypeFamilies #-}
+{-# Language ImplicitParams #-}
 module Symmetry.Language.AST where
 
-import Data.Hashable
 import Data.Typeable
+import GHC.Stack
 
 data RSing  = RS Int
             | RSelf Role
@@ -21,7 +22,7 @@ data Role = S RSing
           | M RMulti
             deriving (Ord, Eq, Show)
 
-data Pid r = Pid r deriving (Typeable)
+data Pid r = Pid r deriving (Typeable, Show)
 
 deriving instance Eq a  => Eq (Pid a)
 deriving instance Ord a => Ord (Pid a)
@@ -53,7 +54,8 @@ class Symantics repr where
   -- Lists
   nil       :: repr [a]
   cons      :: repr a   -> repr [a] -> repr [a]
-  matchList :: repr [a] -> repr (() -> b) -> repr ((a, [a]) -> b) -> repr b
+  matchList :: (?callStack :: CallStack)
+            => repr [a] -> repr (() -> b) -> repr ((a, [a]) -> b) -> repr b
 
   -- Lambda Calculus:
   lam  :: (repr a -> repr b) -> repr (a -> b)
@@ -62,18 +64,24 @@ class Symantics repr where
   -- Monads:
   ret  :: repr a -> repr (Process repr a)
   bind :: repr (Process repr a) -> repr (a -> Process repr b) -> repr (Process repr b)
-  fixM :: repr ((a -> Process repr a) -> a -> Process repr a) -> repr (a -> Process repr a)
+  fixM :: (?callStack :: CallStack)
+       => repr ((a -> Process repr a) -> a -> Process repr a) -> repr (a -> Process repr a)
 
   -- Primitives:        
   self      :: repr (Process repr (Pid RSing))
-  send      :: (Typeable a) => repr (Pid RSing) -> repr a -> repr (Process repr ())
-  recv      :: (Typeable a, ArbPat repr a) => repr (Process repr a)
+  send      :: (?callStack :: CallStack, Typeable a)
+            => repr (Pid RSing) -> repr a -> repr (Process repr ())
+  recv      :: (?callStack :: CallStack, Typeable a, ArbPat repr a)
+            => repr (Process repr a)
 
-  newRSing  :: repr (Process repr RSing)
-  spawn     :: repr RSing -> repr (Process repr ()) -> repr (Process repr (Pid RSing))
-
-  newRMulti :: repr (Process repr RMulti)
-  spawnMany :: repr RMulti -> repr Int -> repr (Process repr ()) -> repr (Process repr (Pid RMulti))
+  newRSing  :: (?callStack :: CallStack)
+            => repr (Process repr RSing)
+  spawn     :: (?callStack :: CallStack)
+            => repr RSing -> repr (Process repr ()) -> repr (Process repr (Pid RSing))
+  newRMulti :: (?callStack :: CallStack)
+            => repr (Process repr RMulti)
+  spawnMany :: (?callStack :: CallStack)
+            => repr RMulti -> repr Int -> repr (Process repr ()) -> repr (Process repr (Pid RMulti))
   doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process repr a) -> repr (Process repr [a])
 
   die       :: repr (Process repr a)
@@ -87,7 +95,7 @@ class Symantics repr where
   proj1 :: repr (a, b) -> repr a
   proj2 :: repr (a, b) -> repr b
 
-  match :: (Typeable a, Typeable b, ArbPat repr a, ArbPat repr b)
+  match :: (?callStack :: CallStack, Typeable a, Typeable b, ArbPat repr a, ArbPat repr b)
         => repr (a :+: b) -> repr (a -> c) -> repr (b -> c) -> repr c
 
 class Pat pat where

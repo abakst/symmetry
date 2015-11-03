@@ -1,3 +1,4 @@
+--runwith: --set-size=2
 {-# Language RebindableSyntax #-}
 {-# Language TypeOperators #-}
 {-# Language FlexibleContexts #-}
@@ -22,7 +23,8 @@ master = lam $ \r -> lam $ \n ->
       myPid <- self
       doMany ps (lam $ \p -> send p myPid)
       doMany ps (lam $ \_ -> do (_ :: repr (Pid RSing))  <- recv
-                                ret tt)
+                                return tt)
+      return tt
 
 mainProc :: (DSL repr) => repr (Int -> ())
 mainProc = lam $ \n -> exec $ do r <- newRMulti
