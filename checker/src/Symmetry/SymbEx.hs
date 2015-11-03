@@ -255,17 +255,15 @@ join (AProd _ l1 r1) (AProd _ l2 r2)
 -------------------------------------------------
 -- | Helpers for generating IL from AbsValtractions
 -------------------------------------------------
-joinStmt :: (?callStack :: CallStack)
-         => IL.Stmt () -> IL.Stmt () -> IL.Stmt ()
-joinStmt (IL.SSend p1 mts1 _) (IL.SSend p2 mts2 _)
-  | p1 == p2 = IL.SSend p1 (mts1 ++ mts2) ()
-
-joinStmt (IL.SRecv mts1 _) (IL.SRecv mts2 _)
-  = IL.SRecv (mts1 ++ mts2) ()
-
+joinStmt :: IL.Stmt () -> IL.Stmt () -> IL.Stmt ()
+joinStmt (IL.SNonDet ss1 _) (IL.SNonDet ss2 _)
+  = IL.SNonDet (ss1 ++ ss2) ()
+joinStmt (IL.SNonDet ss _) s
+  = IL.SNonDet (s : ss) ()
+joinStmt s (IL.SNonDet ss _)
+  = IL.SNonDet (s : ss) ()
 joinStmt s1 s2
-  | s1 == s2  = s1
-  | otherwise = error $ "joinStmt: " ++ (show $ pretty s1) ++ " && " ++ (show $ pretty s2)
+  = IL.SNonDet [s1, s2] ()
 
 varToIL :: Var a -> IL.Var
 varToIL (V x) = IL.V ("x_" ++ show x)
@@ -315,13 +313,16 @@ sendToIL p m = do
   let cs = absToIL m
   -- (t, cs) <- unPut $ put (SE $ return m)
   case IL.lookupType g t of
-    Just i  -> return $ IL.SSend (pidAbsValToIL p) [(i, mts i g cs, skip)] ()
+    Just i  -> return $ nonDetSends p i g cs
     Nothing -> do i <- freshTId
                   let g' = M.insert i t g
                   modify $ \s -> s { tyenv = g' }
-                  return $ IL.SSend (pidAbsValToIL p) [(i, mts i g' cs, skip)] ()
+                  return $ nonDetSends p i g' cs
   where
-    mts i g cs = [ (fromMaybe (error ("send:" ++ show c)) $ IL.lookupConstr (g M.! i) c, c) | c <- cs ]
+    sends p i g cs       = map (flip (IL.SSend p) () . lkupMsg i g) cs
+    nonDetSends p i g cs = case sends (pidAbsValToIL p) i g cs of
+                             [s] -> s
+                             ss -> IL.SNonDet ss ()
 
 recvToIL :: (?callStack :: CallStack)
          => (Typeable a) => AbsVal a -> SymbExM (IL.Stmt ())
@@ -330,13 +331,21 @@ recvToIL m = do
   let t  = absToILType m
   let cs = absToIL m
   case IL.lookupType g t of
-    Just i  -> return $ IL.SRecv [(i, mts i g cs, skip)] ()
+    Just i  -> return $ nonDetRecvs i g cs
     Nothing -> do i <- freshTId
                   let g' = M.insert i t g
                   modify $ \s -> s { tyenv = g' }
-                  return $ IL.SRecv [(i, mts i g' cs, skip)] ()
+                  return $ nonDetRecvs i g' cs
   where
-    mts i g cs = [ (fromMaybe (error ("recv:" ++ show c)) $ IL.lookupConstr (g M.! i) c, c) | c <- cs ]
+    recvs i g cs       = map (flip IL.SRecv () . lkupMsg i g) cs
+    nonDetRecvs i g cs = case recvs i g cs of
+                           [r] -> r
+                           rs  -> IL.SNonDet rs ()
+
+                   
+lkupMsg i g c  = (i, lkup i g c, c)
+  where
+    lkup i g c   = fromMaybe (error ("recv:" ++ show c)) $ IL.lookupConstr (g M.! i) c
 
 skip :: IL.Stmt ()
 skip = IL.SSkip ()
@@ -345,12 +354,6 @@ skip = IL.SSkip ()
 -- | Sequence Statements
 -------------------------------------------------
 seqStmt :: IL.Stmt () -> IL.Stmt () -> IL.Stmt ()
-
-seqStmt (IL.SSend p mts ()) s
-  = IL.SSend p (map (\(i, cs, s') -> (i, cs, seqStmt s' s)) mts) ()
-
-seqStmt (IL.SRecv mts ()) s
-  = IL.SRecv (map (\(i, cs, s') -> (i, cs, seqStmt s' s)) mts) ()
 
 seqStmt (IL.SSkip _) s = s
 seqStmt s (IL.SSkip _) = s
