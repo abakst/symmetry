@@ -2,28 +2,24 @@
 
 test_benchmark() {
 	if [[ $# -ne 1 ]]; then
-		echo "usage: test <Symmetry test file>"
+        echo "usage: test <Symmetry test exec>"
 		return 1
     fi
 
-    stack install
+    local exe=$1
 
-    local file=$1
-    local exe=${file:r}
-
-    stack ghc -- $file -o $exe
     ./$exe --verify
 
     local bmk_res=$?
-    if  [[ $bmk_res -eq 0 ]];
-    then
+    if  [[ $bmk_res -eq 0 ]]; then
         return 0
     fi
 
-    local symcheck="${file:h}/.symcheck"
+    local symcheck="${exe:h}/.symcheck"
     local pml="$symcheck/out.pml"
 
-    nohup ispin $pml &
+    echo "Counter example:"
+    spin -p -t $pml
 }
 
 test_benchmark $@
