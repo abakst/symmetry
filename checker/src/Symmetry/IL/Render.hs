@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Symmetry.IL.Render where
 
@@ -213,14 +214,14 @@ data RenderEnv = RE { chanMap :: ChanMap
                
 type RenderM = Reader RenderEnv Doc
 
-renderStmt :: Pid -> Stmt Int -> RenderM
+renderStmt :: Pid -> Stmt StorageT -> RenderM
 renderStmt (p @ (PConc _)) s    = renderStmtConc p s
 renderStmt (p @ (PUnfold {})) s = renderStmtConc p s
 renderStmt p s                  = renderStmtAbs  p s
 
 -- renderStmt f p s               = nonDetStmts $ map (renderStmtAbs f p) ss
 --   where
---     ss = listify (\(_::Stmt Int) -> True) s
+--     ss = listify (\(_::Stmt StorageT) -> True) s
         
 sendMsg :: Pid -> Pid -> (TId, [(CId, MConstr)]) -> RenderM
 sendMsg p q (t,cms)
@@ -236,7 +237,7 @@ recvMsg p q (t,cms)
   where
     recv1 f (c,m) = text "__RECV" <> tupled [f p q (t,c) , renderRecvMsg m]
                    
-renderStmtConc :: Pid -> Stmt Int -> RenderM
+renderStmtConc :: Pid -> Stmt StorageT -> RenderM
 renderStmtConc me (SSend p [(t,cms,s)] _)
   = do send <- sendMsg me p (t,cms)
        d <- renderStmt me s
@@ -359,39 +360,39 @@ outCounters cfg i
       Just js -> map incrCounter js
 
 renderStmtAbs :: Pid 
-              -> Stmt Int 
+              -> Stmt StorageT
               -> RenderM
 renderStmtAbs me (SSend p ms i)
   = do recv <- renderStmtConc me (SSend p [(t,cs,SNull) | (t,cs,_) <- ms] i)
        cfg <- asks stmtMap
-       return $ block (recv : inOutCounters cfg i)
+       return $ block (recv : inOutCounters cfg (numS i))
   where
     newCs cs = [ (c,m,SNull) | (c,m,_) <- cs ]
     
 renderStmtAbs me (SRecv ms i)
   = do cfg       <- asks stmtMap
        let outms  = assert (length ms == length outcs) $ zip nullms outcs
-           outcs  = outCounters cfg i
+           outcs  = outCounters cfg (numS i)
            nullms =  [(t, cs, SNull) | (t, cs, _) <- ms]
        rs        <- mapM render1 outms
        return $ ifs rs
   where
     render1 (m, oc) = do d <- renderStmtConc me $ SRecv [m] i
-                         return $ block [d, decrCounter i, oc]
+                         return $ block [d, decrCounter (numS i), oc]
 
 renderStmtAbs _ (SCase v l r i)
-  = return $ ifs [ isLeftLabel v  $ seqStmts [decrCounter i, incrCounter (annot l)]
-                 , isRightLabel v $ seqStmts [decrCounter i, incrCounter (annot r)]
+  = return $ ifs [ isLeftLabel v  $ seqStmts [decrCounter (numS i), incrCounter (numS $ annot l)]
+                 , isRightLabel v $ seqStmts [decrCounter (numS i), incrCounter (numS $ annot r)]
                  ]
                             
 renderStmtAbs _ (SVar _ i)
-  = inOutCountersM i
-       
+  = inOutCountersM (numS i)
+
 renderStmtAbs _ (SSkip i)
-  = inOutCountersM i
-   
+  = inOutCountersM (numS i)
+
 renderStmtAbs _ (SLoop _ _ i)
-  = inOutCountersM i
+  = inOutCountersM (numS i)
 
 renderStmtAbs _ (SNull)
   = return $ text "skip"
@@ -440,32 +441,32 @@ recvGuard me ms
     go f them (t, c)
       = text "nempty" <> parens (f them me (t,c))
  
-stmtGuard :: Pid -> Stmt Int -> RenderM
+stmtGuard :: Pid -> Stmt StorageT -> RenderM
 stmtGuard me (SRecv mts i)
   = do rg <- recvGuard me mts
        return $ parens $ 
-                  stmtCounter i <+> text ">" <+> int 0 <$>
+                  stmtCounter (numS i) <+> text ">" <+> int 0 <$>
                   text "&&" <+> parens rg
     
 stmtGuard _ s
-  = return $ stmtCounter (annot s) <+> text ">" <+> int 0
-               
-selectStmt :: Pid -> [Stmt Int] -> RenderM 
+  = return $ stmtCounter (numS $ annot s) <+> text ">" <+> int 0
+
+selectStmt :: Pid -> [Stmt StorageT] -> RenderM
 selectStmt me ss 
   = do ds <- mapM goto ss
        return . ifs $ exit : ds
     where
       exit = hcat . punctuate (text " && ") $ map (<+> text "== 0") ks
-      ks   = map (stmtCounter . annot) ss
-      goto :: Stmt Int -> RenderM
+      ks   = map (stmtCounter . numS . annot) ss
+      goto :: Stmt StorageT -> RenderM
       goto s = do sg <- stmtGuard me s
-                  return $ seqStmts [sg, gotoStmt $ annot s]
+                  return $ seqStmts [sg, gotoStmt $ numS $ annot s]
 
 (<?$>) :: [Doc] -> Doc -> Doc
 [] <?$> y = y
 xs <?$> y = vcat xs <$> y
 
-renderProcStmts :: Process Int -> RenderM
+renderProcStmts :: Process StorageT -> RenderM
 renderProcStmts (p, ss) 
   | isAbs p
     = do ds <- mapM do1Abs $ listify notNull ss
@@ -483,7 +484,7 @@ renderProcStmts (p, ss)
                    ds <$> label (text "end") (text "0"))
   where
     do1Abs s = do d <- renderStmt p s
-                  return $ labelStmt (annot s) 
+                  return $ labelStmt (numS $ annot s)
                          $ atomic [d, gotoStmt 0]
     notNull SNull       = False
     notNull _           = True
@@ -493,13 +494,13 @@ renderProcStmts (p, ss)
     isProcVar _          _  = False
     vs                      = listify go ss :: [Var]
     ivs                     = everything (++) (mkQ [] iterVar) ss
-    iterVar :: Stmt Int -> [String]
+    iterVar :: Stmt StorageT -> [String]
     iterVar (SIter (V v) _ _ _) = [v]
     iterVar _                   = []
     go :: Var -> Bool
     go                      = const True
   
-renderProc :: Process Int -> RenderM
+renderProc :: Process StorageT -> RenderM
 renderProc p
   = do ds <- renderProcStmts p
        return $ comments <$>
@@ -518,16 +519,16 @@ renderProc p
     cs   = foldl' (flip (:)) [] (snd p)
     cvs  = if isAbs (fst p) then
              byte <+> 
-               stmtCounter (cs !! 0) <+> 
+               stmtCounter (numS (cs !! 0)) <+>
                equals <+> 
                text "__K__" <> semi <$>
              vcat [ byte <+> 
-                    stmtCounter c <> 
+                    stmtCounter (numS c) <>
                     semi | c <- nub $ tail cs ]
            else
              empty
 
-renderProcs :: Config Int -> PidMap -> SetMap -> Doc
+renderProcs :: Config StorageT -> PidMap -> SetMap -> Doc
 renderProcs (Config { cTypes = ts, cProcs = ps }) pm sm
   = runReader (foldM render1 empty psfilter) env
   where

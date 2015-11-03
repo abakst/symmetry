@@ -12,6 +12,8 @@ $(EXES): %: %.hs
 build-lib:
 	@stack install
 
+test: $(TESTS)
+
 $(TESTS): test-%: %
 	@./test $<
 

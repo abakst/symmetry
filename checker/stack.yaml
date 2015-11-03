@@ -3,5 +3,6 @@ packages:
 - '.'
 extra-deps: [
     plugins-1.5.5.0,
+    located-base-0.1.0.0
 ]
 resolver: lts-3.8
