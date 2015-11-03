@@ -390,9 +390,13 @@ lastStmts (SCase _ sl sr _) = lastStmts sl ++ lastStmts sr
 lastStmts s@(SDie a)        = [s]
 
 data StorageT = StorageT { numS :: Int
-                         , valS :: String
                          }
-                deriving (Show, Data, Eq)
+                deriving (Data)
+
+instance Show StorageT where
+  show = show . numS
+instance Eq StorageT where
+  (==) a b = (numS a) == (numS b)
 
 nextStmts :: Stmt StorageT -> M.Map Int [Int]
 nextStmts (SSend _ ms i)
@@ -432,7 +436,6 @@ freshId
     fr = do n <- get
             put (n + 1)
             return (StorageT { numS = n
-                             , valS = ""
                              })
 
 freshIds :: Config a -> Config StorageT
