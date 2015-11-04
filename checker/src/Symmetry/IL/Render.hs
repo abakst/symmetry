@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Symmetry.IL.Render where
 
-import           Prelude hiding (concat, concatMap, sum, mapM, sequence, foldl, minimum, maximum, (<$>))
+import           Prelude hiding (undefined, error, concat, concatMap, sum, mapM, sequence, foldl, minimum, maximum, (<$>))
 import           Text.PrettyPrint.Leijen
 import           Control.Monad.Reader
 import           Data.Function
@@ -10,16 +10,35 @@ import           Data.Maybe
 import qualified Data.Map.Strict as M
 import           Data.List (intercalate, groupBy, nub, partition)
 import           Data.Generics hiding (empty)
-import           Control.Exception
 import           System.IO
 import           Debug.Trace
+import           GHC.Err.Located
 
 import           Symmetry.IL.AST  
   
+debug :: Show a => String -> a -> a
 debug msg x = 
   trace (msg ++ show x) x
 
 -- | Some useful combinators
+comment :: Doc -> Doc
+comment d = text "/*" <+> d <+> text "*/"
+
+eq :: Doc
+eq = equals <> equals
+
+(<=>) :: Var -> Doc -> Doc            
+(V x) <=> y = text x <+> equals <+> y
+
+(<==>) :: Var -> Doc -> Doc            
+(V x) <==> y = text x <+> eq <+> y
+
+gtZ :: Doc -> Doc
+gtZ d = d <+> rangle <+> int 0              
+
+desc :: Doc -> Doc -> Doc
+desc s d = align (comment (pretty s) <$> d)
+
 byte :: Doc                          
 byte = text "byte"
 
@@ -158,23 +177,25 @@ switchBase :: TId -> CId -> Doc
 switchBase t c = text "tcs_" <> int t <> text "_" <> int c
           
 -- | Addressing Process Channels
-switchboard :: Int -> Pid -> Pid -> (TId, CId) -> Doc 
-switchboard np from p (t,c) = 
-  switchBase t c <+> brackets (
-                          (renderProcVar from <> text "*" <> int np)
-                          <+> text "+"
-                          <+> renderProcVar p
-                     )
+switchboard :: Int
+            -> M.Map (TId, CId) MValMap
+            -> ChanMap
+switchboard np vm from p (t,c,v) = 
+  switchBase t c <+>
+  brackets (renderProcVar from <>
+            text "*" <> int (np * nv) <+>
+            text "+" <+> renderProcVar p <> text "*" <> int nv <+>
+            text "+" <+> int v)
+  where
+    nv = fromMaybe err $ fmap M.size (M.lookup (t,c) vm)
+    err = error "switchboard"
 
 initSwitchboard :: Int -> Pid -> Pid -> (TId, CId) -> Doc
 initSwitchboard np p q (t, c)
-  = switchboard np p q (t, c) <+> 
-    equals <+> 
-    renderChanName p q t c
-               
--- initSwitchboard n p@(PAbs (V v) (S _)) t
---   = forLoop (text v <+> text "in" <+> renderProcPrefix p) $
---     (switchboard n p t <+> equals <+> renderChanName p q t <> brackets (text v))
+  = empty
+  -- = switchboard np p q (t, c) <+> 
+  --   equals <+> 
+  --   renderChanName p q t c
 
 renderChanName :: Pid -> Pid -> TId -> CId -> Doc                            
 renderChanName p q ti cj
@@ -201,12 +222,13 @@ renderProcAssn n rhs
   = renderProcDecl n <+> equals <+> rhs
     
 type SetMap  = M.Map Set Int
-type ChanMap = Pid -> Pid -> (TId, CId) -> Doc
+type ChanMap = Pid -> Pid -> (TId, CId, VId) -> Doc
 type StmtMap = M.Map Int [Int]
 
 -- | Emit Promela code for each statement    
 data RenderEnv = RE { chanMap :: ChanMap
                     , pidMap  :: PidMap
+                    , valMap  :: M.Map (TId, CId) MValMap
                     , setMap  :: SetMap
                     , stmtMap :: StmtMap
                     }
@@ -218,35 +240,72 @@ renderStmt (p @ (PConc _)) s    = renderStmtConc p s
 renderStmt (p @ (PUnfold {})) s = renderStmtConc p s
 renderStmt p s                  = renderStmtAbs  p s
 
--- renderStmt f p s               = nonDetStmts $ map (renderStmtAbs f p) ss
---   where
---     ss = listify (\(_::Stmt Int) -> True) s
-        
+match1Cstr :: MConstr -> MConstr -> VId -> Maybe (CSubst, VId)
+match1Cstr c1 c2 vi
+  = case unify c1 c2 of
+      Just s -> Just (s, vi)
+      Nothing -> Nothing
+
+matchCstr :: (TId, CId, MConstr)
+          -> M.Map (TId, CId) MValMap
+          -> [(CSubst, VId)]
+matchCstr (ti, cj, c) vm
+  = M.elems (M.mapMaybeWithKey (match1Cstr c) m)
+  where
+    m = fromMaybe err $ M.lookup (ti, cj) vm
+    err = error "matchCstr: did not find any values"
+
 sendMsg :: Pid -> Pid -> (TId, CId, MConstr) -> RenderM
-sendMsg p q (t,c,v)
-  = do f <- asks chanMap
-       return $ f p q (t,c) <> text "!" <> renderSendMsg v
+sendMsg p q m@(ti, cj, _) 
+  = do f  <- asks chanMap
+       vm <- asks valMap
+       case matchCstr m vm of
+         []        -> error "send: could not unify!"
+         [(_, vk)] -> return $ incrVal (f p q (ti, cj, vk))
+         svks ->
+           return . ifs $ map (go f) svks
+  where
+    go f (s, vk) = let tests = subToTests s in
+                   seqStmts ((punctuate (text " && ") tests) ++
+                             [incrVal (f p q (ti, cj, vk))])
+    subToTests (CSubst {cPidSub = [], cLabSub = [], cIdxSub = isub})
+      = [ i <==> int n | ((i, _), n) <- isub ]
 
 pollMsg :: Pid -> Pid -> (TId, CId, MConstr) -> RenderM              
-pollMsg p q (t,c,m)
+pollMsg p q m@(ti, cj, _) 
   = do f <- asks chanMap
-       return $ f p q (t,c) <> text "?" <> brackets (renderRecvMsg m)
+       vm <- asks valMap
+       let vs = matchCstr m vm
+           rs = punctuate (text " || ") (map (go f) vs)
+       return (hcat rs)
+  where
+    go f (_, vk) = gtZ (f p q (ti, cj, vk))
 
-recvMsg :: Pid -> Pid -> (TId, CId, MConstr) -> RenderM 
-recvMsg p q (t,c,m)
-  = do f <- asks chanMap
-       return $ text "__RECV" <> tupled [f p q (t,c) , renderRecvMsg m]
-                   
+recvMsg :: Pid -> Pid -> (TId, CId, MConstr) -> Reader RenderEnv [Doc]
+recvMsg p q m@(ti, cj, _)
+  = do f  <- asks chanMap
+       vm <- asks valMap
+       let vs = matchCstr m vm
+       forM vs $ \(sub, vk) ->
+               return $ atomic (gtZ (f p q (ti, cj, vk)) :
+                                decrVal (f p q (ti, cj, vk)) :
+                                subToAssigns sub)
+  where
+    subToAssigns (CSubst { cPidSub = pidSub, cLabSub = labSub, cIdxSub = [] })
+      = [ v <=> renderProcVar (subUnfoldIdx r) | (v, r) <- pidSub ] ++
+        [ v <=> renderLabel l | (v, l) <- labSub ]
+
+    
 renderStmtConc :: Pid -> Stmt Int -> RenderM
-renderStmtConc me (SSend p m _)
-  = sendMsg me p m 
+renderStmtConc me s@(SSend p m _)
+  = fmap (desc (pretty s)) (sendMsg me p m) 
 
-renderStmtConc me (SRecv m _)
+renderStmtConc me s@(SRecv m _)
   = do ps <- fmap (filter (/= me) . M.keys) (asks pidMap)
        rs <- mapM (go m . subUnfoldIdx) ps
-       return $ ifs rs
+       return . desc (pretty s) $ ifs (concat rs)
   where 
-    go m p = recvMsg p me m
+    go msg p = recvMsg p me msg
 
 renderStmtConc me (SCase l sl sr _)
   = do dl <- renderStmtConc me sl
@@ -299,7 +358,6 @@ renderStmtConc _ (SCompare (V v) p1 p2 _)
 renderStmtConc _ _
   = return $ text "assert(0 == 1) /* TBD */"
 
-eq = equals <> equals
 isLeftLabel (V x) s  = align (text x <+> eq <+> inlCstr <+> text "->" <$> s)
 isRightLabel (V x) s = align (text x <+> eq <+> inrCstr <+> text "->" <$> s)
 
@@ -408,11 +466,20 @@ stmtCounter i
     
 decrCounter :: Int -> Doc
 decrCounter i
-  = text "__DEC" <> parens (stmtCounter i)
+  = decrVal (stmtCounter i)
+
+decrVal :: Doc -> Doc
+decrVal d
+  = text "__DEC" <> parens d
 
 incrCounter :: Int -> Doc
 incrCounter i
-  = text "__INC" <> parens (stmtCounter i)
+  = incrVal (stmtCounter i) 
+
+incrVal :: Doc -> Doc    
+incrVal d
+  = text "__INC" <> parens d
+
     
 gotoStmt :: Int -> Doc
 gotoStmt i
@@ -535,8 +602,8 @@ renderProc p
            else
              empty
 
-renderProcs :: Config Int -> PidMap -> SetMap -> Doc
-renderProcs (Config { cTypes = ts, cProcs = ps }) pm sm
+renderProcs :: Config Int -> PidMap -> SetMap -> M.Map (TId, CId) MValMap -> Doc
+renderProcs (Config { cTypes = ts, cProcs = ps }) pm sm vm
   = runReader (foldM render1 empty psfilter) env
   where
     -- For each unfolded process, it suffices to 
@@ -547,8 +614,9 @@ renderProcs (Config { cTypes = ts, cProcs = ps }) pm sm
     eqUnfolds (PUnfold v s _) (PUnfold v' s' _) = v == v' && s == s'
     eqUnfolds p1 p2 = p1 == p2
     env = RE { pidMap = pm
+             , valMap = vm
              , setMap = sm
-             , chanMap = switchboard (length ps)
+             , chanMap = switchboard (length ps) vm
              , stmtMap = cfg
              }
     cfg = M.unions (map (nextStmts . snd) psfilter)
@@ -559,7 +627,6 @@ renderMain m (Config { cTypes = ts, cProcs = ps, cSets = bs })
   where
     body        = declAbsVars ++
                   [ atomic pidInits
-                  , atomic boardInits
                   , atomic procInits
                   ]
     declAbsVars = [ byte <+> text v | PAbs (V v) _ <- map fst ps ]
@@ -615,6 +682,8 @@ assignProcVar _ _ _ = error "Attempt to assign to invalid ProcVar"
 unfoldProcVar :: Pid -> Doc
 unfoldProcVar p@(PUnfold _ _ i)
   = renderProcPrefix p <> text "Unfold_" <> int i
+unfoldProcVar _
+  = error "unfoldProcVar: not a PUnfold"
 
 declProcVar :: Pid -> (Int, Int) ->  Doc             
 declProcVar p@(PConc _) _
@@ -623,6 +692,8 @@ declProcVar p@(PAbs (V _) (S _)) (_, sz)
   = renderProcDecl (renderProcPrefix  p) <> brackets (int sz) <> semi
 declProcVar p@(PUnfold (V _) (S _) _) _
   = renderProcDecl (unfoldProcVar p) <> semi 
+declProcVar _ _
+  = error "declProcVar: not a Conc/Abs/Unfold"
              
 declProcVars :: PidMap -> Doc
 declProcVars
@@ -673,6 +744,21 @@ declChannels pm te
   where
     go tid m docs = declChannelsOfType pm tid m : docs
 
+declMailBox :: PidMap -> TId -> CId -> MValMap -> Doc
+declMailBox pm ti cj vm
+  =  byte <+> switchBase ti cj <>
+     brackets (int sz) <>
+     semi
+  where
+    ps  = M.keys pm
+    sz  = length ps * length ps * length (M.keys vm)
+
+declMailBoxes :: PidMap -> M.Map (TId, CId) MValMap -> Doc
+declMailBoxes pm tm
+  = vcat $ M.foldrWithKey go [] tm
+  where
+    go (ti, cj) vm d = declMailBox pm ti cj vm : d
+
 buildPidMap :: Config a -> PidMap
 buildPidMap (Config { cUnfold = us, cProcs = ps, cSets = bs})
   = fst $ foldl' go (foldl' go (M.empty, 0) (snd pids)) (fst pids)
@@ -687,6 +773,23 @@ buildPidMap (Config { cUnfold = us, cProcs = ps, cSets = bs})
                                     updUnfold (m, i) p
     unfolds s                 = sum [ x | Conc s' x <- us, s == s' ]
 
+buildMValMapTyCon :: [Pid] -> MConstr -> MValMap
+buildMValMapTyCon dom c = M.fromList (zip vs [0..])
+  where
+    vs = instConstr dom c
+
+buildMValMapTy :: [Pid] -> TId -> MType -> M.Map (TId, CId) MValMap
+buildMValMapTy dom ti t
+  = M.foldlWithKey go M.empty t
+  where
+    go m ci cstr = M.insert (ti, ci) (buildMValMapTyCon dom cstr) m
+
+buildMValMap :: MTypeEnv -> PidMap -> M.Map (TId, CId) MValMap
+buildMValMap te pm
+  = M.foldlWithKey go M.empty te
+  where
+    pids = M.keys pm
+    go m ti t = buildMValMapTy pids ti t `M.union` m
                              
 updUnfold :: (PidMap, Int) -> Pid -> (PidMap, Int)
 updUnfold (m, i) p@(PUnfold v s _)
@@ -708,7 +811,7 @@ declSwitchboardsCstr nprocs tid cid
 
 declSwitchboardsType :: Int -> TId -> M.Map CId MConstr -> Doc
 declSwitchboardsType nprocs tid m
-  = vcat $ map go $ M.keys m
+  = vcat . map go $ M.keys m
   where
     go cid = declSwitchboardsCstr nprocs tid cid
                         
@@ -735,43 +838,36 @@ decMacro = macrify [ "#define __DEC(_x) atomic { assert (_x > 0);"
                    , "fi }"
                    , "fi }"
                    ]
-recvMacro =
-  macrify [ "#define __RECV(_i,...) atomic {"
-          , "_i?[__VA_ARGS__];"
-          , "if"
-          , "  :: len(_i) < __K__ ->"
-          , "     _i?__VA_ARGS__"
-          , "  :: else ->"
-          , "  if"
-          , "  :: _i?__VA_ARGS__"
-          , "  :: _i?<__VA_ARGS__>"
-          , "  fi"
-          , "fi }"
-          ]
                            
 macros :: [Doc]
 macros = 
   [ text "#define __K__" <+> int infty
   , text "#define __INC(_x) _x = (_x < __K__ -> _x + 1 : _x)"
   , text decMacro
-  , text recvMacro
   ]
-  
+
 render :: (Eq a, Show a) => Config a -> Doc
 render c@(Config { cTypes = ts, cSets = bs })
   = mtype
     <$$> align (vcat macros)
     <$$> declProcVars pMap <> declSets bs
-    <$$> declChannels pMap ts
-    <$$> declSwitchboards pMap ts
+    <$$> declMailBoxes pMap vMap
     <$$> procs
     <$$> renderMain pMap unfolded
   where
-    unfolded               = filterBoundedAbs . freshIds . instAbs $ unfold c
-    filterBoundedAbs c     = c { cProcs = [ p | p <- cProcs c, not (isBounded bs (fst p)) ] }
+    unfolded               = filterBoundedAbs
+                           . freshIds
+                           . instAbs
+                           $ unfold c
+
+    filterBoundedAbs x     = x { cProcs = [ p | p <- cProcs x
+                                              , not (isBounded bs (fst p)) ]
+                               }
+
     pMap                   = buildPidMap unfolded
+    vMap                   = buildMValMap ts pMap
     mtype                  = renderMConstrs ts
-    procs                  = renderProcs unfolded pMap sMap
+    procs                  = renderProcs unfolded pMap sMap vMap
     sMap                   = M.foldrWithKey goKey M.empty pMap
     goKey (PAbs _ s) (_,n) m = M.insert s n m
     goKey _          _     m = m
