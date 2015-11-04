@@ -8,7 +8,7 @@ test_benchmark() {
 
     local exe=$1
 
-    ./$exe --verify
+    ./$exe --dump-process --verify
 
     local bmk_res=$?
     if  [[ $bmk_res -eq 0 ]]; then
