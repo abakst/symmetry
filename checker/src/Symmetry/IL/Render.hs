@@ -15,6 +15,7 @@ import           Control.Exception
 import           System.IO
 import           Debug.Trace
 import           Text.Printf
+import           Data.List
 
 import           Symmetry.IL.AST
 
@@ -205,7 +206,7 @@ renderProcAssn n rhs
 type SetMap  = M.Map Set Int
 type ChanMap = Pid -> Pid -> (TId, CId) -> Doc
 type StmtMap = M.Map Int [Int]
-type ProcMap = M.Map Int Int
+type ProcMap = M.Map Int Pid
 
 -- | Emit Promela code for each statement
 data RenderEnv = RE { chanMap :: ChanMap
@@ -232,14 +233,22 @@ renderStmt p s                  = do r <- renderStmtAbs p s
 --   where
 --     ss = listify (\(_::Stmt Int) -> True) s
 
+pid_short    :: Pid -> String
+pid_short pid =
+  case pid of
+    PConc i               -> show i
+    PAbs (V v) (S s)      -> "abs-" ++ v ++ "-" ++ s
+    PUnfold (V v) (S s) i -> "unf-" ++ v ++ "-" ++ s ++ "-" ++ (show i)
+    PVar (V v)            -> "pvar-" ++ v
+
 line_directive  :: Stmt Int -> RenderM
 line_directive s =
   do pm <- asks procMap
-     let sid    = annot s
-         procId = case M.lookup sid pm of
-                    Nothing     -> error "Missing (sid,procId) pair"
-                    Just procId -> procId
-     return $ text $ printf "#line %d \"%d %d\"" (1 :: Int) procId sid
+     let sid      = annot s
+         procId_s = case M.lookup sid pm of
+                      Nothing  -> error "missing (sid,pid) pair"
+                      Just pid -> pid_short pid
+     return $ text $ printf "#line %d \"%s:%d\"" (1 :: Int) procId_s sid
 
 sendMsg :: Pid -> Pid -> (TId, CId, MConstr) -> Int -> RenderM
 sendMsg p q (t,c,v) i
@@ -697,7 +706,7 @@ declChannels pm te
 
 buildProcMap :: Config Int -> ProcMap
 buildProcMap (Config { cProcs = ps }) =
-  let pairs = [ (sid,pid) | (PConc pid,s) <- ps,
+  let pairs = [ (sid,pid) | (pid,s) <- ps,
                             sid <- (foldl' (\acc i -> i:acc) [] s) ]
    in M.fromList pairs
 
@@ -794,6 +803,7 @@ render c@(Config { cTypes = ts, cSets = bs })
     <$$> declChannels pMap ts
     <$$> declSwitchboards pMap ts
     <$$> procs
+    <$$> text "#line 1 \"main\""
     <$$> renderMain pMap unfolded
   where
     unfolded               = filterBoundedAbs . freshIds . instAbs $ unfold c
@@ -844,10 +854,10 @@ pretty_short (SCase l sl sr _) =
                   text "| InR ->" <+> (int $ annot sr)]))
 
 
-process_to_str (pid,s) = renderProcName pid <+> text "=>" <+> int (annot s) <$>
-                           stmt_to_str s
+process_to_str (pid,s) =
+  text (pid_short pid) <+> text "=>" <+> int (annot s) <$> stmt_to_str s
 
 all_stmts :: [Process Int] -> Doc
 all_stmts procs = text "/*" <$>
-                    (vcat $ map process_to_str procs) <$>
+                    (vcat $ intersperse line $ map process_to_str procs) <$>
                     text "*/"
