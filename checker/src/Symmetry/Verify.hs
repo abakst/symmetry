@@ -51,6 +51,7 @@ outf, outTrail :: FilePath -> FilePath
 outf d = d </> "out.pml"
 outTrail d = outf d <.> "trail"
 
+runCmd               :: Bool -> String -> FilePath -> CreateProcess -> IO ()
 runCmd verb pre wd c
   = do (_,Just hout,Just herr,p) <- createProcess c { cwd = Just wd
                                                     , std_out = CreatePipe
@@ -95,7 +96,7 @@ run1Cfg opt outd cfg
        runCmd verb "CHECKING MODEL:" outd panCmd
        failure <- fileExists (outTrail outd)
        let unfolded = filterBoundedAbs . freshIds . instAbs $ unfold cfgOut
-       when failure (printTrace unfolded)
+       when failure (printTrace verb outd unfolded)
        return failure
   where
     verb = optVerbose opt
@@ -141,6 +142,9 @@ checkerMain main
     where
       cfgs = stateToConfigs . runSymb $ main
 
+spinTrailCmd  :: String -> CreateProcess
+spinTrailCmd f = shell ("spin -p -t " ++ f ++ " > /tmp/trace")
 
-printTrace  :: Config Int -> IO ()
-printTrace c = printf "HERE BE TRACE !\n"
+printTrace           :: Bool -> FilePath -> Config Int -> IO ()
+printTrace verb outd c = do let pml = outf outd
+                            runCmd verb "RE-RUNNING THE TRACE:" outd $ spinTrailCmd pml

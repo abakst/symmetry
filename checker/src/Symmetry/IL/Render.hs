@@ -205,29 +205,41 @@ renderProcAssn n rhs
 type SetMap  = M.Map Set Int
 type ChanMap = Pid -> Pid -> (TId, CId) -> Doc
 type StmtMap = M.Map Int [Int]
+type ProcMap = M.Map Int Int
 
 -- | Emit Promela code for each statement
 data RenderEnv = RE { chanMap :: ChanMap
                     , pidMap  :: PidMap
                     , setMap  :: SetMap
                     , stmtMap :: StmtMap
+                    , procMap :: ProcMap
                     }
 
 type RenderM = Reader RenderEnv Doc
 
 renderStmt :: Pid -> Stmt Int -> RenderM
 renderStmt (p @ (PConc _)) s    = do r <- renderStmtConc p s
-                                     return $ line_directive s <$> r
+                                     l <- line_directive s
+                                     return $ l <$> r
 renderStmt (p @ (PUnfold {})) s = do r <- renderStmtConc p s
-                                     return $ line_directive s <$> r
+                                     l <- line_directive s
+                                     return $ l <$> r
 renderStmt p s                  = do r <- renderStmtAbs p s
-                                     return $ line_directive s <$> r
+                                     l <- line_directive s
+                                     return $ l <$> r
 
 -- renderStmt f p s               = nonDetStmts $ map (renderStmtAbs f p) ss
 --   where
 --     ss = listify (\(_::Stmt Int) -> True) s
 
-line_directive s = text (printf "#line %d \"stmt_%s\"" (1 :: Int) (show $ annot s))
+line_directive  :: Stmt Int -> RenderM
+line_directive s =
+  do pm <- asks procMap
+     let sid    = annot s
+         procId = case M.lookup sid pm of
+                    Nothing     -> error "Missing (sid,procId) pair"
+                    Just procId -> procId
+     return $ text $ printf "#line %d \"%d %d\"" (1 :: Int) procId sid
 
 sendMsg :: Pid -> Pid -> (TId, CId, MConstr) -> Int -> RenderM
 sendMsg p q (t,c,v) i
@@ -257,9 +269,11 @@ renderStmtConc me (SRecv m _)
 
 renderStmtConc me (SCase l sl sr _)
   = do dl <- renderStmtConc me sl
+       ll <- line_directive sl
        dr <- renderStmtConc me sr
-       return $ ifs [ line_directive sl <$> isLeftLabel l dl
-                    , line_directive sr <$> isRightLabel l dr
+       lr <- line_directive sr
+       return $ ifs [ ll <$> isLeftLabel l dl
+                    , lr <$> isRightLabel l dr
                     ]
 
 renderStmtConc _ (SSkip _)
@@ -542,8 +556,8 @@ renderProc p
            else
              empty
 
-renderProcs :: Config Int -> PidMap -> SetMap -> Doc
-renderProcs (Config { cTypes = ts, cProcs = ps }) pm sm
+renderProcs :: Config Int -> PidMap -> SetMap -> ProcMap -> Doc
+renderProcs (Config { cTypes = ts, cProcs = ps }) pm sm procm
   = runReader (foldM render1 empty psfilter) env
   where
     -- For each unfolded process, it suffices to
@@ -557,6 +571,7 @@ renderProcs (Config { cTypes = ts, cProcs = ps }) pm sm
              , setMap = sm
              , chanMap = switchboard (length ps)
              , stmtMap = cfg
+             , procMap = procm
              }
     cfg = M.unions (map (nextStmts . snd) psfilter)
 
@@ -680,6 +695,13 @@ declChannels pm te
   where
     go tid m docs = declChannelsOfType pm tid m : docs
 
+buildProcMap :: Config Int -> ProcMap
+buildProcMap (Config { cProcs = ps }) =
+  let pairs = [ (sid,pid) | (PConc pid,s) <- ps,
+                            sid <- (foldl' (\acc i -> i:acc) [] s) ]
+   in M.fromList pairs
+
+
 buildPidMap :: Config a -> PidMap
 buildPidMap (Config { cUnfold = us, cProcs = ps, cSets = bs})
   = fst $ foldl' go (foldl' go (M.empty, 0) (snd pids)) (fst pids)
@@ -777,8 +799,9 @@ render c@(Config { cTypes = ts, cSets = bs })
     unfolded               = filterBoundedAbs . freshIds . instAbs $ unfold c
     filterBoundedAbs c     = c { cProcs = [ p | p <- cProcs c, not (isBounded bs (fst p)) ] }
     pMap                   = buildPidMap unfolded
+    procMap                = buildProcMap unfolded
     mtype                  = renderMConstrs ts
-    procs                  = renderProcs unfolded pMap sMap
+    procs                  = renderProcs unfolded pMap sMap procMap
     sMap                   = M.foldrWithKey goKey M.empty pMap
     goKey (PAbs _ s) (_,n) m = M.insert s n m
     goKey _          _     m = m
@@ -807,12 +830,12 @@ stmt_to_str s@(SCase v sl sr a) = vcat [short_stmt s, stmt_to_str sl, stmt_to_st
 stmt_to_str (SNonDet ss a) = vcat $ (text $ printf "%d -> ND %s" a $ show $ map annot ss):
                                     map stmt_to_str ss
 
-stmt_to_str s = int (annot s) <+> text " -> " <+> pretty s
+stmt_to_str s = int (annot s) <+> text "->" <+> pretty s
 
 pretty_short (SIter x xs s a) =
   text "for" <+> parens (pretty x <+> colon <+> pretty xs) <+> braces (int $ annot s)
 
-pretty_short (SLoop (LV v) s i) = pretty v <> colon <+> parens (pretty s)
+pretty_short (SLoop (LV v) s i) = pretty v <> colon <+> (int $ annot s)
 
 pretty_short (SCase l sl sr _) =
   text "match" <+> pretty l <+> text "with" <$>
