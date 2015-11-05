@@ -17,7 +17,9 @@ import GHC.Stack
 data RSing  = RS Int
             | RSelf Role
               deriving (Ord, Eq, Show, Typeable)
+
 data RMulti = RM Int deriving (Ord, Eq, Show, Typeable)
+
 data Role = S RSing
           | M RMulti
             deriving (Ord, Eq, Show)

@@ -139,7 +139,7 @@ setVar v (APid _ p)      = APid  (Just v) p
 setVar v (AProd _ p1 p2) = AProd (Just v) p1 p2
 
 absToILType :: Typeable t => AbsVal t -> IL.MType
-absToILType x = M.fromList $ zip [0..] $ go (typeRep x)
+absToILType x = M.fromList . zip [0..] $ go (typeRep x)
   where
     go :: TypeRep -> [IL.MConstr]
     go a
@@ -152,12 +152,12 @@ absToILType x = M.fromList $ zip [0..] $ go (typeRep x)
         tyConName (typeRepTyCon $ head as) == "Char"
         = [IL.MTApp (IL.MTyCon "String") []]
       | tyConName (typeRepTyCon a) == "[]"
-        = [IL.MTApp (IL.MTyCon ("List" ++ concat [ tyConName $ typeRepTyCon a | a <- as ])) []]
+        = [IL.MTApp (IL.MTyCon ("List" {- ++ concat [ tyConName $ typeRepTyCon a | a <- as ] -})) []]
       | tyConName (typeRepTyCon a) == "Either"
-        =    (IL.MCaseL IL.LL <$> go (as !! 0))
+        =    (IL.MCaseL IL.LL <$> go (head as))
           ++ (IL.MCaseR IL.RL <$> go (as !! 1))
       | tyConName (typeRepTyCon a) == "(,)"
-        = [IL.MTProd c1 c2 | c1 <- go (as !! 0), c2 <- go (as !! 1)]
+        = [IL.MTProd c1 c2 | c1 <- go (head as), c2 <- go (as !! 1)]
       | otherwise
         = [IL.MTApp (IL.MTyCon (tyConName $ typeRepTyCon a)) []]
       where
@@ -231,8 +231,10 @@ join :: (?callStack :: CallStack)
 join ABot x = x
 join x    ABot = x
 
-join (AUnit _) (AUnit _) = AUnit Nothing
-join (AInt _)  (AInt _)  = AInt Nothing
+join (AUnit _) (AUnit _)      = AUnit Nothing
+join (AInt _)  (AInt _)       = AInt Nothing
+join (AString _)  (AString _) = AString Nothing
+join (AList _ a) (AList _ b)  = AList Nothing (a `maybeJoin` b)
 
 join (APid _ (Pid Nothing)) (APid _ _) = APid Nothing (Pid Nothing)
 join (APid _ _) (APid _ (Pid Nothing)) = APid Nothing (Pid Nothing)
@@ -243,14 +245,17 @@ join (AProc _ s1 a1) (AProc _ s2 a2)
 
 join (ASum _ l1 r1) (ASum _ l2 r2)
   = ASum Nothing (l1 `maybeJoin` l2) (r1 `maybeJoin` r2)
-  where
-    maybeJoin :: forall a. Maybe (AbsVal a) -> Maybe (AbsVal a) -> Maybe (AbsVal a)
-    maybeJoin (Just x) (Just y) = Just (x `join` y)
-    maybeJoin (Just x) Nothing  = Just x
-    maybeJoin _  y              = y
 
 join (AProd _ l1 r1) (AProd _ l2 r2)
-  = AProd Nothing l1 r1
+  = AProd Nothing (l1`join`l2) (r1`join`r2)
+
+maybeJoin :: forall a.
+             Maybe (AbsVal a)
+          -> Maybe (AbsVal a)
+          -> Maybe (AbsVal a)
+maybeJoin (Just x) (Just y) = Just (x `join` y)
+maybeJoin (Just x) Nothing  = Just x
+maybeJoin _  y              = y
 
 -------------------------------------------------
 -- | Helpers for generating IL from AbsValtractions
@@ -282,21 +287,33 @@ mkVal s = IL.MTApp (IL.MTyCon s)
 
 absToIL :: (?callStack :: CallStack)
         => AbsVal a -> [IL.MConstr]
-absToIL (AUnit _) = [mkVal "Unit" []]
-absToIL (AInt  _) = [mkVal "Int" []]
-absToIL (AString _) = [mkVal "String" []]
+absToIL ABot          = error "TBD: absToIL ABot"
+absToIL (AArrow _ _)  = error "TBD: absToIL AArrow"
+absToIL (ARoleSing _ _)  = error "TBD: absToIL ARoleSing"
+absToIL (ARoleMulti _ _)  = error "TBD: absToIL ARoleMulti"
+
+absToIL (AUnit _)     = [mkVal "Unit" []]
+absToIL (AInt  _)     = [mkVal "Int" []]
+absToIL (AString _)   = [mkVal "String" []]
+absToIL (AList _ _)   = [mkVal "List" []]
+
+absToIL (APid (Just x) _)                     = [mkVal "Pid" [IL.PVar $ varToIL x]]
 
 absToIL (APid Nothing (Pid (Just (RS r))))    = [mkVal "Pid" [IL.PConc r]]
 absToIL (APid Nothing (Pid (Just (RSelf (S (RS r)))))) = [mkVal "Pid" [IL.PConc r]]
 absToIL (APid Nothing (Pid (Just (RSelf (M r))))) = [mkVal "Pid" [IL.PAbs (IL.V "i") (roleToSet r)]]
-absToIL (APid (Just x) _)                     = [mkVal "Pid" [IL.PVar $ varToIL x]]
 absToIL (APid Nothing (Pid Nothing))          = error "wut"
+
 
 absToIL (ASum _ (Just a) Nothing)  = IL.MCaseL IL.LL <$> absToIL a
 absToIL (ASum _ Nothing (Just b))  = IL.MCaseR IL.RL <$> absToIL b
-absToIL (ASum (Just x) (Just a) (Just b)) = (IL.MCaseL (IL.VL (varToIL x)) <$> absToIL a)
-                                         ++ (IL.MCaseR (IL.VL (varToIL x)) <$> absToIL b)
-absToIL (ASum _ Nothing Nothing)   = error "absToIL sum"
+absToIL (ASum (Just x) (Just a) (Just b))
+  = (IL.MCaseL (IL.VL (varToIL x)) <$> absToIL a) ++ 
+    (IL.MCaseR (IL.VL (varToIL x)) <$> absToIL b)
+absToIL (ASum Nothing (Just a) (Just b))
+  = (IL.MCaseL IL.LL <$> absToIL a) ++ 
+    (IL.MCaseR IL.RL <$> absToIL b)
+absToIL (ASum _ _ _)   = error "absToIL sum"
 
 absToIL (AProd _ a b) = do x <- absToIL a
                            y <- absToIL b
