@@ -14,6 +14,7 @@ import           Data.Generics hiding (empty)
 import           Control.Exception
 import           System.IO
 import           Debug.Trace
+import           Text.Printf
 
 import           Symmetry.IL.AST
 
@@ -214,17 +215,22 @@ data RenderEnv = RE { chanMap :: ChanMap
 
 type RenderM = Reader RenderEnv Doc
 
-renderStmt :: Pid -> Stmt StorageT -> RenderM
-renderStmt (p @ (PConc _)) s    = renderStmtConc p s
-renderStmt (p @ (PUnfold {})) s = renderStmtConc p s
-renderStmt p s                  = renderStmtAbs  p s
+renderStmt :: Pid -> Stmt Int -> RenderM
+renderStmt (p @ (PConc _)) s    = do r <- renderStmtConc p s
+                                     return $ line_directive s <$> r
+renderStmt (p @ (PUnfold {})) s = do r <- renderStmtConc p s
+                                     return $ line_directive s <$> r
+renderStmt p s                  = do r <- renderStmtAbs p s
+                                     return $ line_directive s <$> r
 
 -- renderStmt f p s               = nonDetStmts $ map (renderStmtAbs f p) ss
 --   where
---     ss = listify (\(_::Stmt StorageT) -> True) s
+--     ss = listify (\(_::Stmt Int) -> True) s
 
-sendMsg :: Pid -> Pid -> (TId, CId, MConstr) -> RenderM
-sendMsg p q (t,c,v)
+line_directive s = text (printf "#line %d \"stmt_%s\"" (1 :: Int) (show $ annot s))
+
+sendMsg :: Pid -> Pid -> (TId, CId, MConstr) -> Int -> RenderM
+sendMsg p q (t,c,v) i
   = do f <- asks chanMap
        return $ f p q (t,c) <> text "!" <> renderSendMsg v
 
@@ -239,8 +245,8 @@ recvMsg p q (t,c,m)
        return $ text "__RECV" <> tupled [f p q (t,c) , renderRecvMsg m]
 
 renderStmtConc :: Pid -> Stmt Int -> RenderM
-renderStmtConc me (SSend p m _)
-  = sendMsg me p m
+renderStmtConc me (SSend p m i)
+  = sendMsg me p m i
 
 renderStmtConc me (SRecv m _)
   = do ps <- fmap (filter (/= me) . M.keys) (asks pidMap)
@@ -252,8 +258,8 @@ renderStmtConc me (SRecv m _)
 renderStmtConc me (SCase l sl sr _)
   = do dl <- renderStmtConc me sl
        dr <- renderStmtConc me sr
-       return $ ifs [ isLeftLabel l dl
-                    , isRightLabel l dr
+       return $ ifs [ line_directive sl <$> isLeftLabel l dl
+                    , line_directive sr <$> isRightLabel l dr
                     ]
 
 renderStmtConc _ (SSkip _)
@@ -288,7 +294,7 @@ renderStmtConc me (SBlock ss _)
 renderStmtConc me (SNonDet ss _)
   = fmap ifs $ mapM (renderStmt me) ss
 
-renderStmtConc _ (SDie _)
+renderStmtConc _ s@(SDie _)
   = return $ text "assert(0 == 1) /* CRASH! */"
 
 renderStmtConc _ (SCompare (V v) p1 p2 _)
@@ -333,7 +339,7 @@ outCounters cfg i
       Just js -> map incrCounter js
 
 renderStmtAbs :: Pid
-              -> Stmt StorageT
+              -> Stmt Int
               -> RenderM
 renderStmtAbs me s@(SSend _ _ i)
   = do send <- renderStmtConc me s
@@ -356,8 +362,8 @@ renderStmtAbs me s@(SRecv _ i)
   --                        return $ block [d, decrCounter i, oc]
 
 renderStmtAbs _ (SCase v l r i)
-  = return $ ifs [ isLeftLabel v  $ seqStmts [decrCounter (numS i), incrCounter (numS $ annot l)]
-                 , isRightLabel v $ seqStmts [decrCounter (numS i), incrCounter (numS $ annot r)]
+  = return $ ifs [ isLeftLabel v  $ seqStmts [decrCounter i, incrCounter (annot l)]
+                 , isRightLabel v $ seqStmts [decrCounter i, incrCounter (annot r)]
                  ]
 
 renderStmtAbs me (SNonDet ss i)
@@ -372,13 +378,13 @@ renderStmtAbs me (SNonDet ss i)
     go (oc, Nothing) = return (block [decrCounter i, oc])
 
 renderStmtAbs _ (SVar _ i)
-  = inOutCountersM (numS i)
+  = inOutCountersM i
 
 renderStmtAbs _ (SSkip i)
-  = inOutCountersM (numS i)
+  = inOutCountersM i
 
 renderStmtAbs _ (SLoop _ _ i)
-  = inOutCountersM (numS i)
+  = inOutCountersM i
 
 renderStmtAbs _ (SNull {})
   = return $ text "skip"
@@ -463,16 +469,16 @@ selectStmt me ss
        return . ifs $ exit : ds
     where
       exit = hcat . punctuate (text " && ") $ map (<+> text "== 0") ks
-      ks   = map (stmtCounter . numS . annot) ss
-      goto :: Stmt StorageT -> RenderM
+      ks   = map (stmtCounter .  annot) ss
+      goto :: Stmt Int -> RenderM
       goto s = do sg <- stmtGuard me s
-                  return $ seqStmts [sg, gotoStmt $ numS $ annot s]
+                  return $ seqStmts [sg, gotoStmt $ annot s]
 
 (<?$>) :: [Doc] -> Doc -> Doc
 [] <?$> y = y
 xs <?$> y = vcat xs <$> y
 
-renderProcStmts :: Process StorageT -> RenderM
+renderProcStmts :: Process Int -> RenderM
 renderProcStmts (p, ss)
   | isAbs p
     = do ds <- mapM do1Abs absStatements
@@ -503,13 +509,13 @@ renderProcStmts (p, ss)
     isProcVar _          _  = False
     vs                      = listify go ss :: [Var]
     ivs                     = everything (++) (mkQ [] iterVar) ss
-    iterVar :: Stmt StorageT -> [String]
+    iterVar :: Stmt Int -> [String]
     iterVar (SIter (V v) _ _ _) = [v]
     iterVar _                   = []
     go :: Var -> Bool
     go                      = const True
 
-renderProc :: Process StorageT -> RenderM
+renderProc :: Process Int -> RenderM
 renderProc p
   = do ds <- renderProcStmts p
        return $ text "proctype" <+>
@@ -536,7 +542,7 @@ renderProc p
            else
              empty
 
-renderProcs :: Config StorageT -> PidMap -> SetMap -> Doc
+renderProcs :: Config Int -> PidMap -> SetMap -> Doc
 renderProcs (Config { cTypes = ts, cProcs = ps }) pm sm
   = runReader (foldM render1 empty psfilter) env
   where
@@ -760,7 +766,7 @@ macros =
 
 render :: (Eq a, Show a) => Config a -> Doc
 render c@(Config { cTypes = ts, cSets = bs })
-  = mtype
+  = all_stmts (cProcs unfolded) <$$> mtype
     <$$> align (vcat macros)
     <$$> declProcVars pMap <> declSets bs
     <$$> declChannels pMap ts
@@ -780,3 +786,45 @@ render c@(Config { cTypes = ts, cSets = bs })
 renderToFile :: (Eq a, Show a) => FilePath -> Config a -> IO ()
 renderToFile fn c
   = withFile fn WriteMode $ flip hPutDoc (render c)
+
+pid_arrow s  = int (annot s) <+> text "->"
+short_stmt s = pid_arrow s <+> pretty_short s
+
+stmt_to_str              :: Stmt Int -> Doc
+stmt_to_str (SBlock ss a) = vcat $ text (printf "%d -> block %s" a (show $ map annot ss)) :
+                                   map stmt_to_str ss
+
+stmt_to_str s@(SIter v set body a) = vcat [short_stmt s, stmt_to_str body]
+
+stmt_to_str s@(SLoop lv body a) = vcat [short_stmt s, stmt_to_str body]
+
+stmt_to_str (SChoose v set body a) = vcat [ text $ printf "%d -> choose %d" a (annot body)
+                                          , stmt_to_str body
+                                          ]
+
+stmt_to_str s@(SCase v sl sr a) = vcat [short_stmt s, stmt_to_str sl, stmt_to_str sr]
+
+stmt_to_str (SNonDet ss a) = vcat $ (text $ printf "%d -> ND %s" a $ show $ map annot ss):
+                                    map stmt_to_str ss
+
+stmt_to_str s = int (annot s) <+> text " -> " <+> pretty s
+
+pretty_short (SIter x xs s a) =
+  text "for" <+> parens (pretty x <+> colon <+> pretty xs) <+> braces (int $ annot s)
+
+pretty_short (SLoop (LV v) s i) = pretty v <> colon <+> parens (pretty s)
+
+pretty_short (SCase l sl sr _) =
+  text "match" <+> pretty l <+> text "with" <$>
+  indent 2
+    (align (vcat [text "| InL ->" <+> (int $ annot sl),
+                  text "| InR ->" <+> (int $ annot sr)]))
+
+
+process_to_str (pid,s) = renderProcName pid <+> text "=>" <+> int (annot s) <$>
+                           stmt_to_str s
+
+all_stmts :: [Process Int] -> Doc
+all_stmts procs = text "/*" <$>
+                    (vcat $ map process_to_str procs) <$>
+                    text "*/"

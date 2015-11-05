@@ -93,12 +93,18 @@ run1Cfg opt outd cfg
        runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName)
        runCmd verb "COMPILING VERIFIER:" outd ccCmd
        runCmd verb "CHECKING MODEL:" outd panCmd
-       fileExists (outTrail outd)
+       failure <- fileExists (outTrail outd)
+       let unfolded = filterBoundedAbs . freshIds . instAbs $ unfold cfgOut
+       when failure (printTrace unfolded)
+       return failure
   where
     verb = optVerbose opt
     setsz = optBounded opt
     fileExists f = catch (openFile f ReadMode >> return True)
                          (\(_ :: IOException) -> return False)
+    filterBoundedAbs c@(Config { cSets = bs }) =
+      c { cProcs = [ p | p <- cProcs c, not (isBounded bs (fst p)) ] }
+
 
 report status
   = if status then
@@ -134,3 +140,7 @@ checkerMain main
 
     where
       cfgs = stateToConfigs . runSymb $ main
+
+
+printTrace  :: Config Int -> IO ()
+printTrace c = printf "HERE BE TRACE !\n"

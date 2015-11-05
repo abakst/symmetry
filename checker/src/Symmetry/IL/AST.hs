@@ -462,15 +462,15 @@ nextStmts (SBlock ss i)
       go (m, is) s = ([(a, [annot s]) | a <- is] ++ m, map annot (lastStmts s))
 
 nextStmts (SIter _ _ s i)
-  = M.fromList ((numS i, [numS $ annot s]):[(numS $ annot j, [numS i]) | j <- lastStmts s])  `joinMaps` nextStmts s
+  = M.fromList ((i, [annot s]):[(annot j, [i]) | j <- lastStmts s])  `joinMaps` nextStmts s
 nextStmts (SLoop v s i)
-  = M.fromList ((numS i, [numS $ annot s]):[(numS j, [numS i]) | j <- js ]) `joinMaps` nextStmts s
+  = M.fromList ((i, [annot s]):[(j, [i]) | j <- js ]) `joinMaps` nextStmts s
   where
     js = [ j | SVar v' j <- listify (const True) s, v' == v]
 nextStmts (SChoose _ _ s i)
-  = addNext (numS i) [numS $ annot s] $ nextStmts s
+  = addNext i [annot s] $ nextStmts s
 nextStmts (SCase _ sl sr i)
-  = M.fromList [(numS i, [numS $ annot sl, numS $ annot sr])] `joinMaps` nextStmts sl `joinMaps` nextStmts sr
+  = M.fromList [(i, [annot sl, annot sr])] `joinMaps` nextStmts sl `joinMaps` nextStmts sr
 nextStmts _
   = M.empty
 
@@ -485,16 +485,15 @@ data Config a = Config {
   } deriving (Eq, Read, Show, Typeable)
 
 -- | Operations
-freshId :: Stmt a -> State Int (Stmt StorageT)
+freshId :: Stmt a -> State Int (Stmt Int)
 freshId
   = mapM (const fr)
   where
     fr = do n <- get
             put (n + 1)
-            return (StorageT { numS = n
-                             })
+            return n
 
-freshIds :: Config a -> Config StorageT
+freshIds :: Config a -> Config Int
 freshIds (c @ Config { cProcs = ps })
   = c { cProcs = evalState (mapM (mapM freshId) ps) 1 }
 
