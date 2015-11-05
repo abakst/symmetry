@@ -23,6 +23,7 @@ data MainOptions = MainOptions { optVerify  :: Bool
                                , optBounded :: Int
                                , optVerbose :: Bool
                                , optProcess :: Bool
+                               , optModel   :: Bool
                                , optDir     :: String
                                }
 
@@ -32,6 +33,7 @@ instance Options MainOptions where
                   <*> simpleOption "set-size" 0 "Concrete set size"
                   <*> simpleOption "verbose" False "Verbose Output"
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
+                  <*> simpleOption "dump-model" False "Dump Spin model"
                   <*> simpleOption "pmlfile" ".symcheck" "Directory to store intermediate results"
 
 spinCmd :: FilePath -> CreateProcess
@@ -82,18 +84,29 @@ runCmd verb pre wd c
 
 run1Cfg :: MainOptions -> FilePath -> Config () -> IO Bool
 run1Cfg opt outd cfg
-  = do createDirectoryIfMissing True outd
-       removeFile (outTrail outd) `catch` \(_ :: IOException) ->
-         return ()
+  = do when (optModel opt) $
+         createDirectoryIfMissing True outd
+       when (optVerify opt) $ 
+         removeFile (outTrail outd) `catch` \(_ :: IOException) ->
+           return ()
+
        let cfgOut = if setsz > 0 then
                       boundAbs setsz cfg
                     else
                       unfoldAbs cfg
-       renderToFile (outf outd) cfgOut
-       runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName)
-       runCmd verb "COMPILING VERIFIER:" outd ccCmd
-       runCmd verb "CHECKING MODEL:" outd panCmd
-       fileExists (outTrail outd)
+
+       when (optModel opt) $ do
+         renderToFile (outf outd) cfgOut
+
+       when (optVerify opt) $ do 
+         runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName)
+         runCmd verb "COMPILING VERIFIER:" outd ccCmd
+         runCmd verb "CHECKING MODEL:" outd panCmd
+
+       if (optVerify opt) then
+         not <$> fileExists (outTrail outd)
+       else
+         return True
   where
     verb = optVerbose opt
     setsz = optBounded opt
@@ -101,7 +114,7 @@ run1Cfg opt outd cfg
                          (\(_ :: IOException) -> return False)
 
 report status
-  = if status then
+  = if not status then
       do setSGR [SetConsoleIntensity BoldIntensity, SetColor Foreground Vivid Red]
          putStr "UNSAFE"
          setSGR [Reset]
@@ -116,19 +129,21 @@ checkerMain :: SymbEx () -> IO ()
 checkerMain main
   = runCommand $ \opts _ -> do
 
-      when (optProcess opts) $
+      when (optProcess opts) .
         forM_ cfgs $ \c ->
           print $ text "Config" <> nest 2 (line <> pretty c)
 
-      when (optVerify opts) $ do
-        d <- getCurrentDirectory
-        let  dir  = optDir opts
-             verb = optVerbose opts
-             outd = d </> dir
-        es <- forM cfgs $ run1Cfg opts outd
-        let status = or es
-        report status
-        when status exitFailure
+      d <- getCurrentDirectory
+
+      let  dir  = optDir opts
+           outd = d </> dir
+           optsImplied = opts { optModel = optModel opts ||
+                                           optVerify opts }
+
+      es <- forM cfgs $ run1Cfg optsImplied outd
+      let status = and es
+      report status
+      unless status exitFailure
 
       exitSuccess
 

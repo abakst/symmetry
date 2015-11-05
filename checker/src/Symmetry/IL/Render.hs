@@ -20,6 +20,10 @@ debug :: Show a => String -> a -> a
 debug msg x = 
   trace (msg ++ show x) x
 
+debugPP :: Pretty a => String -> a -> a
+debugPP msg x = 
+  trace (msg ++ show (pretty x)) x
+
 -- | Some useful combinators
 comment :: Doc -> Doc
 comment d = text "/*" <+> d <+> text "*/"
@@ -187,15 +191,8 @@ switchboard np vm from p (t,c,v) =
             text "+" <+> renderProcVar p <> text "*" <> int nv <+>
             text "+" <+> int v)
   where
-    nv = fromMaybe err $ fmap M.size (M.lookup (t,c) vm)
+    nv = maybe err M.size (M.lookup (t,c) vm)
     err = error "switchboard"
-
-initSwitchboard :: Int -> Pid -> Pid -> (TId, CId) -> Doc
-initSwitchboard np p q (t, c)
-  = empty
-  -- = switchboard np p q (t, c) <+> 
-  --   equals <+> 
-  --   renderChanName p q t c
 
 renderChanName :: Pid -> Pid -> TId -> CId -> Doc                            
 renderChanName p q ti cj
@@ -240,7 +237,7 @@ renderStmt (p @ (PConc _)) s    = renderStmtConc p s
 renderStmt (p @ (PUnfold {})) s = renderStmtConc p s
 renderStmt p s                  = renderStmtAbs  p s
 
-match1Cstr :: MConstr -> MConstr -> VId -> Maybe (CSubst, VId)
+match1Cstr :: MConstr -> MConstr -> VId -> Maybe (Subst, VId)
 match1Cstr c1 c2 vi
   = case unify c1 c2 of
       Just s -> Just (s, vi)
@@ -248,7 +245,7 @@ match1Cstr c1 c2 vi
 
 matchCstr :: (TId, CId, MConstr)
           -> M.Map (TId, CId) MValMap
-          -> [(CSubst, VId)]
+          -> [(Subst, VId)]
 matchCstr (ti, cj, c) vm
   = M.elems (M.mapMaybeWithKey (match1Cstr c) m)
   where
@@ -268,18 +265,21 @@ sendMsg p q m@(ti, cj, _)
     go f (s, vk) = let tests = subToTests s in
                    seqStmts ((punctuate (text " && ") tests) ++
                              [incrVal (f p q (ti, cj, vk))])
-    subToTests (CSubst {cPidSub = [], cLabSub = [], cIdxSub = isub})
+    subToTests (Subst {cPidSub = [], cLabSub = [], cIdxSub = isub})
       = [ i <==> int n | ((i, _), n) <- isub ]
 
-pollMsg :: Pid -> Pid -> (TId, CId, MConstr) -> RenderM              
+pollMsg :: Pid -> Pid -> (TId, CId, MConstr) -> Reader RenderEnv [(Pid, Pid, TId, CId, VId)]
 pollMsg p q m@(ti, cj, _) 
   = do f <- asks chanMap
        vm <- asks valMap
-       let vs = matchCstr m vm
-           rs = punctuate (text " || ") (map (go f) vs)
-       return (hcat rs)
+       let vs@(_:_) = matchCstr m vm
+       --     rs@(_:_) = punctuate (text " || ") (map (go f) vs)
+       -- return rs
+       -- return [(ti, cj, vk) | (_, vk) <- vs ]
+       return . map go $ vs
   where
-    go f (_, vk) = gtZ (f p q (ti, cj, vk))
+    go (_, vk) = (p, q, ti, cj, vk)
+    -- go f (_, vk) = gtZ (f p q (ti, cj, vk))
 
 recvMsg :: Pid -> Pid -> (TId, CId, MConstr) -> Reader RenderEnv [Doc]
 recvMsg p q m@(ti, cj, _)
@@ -291,10 +291,10 @@ recvMsg p q m@(ti, cj, _)
                                 decrVal (f p q (ti, cj, vk)) :
                                 subToAssigns sub)
   where
-    subToAssigns (CSubst { cPidSub = pidSub, cLabSub = labSub, cIdxSub = [] })
+    subToAssigns (Subst { cPidSub = pidSub
+                         , cLabSub = labSub })
       = [ v <=> renderProcVar (subUnfoldIdx r) | (v, r) <- pidSub ] ++
         [ v <=> renderLabel l | (v, l) <- labSub ]
-
     
 renderStmtConc :: Pid -> Stmt Int -> RenderM
 renderStmtConc me s@(SSend p m _)
@@ -400,9 +400,7 @@ renderStmtAbs me s@(SSend _ _ i)
 renderStmtAbs me s@(SRecv _ i)
   = do cfg       <- asks stmtMap
        recv      <- renderStmtConc me s
-       return $ ifs [ seqStmts (recv : inOutCounters cfg i)
-                    , text "timeout"
-                    ]
+       return $ seqStmts (recv : inOutCounters cfg i)
   --      let outms  = assert (length ms == length outcs) $ zip nullms outcs
   --          outcs  = outCounters cfg i
   --          nullms =  [(t, cs, SNull) | (t, cs, _) <- ms]
@@ -417,16 +415,21 @@ renderStmtAbs _ (SCase v l r i)
                  , isRightLabel v $ seqStmts [decrCounter i, incrCounter (annot r)]
                  ]
 
-renderStmtAbs me (SNonDet ss i)    
+renderStmtAbs me s@(SNonDet ss i)    
   = do cfg  <- asks stmtMap
+       f    <- asks chanMap
        let outcs = outCounters cfg i
-           grds  = zip outcs $ map (recvGuard me) ss
-       rs <- mapM go grds
-       return $ ifs rs
+       grds <- fmap (zip outcs) $ mapM (recvGuard me) ss
+           -- grds  = zip outcs $ map (recvGuard me) ss
+       rs <- mapM (go f) grds
+       return $ desc (pretty s) (ifs rs)
   where
-    go (oc, Just g) = do grd <- g
-                         return (grd <+> text "->" <+> block [decrCounter i, oc])
-    go (oc, Nothing) = return (block [decrCounter i, oc])
+    doChans f cs = vcat . punctuate (text " || ") . map (doChan f) .  nub $ cs
+    doChan f (p,q,ti,cj,vk) = gtZ (f p q (ti, cj, vk))
+
+    go _ (oc, []) = return (block [decrCounter i, oc])
+    go f (oc, cs) = do let grd = doChans f cs
+                       return (grd <+> text "->" <+> block [decrCounter i, oc])
                             
 renderStmtAbs _ (SVar _ i)
   = inOutCountersM i
@@ -485,40 +488,53 @@ gotoStmt :: Int -> Doc
 gotoStmt i
   = text "goto" <+> stmtLabel i
 
-chanGuard :: Pid -> (TId, CId, MConstr) -> RenderM
+chanGuard :: Pid -> (TId, CId, MConstr) -> Reader RenderEnv [(Pid, Pid, TId, CId, VId)]-- RenderM
 chanGuard me (t,c,v)
   = do pm <- asks pidMap 
-       fmap (vcat . punctuate (text " || ")) .
-         mapM go $ M.keys pm
+       -- f  <- asks chanMap
+       -- fmap (vcat . punctuate (text " || ") . concat) $
+       -- fmap (doChans f) $ 
+       --   mapM go (filter (/= me) (M.keys pm))
+       fmap (nub . concat) $ mapM go (M.keys pm)
   where
+      -- mapM        nub $ concat cs
     go them = pollMsg them me (t,c,v)
+       --     rs@(_:_) = punctuate (text " || ") (map (go f) vs)
+       -- return rs
+       -- return [(ti, cj, vk) | (_, vk) <- vs ]
 
-recvGuard :: Pid -> Stmt Int -> Maybe RenderM        
+-- recvGuard :: Pid -> Stmt Int -> Maybe RenderM        
 recvGuard me (SNonDet ss _)
-  = do let gs = mapMaybe (recvGuard me) ss
-       case gs of
-         [] -> Nothing
-         _  -> Just $ do
-                 fmap (vcat . punctuate (text " || ")) (sequence gs)
+  = fmap (nub . concat) $ mapM (recvGuard me) ss
+  -- = do let gs = mapMaybe (recvGuard me) ss
+  --      case gs of
+  --        [] -> Nothing
+  --        _  -> Just $ do
+  --                fmap (vcat . punctuate (text " || ")) (sequence gs)
                 
 recvGuard me (SBlock (s:_) _)
   = recvGuard me s
 
 recvGuard me (SRecv m _)
-  = Just $ chanGuard me m
+  = chanGuard me m
 
 recvGuard _ _
-  = Nothing
+  = return []
  
 stmtGuard :: Pid -> Stmt Int -> RenderM
 stmtGuard me s
-  = case rg of
-      Just g -> do d <- g
-                   return $ (align (base <+> text "&&" <+> parens d))
-      _      -> return base
+  = do rg <- recvGuard me s
+       case rg of
+         []     -> return base
+         _  -> do f <- asks chanMap
+                  let d = doChans f rg
+                  return $ (align (base <+> text "&&" <+> parens d))
   where
-    rg   = recvGuard me s
+    -- rg   = recvGuard me s
     base = stmtCounter (annot s) <+> text ">" <+> int 0
+
+    doChans f cs = vcat . punctuate (text " || ") . map (doChan f) .  nub $ cs
+    doChan f (p,q,ti,cj,vk) = gtZ (f p q (ti, cj, vk))
        
 -- stmtGuard _ s
 --   = return $ stmtCounter (annot s) <+> text ">" <+> int 0
@@ -630,13 +646,6 @@ renderMain m (Config { cTypes = ts, cProcs = ps, cSets = bs })
                   , atomic procInits
                   ]
     declAbsVars = [ byte <+> text v | PAbs (V v) _ <- map fst ps ]
-    boardInits  = do let pids = map fst ps
-                     p        <- pids
-                     q        <- pids
-                     (t,cm)   <- M.toList ts
-                     (c,m)    <- M.toList cm
-                     -- t        <- ts
-                     return $ initSwitchboard (length ps) (subUnfoldIdx p) (subUnfoldIdx q) (t,c)
     procInits   = map (runProc m . fst) ps
     pidInits    = map ((\p -> assignProcVar bs p (sz p)) . fst) ps
     sz p        = fromMaybe (err p) $ M.lookup p m
@@ -721,29 +730,6 @@ chanMsgType' (MCaseR _ c)
 chanMsgType' (MTProd c c')
   = chanMsgType' c ++ chanMsgType' c'
 
-declChannelsOfCstr :: PidMap -> (TId, CId, MConstr) -> Doc             
-declChannelsOfCstr pm (tid,cid,c) = vcat $ map go (prod $ M.keys pm)
-  where
-    prod ps = [ (p,q) | p <- ps, q <- ps ]
-    go (p,q)
-      = chanTy <+> renderChanName p q tid cid
-               <+> equals
-               <+> text "[__K__] of"
-               <+> chanMsgType c
-               <> semi
-
-declChannelsOfType :: PidMap -> TId -> M.Map CId MConstr -> Doc             
-declChannelsOfType pm tid m
-  = vcat $ M.foldrWithKey go [] m
-  where
-    go cid c docs = declChannelsOfCstr pm (tid, cid, c) : docs
-             
-declChannels :: PidMap -> MTypeEnv -> Doc
-declChannels pm te 
-  = vcat $ M.foldrWithKey go [] te
-  where
-    go tid m docs = declChannelsOfType pm tid m : docs
-
 declMailBox :: PidMap -> TId -> CId -> MValMap -> Doc
 declMailBox pm ti cj vm
   =  byte <+> switchBase ti cj <>
@@ -798,36 +784,12 @@ updUnfold (m, i) p@(PUnfold v s _)
       upd (a,b) (_,d) = (a, b+d)
       j               = maybe err (succ . fst) $ M.lookup (PAbs v s) m
       err             = error ("Unknown pid (updUnfold): " ++ show p)
+updUnfold _ _  = error "updUnfold non-PUnfold"
 
--- renderSwitchboard :: Int -> Int -> Doc
--- renderSwitchboard nprocs ntypes
---   = chanTy <+> switchBase <+>
---     brackets (int (nprocs*nprocs*ntypes)) <> semi
-
-declSwitchboardsCstr :: Int -> TId -> CId -> Doc
-declSwitchboardsCstr nprocs tid cid
-  = chanTy <+> switchBase tid cid
-           <+> brackets (int (nprocs * nprocs)) <> semi
-
-declSwitchboardsType :: Int -> TId -> M.Map CId MConstr -> Doc
-declSwitchboardsType nprocs tid m
-  = vcat . map go $ M.keys m
-  where
-    go cid = declSwitchboardsCstr nprocs tid cid
-                        
-declSwitchboards :: PidMap -> MTypeEnv -> Doc
-declSwitchboards pm te
-  = vcat $ M.foldrWithKey go [] te
-  where
-    go tid m docs = declSwitchboardsType nprocs tid m : docs
-    nprocs = M.foldrWithKey (\p v s -> s + count p v) 0 pm
-    count (PAbs _ _) (_, n) = n - setSize + 1
-    count (PConc _) (_,n) = n
-    count p@(PUnfold v s _) (_,n) =
-      maybe n (const 0) $ M.lookup (PAbs v s) pm
-    count _ _          = 0
-
+macrify :: [String] -> String                        
 macrify = intercalate " \\\n"
+
+decMacro :: String
 decMacro = macrify [ "#define __DEC(_x) atomic { assert (_x > 0);"
                    , "if"
                    , ":: (_x < __K__) ->  _x = _x - 1"
@@ -846,7 +808,7 @@ macros =
   , text decMacro
   ]
 
-render :: (Eq a, Show a) => Config a -> Doc
+render :: (Eq a, Show a, Data a) => Config a -> Doc
 render c@(Config { cTypes = ts, cSets = bs })
   = mtype
     <$$> align (vcat macros)
@@ -872,6 +834,6 @@ render c@(Config { cTypes = ts, cSets = bs })
     goKey (PAbs _ s) (_,n) m = M.insert s n m
     goKey _          _     m = m
 
-renderToFile :: (Eq a, Show a) => FilePath -> Config a -> IO ()
+renderToFile :: (Eq a, Show a, Data a) => FilePath -> Config a -> IO ()
 renderToFile fn c
   = withFile fn WriteMode $ flip hPutDoc (render c)

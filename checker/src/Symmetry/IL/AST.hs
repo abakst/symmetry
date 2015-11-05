@@ -69,12 +69,12 @@ data MConstr = MTApp  { tycon :: MTyCon, tyargs :: [Pid] }
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 unifyLabel (VL v) x
-  = Just $ emptyCSubst { cLabSub = [(v, x)] }
+  = Just $ emptySubst { cLabSub = [(v, x)] }
 unifyLabel x y
-  | x == y    = Just emptyCSubst 
+  | x == y    = Just emptySubst 
   | otherwise = Nothing
 
-unify :: MConstr -> MConstr -> Maybe CSubst
+unify :: MConstr -> MConstr -> Maybe Subst
 
 unify (MCaseL x c) (MCaseL l c')
   = joinSubst <$> s <*> unify c c'
@@ -92,7 +92,7 @@ unify (MTProd p1 p2) (MTProd p1' p2')
 unify a1@(MTApp{}) a2@MTApp{}
   | tycon a1 == tycon a2 &&
     length (tyargs a1) == length (tyargs a2)
-  = if map (substcPid sub) xs == ys then
+  = if map (substPid sub) xs == ys then
       Just sub
     else
       Nothing
@@ -101,20 +101,18 @@ unify a1@(MTApp{}) a2@MTApp{}
     (xs, ys) = (tyargs a1, tyargs a2)
 unify _ _
   = Nothing
-    
-substcPid sub p@(PVar v)
-  = substPid (cPidSub sub) p
-substcPid sub p@(PAbs i s)
-  = case lookup (i,s) (cIdxSub sub) of
-      Nothing -> p
-      Just n  -> PUnfold i s n
-substcPid _ p = p
+
+substLabel :: Subst -> Label -> Label    
+substLabel sub l@(VL v)
+  = fromMaybe l $ lookup v (cLabSub sub)
+substLabel _ l
+  = l
             
-unifyPid (PVar v) p = Just $ emptyCSubst { cPidSub = [(v, p)] }
+unifyPid (PVar v) p = Just $ emptySubst { cPidSub = [(v, p)] }
 unifyPid (PAbs v s) (PUnfold _ s' i)
-  | s == s' = Just $ emptyCSubst { cIdxSub = [((v,s), i)] }
+  | s == s' = Just $ emptySubst { cIdxSub = [((v,s), i)] }
 unifyPid p1 p2
-  | p1 == p2  = Just emptyCSubst
+  | p1 == p2  = Just emptySubst
   | otherwise = Nothing
 
 eqConstr :: MConstr -> MConstr -> Bool
@@ -273,28 +271,57 @@ instConstr dom (MTProd c1 c2)
     
 instStmt  :: (Show a, Eq a)
           => [Pid] -> Stmt a -> Stmt a
-instStmt dom s = SNonDet [ s' | (_, s') <- instStmt' dom s ] (annot s)
+instStmt dom s
+  = SNonDet (nub [ s' | (_, s') <- instStmt' dom s ]) (annot s)
 
 instStmt' :: Eq a => [Pid] -> Stmt a -> [(Subst, Stmt a)]
+instStmt' dom (SNonDet (s:ss) a)
+  = do (sub, s')             <- instStmt' dom s
+       (sub', SNonDet ss' _) <- instStmt' dom (subst sub (SNonDet ss a))
+       return (sub `joinSubst` sub', SNonDet (s' : ss') a)
+
 instStmt' dom (SBlock (s:ss) a)
   = do (sub, s')    <- ts
        (sub', SBlock ss' _)  <- instStmt' dom (subst sub (SBlock ss a))
-       return (sub ++ sub', SBlock (s' : ss') a)
+       return (sub `joinSubst` sub', SBlock (s' : ss') a)
   where
     ts = instStmt' dom s
 
 instStmt' dom (SRecv (t,c,v) a)
-  = [ (sub, SRecv (t,c, substCstr sub v) a) | sub <- allSubs dom (pvars v) ]
+  = [ (sub, SRecv (t, c, substCstr sub v) a)
+    | sub <- psubs
+    -- , coherent (substCstr sub v)
+    ]
+  where
 
-instStmt' _ s = [([], s)]
+    psubs     = allSubs dom (pvars v)
+    -- lsubs     = foldl' go [emptySubst] (lvars v)
+    -- subs      = [ s1 `joinSubst` s2 | s1 <- psubs, s2 <- lsubs ]
+    -- go subs v = map (joinSubst (sub1Label v LL)) subs ++
+    --             map (joinSubst (sub1Label v RL)) subs
+    -- subs      = map (joinSubst lsub) psubs
 
+  -- = [ (sub, SRecv (t,c, substCstr sub v) a) | sub <- allSubs dom (pvars v)
+  --                                           , ]
+instStmt' _ s = [(emptySubst, s)]
+
+labSubCstr :: MConstr -> Subst
+labSubCstr (MCaseL (VL x) c) = sub1Label x LL `joinSubst`
+                               labSubCstr c
+labSubCstr (MCaseL _ c)      = labSubCstr c
+labSubCstr (MCaseR (VL x) c) = sub1Label x RL `joinSubst`
+                               labSubCstr c
+labSubCstr (MCaseR _ c)      =  labSubCstr c
+labSubCstr (MTProd c1 c2) = labSubCstr c1 `joinSubst` labSubCstr c2
+labSubCstr (MTApp {})     = emptySubst
+           
 allSubs :: [Pid] -> [Var] -> [Subst] 
 allSubs _ []
-  = [[]]
+  = [emptySubst]
 allSubs dom (x:xs)
-  = [ su1:surest | su1 <- subs x, surest <- allSubs dom xs ]
+  = [ su1 `joinSubst` surest | su1 <- subs x, surest <- allSubs dom xs ]
   where
-    subs v  = [ (v, p) | p <- dom ]
+    subs v  = [ emptySubst { cPidSub = [(v, p)] } | p <- dom ] 
 
 pvars :: MConstr -> [Var]
 pvars (MTApp _ xs)   = [v | PVar v <- xs]
@@ -302,54 +329,161 @@ pvars (MCaseL _ c)   = pvars c
 pvars (MCaseR _ c)   = pvars c
 pvars (MTProd c1 c2) = nub (pvars c1 ++ pvars c2)
 
-instAbs :: (Show a, Eq a) => Config a -> Config a
+lvars :: MConstr -> [Var]
+lvars (MTApp _ _)       = []
+lvars (MCaseL (VL l) c) = l : lvars c
+lvars (MCaseR (VL l) c) = l : lvars c
+lvars (MCaseL _ c)      = lvars c
+lvars (MCaseR _ c)      = lvars c
+lvars (MTProd c1 c2)    = nub (lvars c1 ++ lvars c2)
+
+instAbs :: (Show a, Eq a, Data a) => Config a -> Config a
 instAbs c@(Config { cProcs = ps })
   = c { cProcs = map (inst1Abs dom) ps }
   where
     dom                          = map fst ps
-    inst1Abs d (p@(PAbs _ _), s) = (p, instStmt d s)
-    inst1Abs _ p                 = p
 
+inst1Abs :: (Show a, Data a, Eq a) => [Pid] -> Process a -> Process a
+inst1Abs d (p@(PAbs _ _), s)
+  = (p, flattenNonDet . instStmt d $ instLabels s)
+  where
+    -- All values of match vars:
+    lsubs        = foldl' go [emptySubst] ls
+    ls           = nub . concatMap lvars $ listify (const True) s
+    go ss v      = [ s1`joinSubst`sub1Label v LL | s1 <- ss ] ++
+                   [ s1`joinSubst`sub1Label v RL | s1 <- ss ] 
+
+    instLabels st =
+      fromMaybe err $ filterCoherent (SNonDet (subLabels st) (annot st))
+
+    err = error "inst1Abs: no labels are coherent"
+
+    subLabels st = map (`subst` st) lsubs
+inst1Abs _ p                 = p
+
+flattenNonDet :: Eq a => Stmt a -> Stmt a
+flattenNonDet (SNonDet ss a)
+  = SNonDet (nub $ foldl' flatten [] ss) a
+  where
+    flatten ss' (SNonDet ss'' _)
+      = ss' ++ map flattenNonDet ss''
+    flatten ss' s'
+      = ss' ++ [s']
+flattenNonDet (SBlock ss a)
+  = SBlock (map flattenNonDet ss) a
+flattenNonDet s
+  = s
+
+coherent :: MConstr -> Bool
+coherent (MTApp {})    = True
+coherent (MCaseL LL c) = coherent c
+coherent (MCaseR RL c) = coherent c
+coherent (MTProd c1 c2)= coherent c1 && coherent c2
+coherent _             = False
+
+filterCoherent :: (Eq a) => Stmt a -> Maybe (Stmt a)                         
+filterCoherent s@(SDie _)
+  = Just s
+
+filterCoherent (SNonDet ss a)
+  = case mapMaybe filterCoherent ss of
+      []   -> Nothing
+      [s'] -> Just s'
+      ss'  -> Just $ SNonDet (nub ss') a
+
+filterCoherent s@(SBlock [] _)
+  = Just s
+
+filterCoherent (SBlock ss a)
+  = if any isNothing ss' then
+      Nothing
+    else
+      Just (SBlock (catMaybes ss') a)
+  where
+    ss' = map filterCoherent ss
+
+filterCoherent s@(SSend _ (_,_,v) _)
+  = if coherent v then Just s else Nothing
+
+filterCoherent s@(SRecv (_,_,v) _)
+  = if coherent v then Just s else Nothing
+
+filterCoherent s@(SIter {})
+  = do s' <- filterCoherent (iterBody s)
+       return s { iterBody = s' } 
+
+filterCoherent s@(SLoop {})
+  = do s' <- filterCoherent (loopBody s)
+       return s { loopBody = s' } 
+
+filterCoherent s = Just s          
 
 -- | Substitution of PidVars for Pids
-type Subst = [(Var, Pid)]
+type PidSubst = [(Var, Pid)]
 type IdxSub = [((Var, Set), Int)]
 type LabelSubst = [(Var, Label)]
 
-data CSubst = CSubst { cPidSub :: Subst
-                     , cLabSub :: LabelSubst
-                     , cIdxSub :: IdxSub
-                     }
+data Subst = Subst { cPidSub :: PidSubst
+                   , cLabSub :: LabelSubst
+                   , cIdxSub :: IdxSub
+                   }
+
+sub1Pid   v p = emptySubst { cPidSub = [(v, p)] }
+sub1Label v l = emptySubst { cLabSub = [(v, l)] }
+
 joinSubst c1 c2
-  = CSubst { cPidSub = cPidSub c1 ++ cPidSub c2
+  = Subst { cPidSub = cPidSub c1 ++ cPidSub c2
            , cLabSub = cLabSub c1 ++ cLabSub c2
            , cIdxSub = cIdxSub c1 ++ cIdxSub c2
            }
 
-joinSubsts :: [CSubst] -> CSubst
+joinSubsts :: [Subst] -> Subst
 joinSubsts
-  = foldl' joinSubst emptyCSubst
+  = foldl' joinSubst emptySubst
 
-emptyCSubst = CSubst [] [] []
+emptySubst = Subst [] [] []
 
 restrict :: Var -> Subst -> Subst
-restrict x s = [(v, q) | (v, q) <- s, v /= x]
+restrict x s
+  = s { cPidSub = [(v, q) | (v, q) <- cPidSub s, v /= x]
+      , cIdxSub = [(v, q) | (v, q) <- cIdxSub s, (fst v) /= x]
+      }
 
-subst :: Subst -> Stmt a -> Stmt a
-subst s (SBlock ss a)    = SBlock (map (subst s) ss) a
-subst s (SSend p ms a)   = SSend (substPid s p) (substMS s ms) a
-subst s (SRecv ms a)     = SRecv (substMS s ms) a
-subst s (SIter v xs t a) = SIter v xs (subst s' t) a
-  where s'               = restrict v s
-subst s (SLoop v t a)    = SLoop v (subst s t) a
-subst s (SCompare v p1 p2 a) = SCompare v (substPid s p1) (substPid s p2) a
-subst s (SCase v l r a)  = SCase v (subst s l) (subst s r) a
-subst _ s                = s
+subst :: Eq a => Subst -> Stmt a -> Stmt a
+subst s (SNonDet ss a)
+  = SNonDet (nub $ map (subst s) ss) a
+
+subst s (SBlock ss a)
+  = SBlock (map (subst s) ss) a
+
+subst s (SSend p ms a)
+  = SSend (substPid s p) (substMS s ms) a
+
+subst s (SRecv ms a)
+  = SRecv (substMS s ms) a
+
+subst s (SIter v xs t a)
+  = SIter v xs (subst s' t) a
+  where s' = restrict v s
+
+subst s (SLoop v t a)
+  = SLoop v (subst s t) a
+
+subst s (SCompare v p1 p2 a)
+  = SCompare v (substPid s p1) (substPid s p2) a
+
+subst s (SCase v l r a)
+  = case lookup v (cLabSub s) of
+      Just LL -> subst s l
+      Just RL -> subst s r
+      _       -> SCase v (subst s l) (subst s r) a
+
+subst _ s = s
 
 substCstr :: Subst -> MConstr -> MConstr
 substCstr sub (MTApp tc as) = MTApp tc $ map (substPid sub) as
-substCstr sub (MCaseL l c)  = MCaseL l $ substCstr sub c
-substCstr sub (MCaseR l c)  = MCaseR l $ substCstr sub c
+substCstr sub (MCaseL l c)  = MCaseL (substLabel sub l) $ substCstr sub c
+substCstr sub (MCaseR l c)  = MCaseR (substLabel sub l) $ substCstr sub c
 substCstr sub (MTProd c c') = MTProd (substCstr sub c) (substCstr sub c')
 
 substMS :: Subst -> (TId, CId, MConstr) -> (TId, CId, MConstr)
@@ -357,7 +491,11 @@ substMS sub (ti,ci,m)
   = (ti, ci, substCstr sub m)
 
 substPid :: Subst -> Pid -> Pid
-substPid s p@(PVar v) = fromMaybe p $ lookup v s
+substPid s p@(PVar v) = fromMaybe p $ lookup v (cPidSub s)
+substPid sub p@(PAbs i s)
+  = case lookup (i,s) (cIdxSub sub) of
+      Nothing -> p
+      Just n  -> PUnfold i s n
 substPid _ p          = p
 
 -- | Typeclass tomfoolery
