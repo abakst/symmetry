@@ -857,7 +857,13 @@ pretty_short (SCase l sl sr _) =
 process_to_str (pid,s) =
   text (pid_short pid) <+> text "=>" <+> int (annot s) <$> stmt_to_str s
 
+
 all_stmts :: [Process Int] -> Doc
 all_stmts procs = text "/*" <$>
                     (vcat $ intersperse line $ map process_to_str procs) <$>
                     text "*/"
+
+error_print_helper          :: (Int, (Pid, Stmt a)) -> Doc
+error_print_helper (n,(p,s)) = int n <> text ")" <+>
+                                 text (pid_short p) <+>
+                                 text "=>" <+> pretty s

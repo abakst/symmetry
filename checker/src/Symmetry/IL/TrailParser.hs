@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts, TypeSynonymInstances, FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module TrailParser (readConfig) where
+module Symmetry.IL.TrailParser (readTrails, Trail(..)) where
 
 import Symmetry.IL.AST
 
@@ -23,11 +23,17 @@ import           System.Directory
 -- ### MAIN FUNCTION
 -- ####################################################################
 
-readConfig    :: String -> [Trail]
-readConfig str =
-  case runParser trailParser Data.Map.empty "" str of
-    Left  err -> error "err.."
-    Right exp -> []
+readTrails      :: FilePath -> IO [Trail]
+readTrails fname =
+  let emp   = Data.Map.empty in
+  do input <- readFile fname
+     case runParser parser emp fname input of
+       (Left err) -> error (show err)
+       (Right ts) ->
+         let f old@(prevId,l) t = let sId = stmtId t
+                                   in if prevId == sId then old else (sId,l++[t])
+             (_,sids')          = foldl' f (-1,[]) ts
+          in return sids'
 
 -- ####################################################################
 -- ### LEXER
@@ -56,16 +62,16 @@ colonSep p    = p `sepBy` colon
 -- ### PARSER
 -- ####################################################################
 
-data Trail = Trail { no      :: Int
-                   , typ     :: String
-                   , spinPid :: Int
-                   , fun     :: String
-                   , funId   :: Int
-                   , procId  :: Pid
-                   , stmtId  :: Int
-                   , lineNo  :: Int
-                   , stateNo :: Int
-                   , line    :: String
+data Trail = Trail { no       :: Int
+                   , typ      :: String
+                   , spinPid  :: Int
+                   , fun      :: String
+                   , funId    :: Int
+                   , procId   :: Pid
+                   , stmtId   :: Int
+                   , lineNo   :: Int
+                   , stateNo  :: Int
+                   , thisStmt :: String
                    } deriving (Eq, Show)
 
 parser = do whiteSpace
@@ -112,3 +118,4 @@ s_testerF parser fname =
      case runParser parser emp fname input of
        (Left err) -> print "ERROR" >> print err
        (Right s)  -> print s
+

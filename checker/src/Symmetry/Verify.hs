@@ -5,6 +5,7 @@ module Symmetry.Verify where
 import Symmetry.SymbEx
 import Symmetry.IL.Render
 import Symmetry.IL.AST
+import Symmetry.IL.TrailParser
 
 import System.Console.ANSI
 import Control.Exception
@@ -18,6 +19,7 @@ import System.Process hiding (runCommand)
 import Text.Printf
 import Options
 import Text.PrettyPrint.Leijen  (pretty, nest, text, (<>), line)
+import qualified Data.Map.Strict as M
 
 data MainOptions = MainOptions { optVerify  :: Bool
                                , optBounded :: Int
@@ -142,11 +144,42 @@ checkerMain main
     where
       cfgs = stateToConfigs . runSymb $ main
 
+outTrace = "/tmp/trace"
+
 spinTrailCmd  :: String -> CreateProcess
 spinTrailCmd f = shell ("spin -p -t " ++ f ++
                         "| sed '/Error/Q' | sed '/:init:/d' " ++
-                        "| grep -P '^\\s*\\d+:' > /tmp/trace")
+                        "| grep -P '^\\s*\\d+:' >" ++ outTrace)
 
-printTrace           :: Bool -> FilePath -> Config Int -> IO ()
+
+type IdStmtMap = M.Map Int (Stmt Int)
+
+flattenStmt                     :: Stmt a -> [Stmt a]
+flattenStmt s@(SBlock l _)       = s : (concatMap flattenStmt l)
+flattenStmt s@(SIter _ _ s' _)   = s : (flattenStmt s')
+flattenStmt s@(SLoop _ s' _)     = s : (flattenStmt s')
+flattenStmt s@(SChoose _ _ s' _) = s : (flattenStmt s')
+flattenStmt s@(SCase _ sl sr _)  = s : (concatMap flattenStmt [sl,sr])
+flattenStmt s@(SNonDet l _)      = s : (concatMap flattenStmt l)
+flattenStmt s                    = [s]
+
+buildIdStmtMap                         :: Config Int -> IdStmtMap
+buildIdStmtMap (Config { cProcs = ps }) =
+  let pairs = [ (annot s,s) | (pid,main_s) <- ps, s <- (flattenStmt main_s) ]
+   in M.fromList pairs
+
+printTrace            :: Bool -> FilePath -> Config Int -> IO ()
 printTrace verb outd c = do let pml = outf outd
                             runCmd verb "RE-RUNNING THE TRACE:" outd $ spinTrailCmd pml
+                            ts <- readTrails outTrace
+                            let idStmtMap = buildIdStmtMap c
+                            let getS m t = M.findWithDefault (SNull (-1)) (stmtId t) m
+                            dangerZone "Counter Example:"
+                            let tnss = map (\t -> (procId t, getS idStmtMap t)) ts
+                            forM_ (zip [1..] tnss) (print . error_print_helper)
+
+dangerZone str =
+  do setSGR [SetConsoleIntensity BoldIntensity, SetColor Foreground Vivid Red]
+     putStr str
+     setSGR [Reset]
+     putStr "\n"
