@@ -143,7 +143,9 @@ checkerMain main
       cfgs = stateToConfigs . runSymb $ main
 
 spinTrailCmd  :: String -> CreateProcess
-spinTrailCmd f = shell ("spin -p -t " ++ f ++ " > /tmp/trace")
+spinTrailCmd f = shell ("spin -p -t " ++ f ++
+                        "| sed '/Error/Q' | sed '/:init:/d' " ++
+                        "| grep -P '^\\s*\\d+:' > /tmp/trace")
 
 printTrace           :: Bool -> FilePath -> Config Int -> IO ()
 printTrace verb outd c = do let pml = outf outd

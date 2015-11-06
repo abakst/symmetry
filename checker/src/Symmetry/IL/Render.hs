@@ -237,9 +237,9 @@ pid_short    :: Pid -> String
 pid_short pid =
   case pid of
     PConc i               -> show i
-    PAbs (V v) (S s)      -> "abs-" ++ v ++ "-" ++ s
-    PUnfold (V v) (S s) i -> "unf-" ++ v ++ "-" ++ s ++ "-" ++ (show i)
-    PVar (V v)            -> "pvar-" ++ v
+    PAbs (V v) (S s)      -> "abs " ++ v ++ " " ++ s
+    PUnfold (V v) (S s) i -> "unf " ++ v ++ " " ++ s ++ " " ++ (show i)
+    PVar (V v)            -> "pvar " ++ v
 
 line_directive  :: Stmt Int -> RenderM
 line_directive s =
