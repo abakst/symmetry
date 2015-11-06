@@ -1,1 +1,18 @@
 *~
+nohup.out
+**/.symcheck
+trace.html
+
+# benchmark executables
+SrcConcDB
+SrcFiniteLeader
+SrcFirewall
+SrcHowait
+SrcParikh
+SrcPipe
+SrcReslock
+SrcRing
+SrcSieve
+SrcStateFactory
+SrcStutter
+SrcStutter

@@ -23,26 +23,25 @@ pipe  = do me   <- self
            send head (int 0)
            sink
 
-type T_p = ((Int->Int),(Int,(Pid RSing)))
+type T_p = (Int,(Pid RSing))
 
 fix_init_pipe :: DSL repr
               => repr ((T_p -> Process repr T_p) -> T_p -> Process repr T_p)
 fix_init_pipe  = lam $ \init_pipe -> lam $ \arg ->
-                   let f    = proj1 arg
-                       n    = proj1 $ proj2 arg
-                       next = proj2 $ proj2 arg in
+                   let n    = proj1 arg
+                       next = proj2 arg in
                    ifte (eq n (int 0))
                      (ret arg)
                      (do role <- newRSing
-                         new  <- spawn role $ app2 pipe_node f next
-                         app init_pipe $ pair3 f (plus n (int (-1))) new)
+                         new  <- spawn role $ app pipe_node next
+                         app init_pipe $ pair (plus n (int (-1))) new)
 
 
 init_pipe :: DSL repr => repr ((Int->Int) -> Int -> (Pid RSing) -> Process repr (Pid RSing))
 init_pipe  = lam $ \f -> lam $ \n -> lam $ \next ->
                do let p = pair3 f n next
                   p' <- app (fixM fix_init_pipe) p
-                  let pid' = proj2 $ proj2 p'
+                  let pid' = proj2 p'
                   return pid'
 
 sink :: DSL repr => repr (Process repr ())
@@ -59,8 +58,8 @@ pipe_node  = lam $ \f -> lam $ \next ->
                                     let next = proj2 p
                                     i :: repr Int <- recv
                                     send next (app f i)
-                                    app pipe_node p
-                  app (fixM fix_pn) (pair f next)
+                                    app pipe_node next
+                  app (fixM fix_pn) next
                   ret tt
 
 

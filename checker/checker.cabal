@@ -25,6 +25,7 @@ library
                    Symmetry.SymbEx
                    Symmetry.Verify
                    SrcHelper
+                   Symmetry.IL.TrailParser
   ghc-options: -fwarn-unused-binds
   build-depends:       base >=4.7
                      , containers >= 0.5.5.1

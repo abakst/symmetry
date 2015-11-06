@@ -1,0 +1,163 @@
+* Definitions
+
+- Process ID          : PId
+- Var Type            : TId
+- Message Type        : T = TId × CId × Value
+- Message             : M_{i} = P × T
+- Message Queue       : Q_{i} ⊆ (M_{i})*
+- Local Vars          : X_{i} = Var → Value
+- Statement           : S
+- Loop Vars           : LV = LVar → S
+- Process State       : C_{i} = Q_{i} × X_{i} × S_{i} × LV_{i}
+- General State       : C ⊆ C_{1} × C_{1} × ... × C_{n}
+- Transition Relation : → = C × S × C
+
+- x ∈ Var   → x : Expr
+- x ∈ Value → x : Expr
+- x : Expr  → L x : Expr
+- x : Expr  → R x : Expr
+
+- Update(m1,m2) : Updates the map m1 with the bindings in m2 by either adding new bindings or replacing the old ones
+
+* Actions
+- state before action : c  = (Q_{1},  X_{1},  S_{1},  LV_{1},  ..., Q_{n},  X_{n},  S_{n},  LV_{n})
+- state after action  : c' = (Q_{1}', X_{1}', S_{1}', LV_{1}', ..., Q_{n}', X_{n}', S_{n}', LV_{n}')
+
+** SSend Pid [(TId, [(CId, MConstr)], Stmt a)] a
+S_{j} = SSend p [..., (t_{k}, [..., (con_{kl}, v_{kl}), ...], S_{jk}), ...]
+
+IF ∃k,l such that
+- Q_{p}' = Q_{p} . (j, (t_{k}, con_{kl}, v_{kl}))
+- ∀i≠j : Q_{i}' = Q_{i}
+- S_{j}' = S_{jk}
+- ∀i≠j : S_{i}' = S_{i}
+- ∀i   : X_{i}' = X_{i}
+
+THEN c →(S_{j})→ c'
+
+** SRecv [(TId, [(CId, MConstr)], Stmt a)] a
+S_{j} = SRecv [..., (t_{k}, [..., (con_{kl}, var_{kl}), ...], S_{jk}), ...]
+
+IF ∃p,k,l such that
+- ∃ val ∈ Value, θ ∈ X such that
+  - Q_{j}  = (p, (t_{k}, con_{kl}, val)) . Q_{j}' ∧
+  - θ(var_{kl}) = val ∧
+  - X_{j}' = Update(X_{j},θ)
+- ∀i≠j : Q_{i}' = Q_{i}
+- S_{j}' = S_{jk}
+- ∀i≠j : S_{i}' = S_{i}
+- ∀i≠j : X_{i}' = X_{i}
+
+THEN c →(S_{j})→ c'
+
+** SBlock [Stmt a] a
+*** Case 1
+S_{j} = SBlock [S_{j1}, ..., S_{jk}]
+
+IF ∃c_{step} such that
+- c →(S_{j1})→ c_{step}
+- S_{j}' = SBlock [c_{step}[S_{j}], ..., S_{jk}]
+- ∀i≠j : S_{i}' = c_{step}[S_{i}]
+- ∀i : X_{i}' = c_{step}[X_{i}]
+- ∀i : LV_{i}' = c_{step}[LV_{i}]
+- ∀i : Q_{i}' = c_{step}[Q_{i}]
+
+THEN c →(S_{j})→ c'
+
+*** Case 2
+S_{j} = SBlock [SSkip, S_{j2}, ..., S_{jk}]
+
+IF
+- S_{j}' = SBlock [S_{j2}, ..., S_{jk}]
+- ∀i≠j : S_{i}' = S_{i}
+- ∀i : X_{i}'   = X_{i}
+- ∀i : Q_{i}'   = Q_{i}
+- ∀i : LV_{i}'  = LV_{i}
+
+THEN c →(S_{j})→ c'
+
+** SLoop LVar (Stmt a) a
+S_{j} = SLoop lv s
+
+IF
+- S_{j}' = s
+- ∀i≠j : S_{i}' = S_{i}
+- ∀i : Q_{i}' = Q_{i}
+- ∀i : X_{i}' = X_{i}
+- LV_{j} = Update(LV_{j}, {lv ↦ s})
+- ∀i≠j : LV_{i}' = LV_{i}
+
+THEN c →(S_{j})→ c'
+
+** SVar LVar a
+S_{j} = SVar lv
+
+IF ∃s such that
+- {lv ↦ s} ∈ LV_{j}
+- S_{j}' = s
+- ∀i≠j : S_{i}' = S_{i}
+- ∀i : Q_{i}' = Q_{i}
+- ∀i : X_{i}' = X_{i}
+- ∀i : LV_{i}' = LV_{i}
+
+THEN c →(S_{j})→ c'
+
+** TODO SCase Var (Stmt a) (Stmt a) a
+S_{j} = SCase var s_{1} s_{2}
+
+IF ∃ val_{1} such that
+- X_{j}(var) = L val_{1}
+- S_{j}' = S_{1}
+- ∀i≠j : S_{i}'  = S_{i}
+- ∀i   : X_{i}'  = X_{i}
+- ∀i   : LV_{i}' = LV_{i}
+- ∀i   : Q_{i}'  = Q_{i}
+THEN c →(S_{j})→ c'
+
+IF ∃ val_{2} such that
+- X_{j}(var) = R val_{2}
+- S_{j}' = S_{2}
+- ∀i≠j : S_{i}'  = S_{i}
+- ∀i   : X_{i}'  = X_{i}
+- ∀i   : LV_{i}' = LV_{i}
+- ∀i   : Q_{i}'  = Q_{i}
+THEN c →(S_{j})→ c'
+
+** TODO SIter Var Set (Stmt a) a
+*** Case 1
+S_{j} = SIter var set s
+
+IF ∃ v ∈ set such that
+- S_{j}' = SBlock [s, SIter var (set∖{v}) s]
+- X_{j}' = Update(X_{j}, {var ↦ v})
+- ∀i≠j : S_{i}'  = S_{i}
+- ∀i≠j : X_{i}'  = X_{i}
+- ∀i   : LV_{i}' = LV_{i}
+- ∀i   : Q_{i}'  = Q_{i}
+
+THEN c →(S_{j})→ c'
+
+*** Case 2
+S_{j} = SIter var ∅ s
+
+IF c →(SSkip)→ c'
+
+THEN c →(S_{j})→ c'
+
+** TODO SChoose Var Set (Stmt a) a
+** TODO SDie a
+** SSkip a
+S_{j} = SSkip
+
+IF c' = c
+
+THEN c →(S_{j})→ c'
+
+** TODO SNull
+** TODO SVarDecl Var a
+** TODO STest Var a
+** TODO SNonDet [Stmt a]
+* Questions [0/3]
+- [ ] Unbounded number of processes
+- [ ] How to determine whether a process is dead or alive?
+- [ ] Counter abstraction

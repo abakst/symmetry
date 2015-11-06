@@ -96,9 +96,16 @@ print  = lam $ \_ -> ret tt
 mod :: ( ?callStack :: CallStack
        , Symantics repr
        , ArbPat repr ()
-       ) => repr (Int -> Int -> Int)
+       ) => repr (Int -> Int -> Process repr Int)
 mod  = lam $ \a -> lam $ \b ->
-         ifte (lt a b) a (app2 mod (plus a (neg b)) b)
+         do let f_mod = lam $ \mod -> lam $ \ab ->
+                          do let a = proj1 ab
+                             let b = proj2 ab
+                             ifte (lt a b)
+                                 (ret $ pair a b)
+                                 (app mod $ pair (plus a (neg b)) b)
+            r <- app (fixM f_mod) $ pair a b
+            ret $ proj1 r
 
 match3 :: ( ?callStack :: CallStack
           , Symantics repr

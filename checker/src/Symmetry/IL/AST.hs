@@ -16,7 +16,7 @@ import Text.PrettyPrint.Leijen as P hiding ((<$>))
 
 setSize :: Int
 setSize = infty
-          
+
 infty :: Int
 infty = 2
 
@@ -71,7 +71,7 @@ data MConstr = MTApp  { tycon :: MTyCon, tyargs :: [Pid] }
 unifyLabel (VL v) x
   = Just $ emptySubst { cLabSub = [(v, x)] }
 unifyLabel x y
-  | x == y    = Just emptySubst 
+  | x == y    = Just emptySubst
   | otherwise = Nothing
 
 unify :: MConstr -> MConstr -> Maybe Subst
@@ -102,12 +102,12 @@ unify a1@(MTApp{}) a2@MTApp{}
 unify _ _
   = Nothing
 
-substLabel :: Subst -> Label -> Label    
+substLabel :: Subst -> Label -> Label
 substLabel sub l@(VL v)
   = fromMaybe l $ lookup v (cLabSub sub)
 substLabel _ l
   = l
-            
+
 unifyPid (PVar v) p = Just $ emptySubst { cPidSub = [(v, p)] }
 unifyPid (PAbs v s) (PUnfold _ s' i)
   | s == s' = Just $ emptySubst { cIdxSub = [((v,s), i)] }
@@ -129,7 +129,7 @@ lookupConstr m c
   where
     go Nothing i c' = if eqConstr c c' then Just i else Nothing
     go a       _ _  = a
-                      
+
 lookupType m t
   = M.foldlWithKey go Nothing m
   where
@@ -170,13 +170,13 @@ data Stmt a = SSkip { annot :: a }
                     , loopBody :: Stmt a
                     , annot    :: a
                     }
-              
+
             | SChoose { chooseVar :: Var
                       , chooseSet :: Set
                       , chooseBody :: Stmt a
                       , annot      :: a
                       }
-              
+
             | SVar { varVar :: LVar
                    , annot  :: a
                    }
@@ -247,7 +247,7 @@ unfoldAbs c@(Config {cProcs = ps})
   = c { cUnfold = us }
   where
     us = [ Conc s 1 | (PAbs v s, _) <- ps ]
-         
+
 isBound :: Set -> [SetBound] -> Bool
 isBound s = any p
   where p (Bounded s' _) = s == s'
@@ -268,7 +268,7 @@ instConstr dom (MCaseR _ c)
 instConstr dom (MTProd c1 c2)
   = [MTProd c1' c2' | c1' <- instConstr dom c1
                     , c2' <- instConstr dom c2]
-    
+
 instStmt  :: (Show a, Eq a)
           => [Pid] -> Stmt a -> Stmt a
 instStmt dom s
@@ -314,14 +314,14 @@ labSubCstr (MCaseR (VL x) c) = sub1Label x RL `joinSubst`
 labSubCstr (MCaseR _ c)      =  labSubCstr c
 labSubCstr (MTProd c1 c2) = labSubCstr c1 `joinSubst` labSubCstr c2
 labSubCstr (MTApp {})     = emptySubst
-           
-allSubs :: [Pid] -> [Var] -> [Subst] 
+
+allSubs :: [Pid] -> [Var] -> [Subst]
 allSubs _ []
   = [emptySubst]
 allSubs dom (x:xs)
   = [ su1 `joinSubst` surest | su1 <- subs x, surest <- allSubs dom xs ]
   where
-    subs v  = [ emptySubst { cPidSub = [(v, p)] } | p <- dom ] 
+    subs v  = [ emptySubst { cPidSub = [(v, p)] } | p <- dom ]
 
 pvars :: MConstr -> [Var]
 pvars (MTApp _ xs)   = [v | PVar v <- xs]
@@ -351,7 +351,7 @@ inst1Abs d (p@(PAbs _ _), s)
     lsubs        = foldl' go [emptySubst] ls
     ls           = nub . concatMap lvars $ listify (const True) s
     go ss v      = [ s1`joinSubst`sub1Label v LL | s1 <- ss ] ++
-                   [ s1`joinSubst`sub1Label v RL | s1 <- ss ] 
+                   [ s1`joinSubst`sub1Label v RL | s1 <- ss ]
 
     instLabels st =
       fromMaybe err $ filterCoherent (SNonDet (subLabels st) (annot st))
@@ -381,7 +381,7 @@ coherent (MCaseR RL c) = coherent c
 coherent (MTProd c1 c2)= coherent c1 && coherent c2
 coherent _             = False
 
-filterCoherent :: (Eq a) => Stmt a -> Maybe (Stmt a)                         
+filterCoherent :: (Eq a) => Stmt a -> Maybe (Stmt a)
 filterCoherent s@(SDie _)
   = Just s
 
@@ -410,13 +410,13 @@ filterCoherent s@(SRecv (_,_,v) _)
 
 filterCoherent s@(SIter {})
   = do s' <- filterCoherent (iterBody s)
-       return s { iterBody = s' } 
+       return s { iterBody = s' }
 
 filterCoherent s@(SLoop {})
   = do s' <- filterCoherent (loopBody s)
-       return s { loopBody = s' } 
+       return s { loopBody = s' }
 
-filterCoherent s = Just s          
+filterCoherent s = Just s
 
 -- | Substitution of PidVars for Pids
 type PidSubst = [(Var, Pid)]
@@ -525,7 +525,7 @@ instance Traversable Stmt where
     where
       mkCase a l r = SCase v l r a
   traverse f (SNonDet ss a)
-    = flip SNonDet <$> f a <*> traverse (traverse f) ss 
+    = flip SNonDet <$> f a <*> traverse (traverse f) ss
   traverse _ _
     = error "traverse undefined for non-source stmts"
 
@@ -627,7 +627,7 @@ instance Pretty (Stmt a) where
   pretty (SSend p m _)
     = text "send" <+> pretty p <+> prettyMsg m
 
-  pretty (SRecv m _)    
+  pretty (SRecv m _)
     = text "recv" <+> prettyMsg m
 
   pretty (SIter x xs s a)
