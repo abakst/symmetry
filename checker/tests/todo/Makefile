@@ -1,5 +1,6 @@
 TEST_FILES = $(wildcard *.hs)
-EXES       = $(patsubst %.hs,%,$(TEST_FILES))
+EXES_ALL   = $(patsubst %.hs,%,$(TEST_FILES))
+EXES       = $(filter-out SrcPipe, $(EXES_ALL))
 TESTS      = $(patsubst %,test-%,$(EXES))
 
 SRC_DIR            = $(CURDIR)/../../src/Symmetry
@@ -19,7 +20,7 @@ build-lib:
 test: $(TESTS)
 
 $(TESTS): test-%: %
-	./test $<
+	-./$< --verify
 
 clean:
 	rm -f *.hi *.o $(EXES)
