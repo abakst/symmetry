@@ -221,7 +221,7 @@ renderProcAssn :: Doc -> Doc -> Doc
 renderProcAssn n rhs
   = renderProcDecl n <+> equals <+> rhs
 
-type SetMap  = M.Map Set Int
+type SetMap  = M.Map Set [(Int, Pid)]
 type ChanMap = Pid -> Pid -> (TId, CId, VId) -> Doc
 type StmtMap = M.Map Int [Int]
 type ProcMap = M.Map Int Pid
@@ -269,7 +269,7 @@ sendMsg p q m@(ti, cj, _)
        vm <- asks valMap
        case matchCstr m vm of
          []        -> error "send: could not unify!"
-         [(_, vk)] -> return $ incrVal (f p q (ti, cj, vk))
+         [(_, vk)] -> return $ incrVal (f (subUnfoldIdx p) (subUnfoldIdx q) (ti, cj, vk))
          svks ->
            return . ifs $ map (go f) svks
   where
@@ -345,12 +345,25 @@ renderStmtConc me (SCase l sl sr _)
                     ]
 
 renderStmtConc _ (SSkip _)
-  = return $ text "skip"
+  = return $ text "1 -> skip"
+    
+renderStmtConc me st@(SIter _ s ss _)
+  = do -- sm <- asks setMap
+       -- d  <- renderStmt me ss
+       -- let ps  = sm M.! s
+       --     [abs] = [p | (_, p@(PAbs _ _)) <- ps]
+       --     ufs = [ p | (_, p@(PUnfold _ _ _)) <- ps ]
 
-renderStmtConc me (SIter (V v) (S s) ss _)
-  = do d <- renderStmt me ss
-       return $ forLoop (text ("_it_" ++ v) <+> text "in" <+> text s)
-                        (text v <+> equals <+> renderProcName (PAbs (V ("_it_" ++ v)) (S s)) <> semi <$> d)
+       --     go s p = [ufStmt p, s]
+
+       --     ufStmt p = renderStmt me $ subst (sub1Pid v p) ss
+       --     absStmt :: RenderM
+       --     absStmt = do d <- renderStmt me $ subst (sub1Pid v abs) ss
+       --                  return $ doLoop [ d, int 1 ]
+       -- body <- fmap seqStmts (sequence (absStmt : concatMap (go absStmt) ufs))
+       body <- renderStmt me ss
+       return $ desc (pretty st) (doLoop [body, text "break"])
+
 renderStmtConc me (SLoop (LV v) ss _)
   = do d <- renderStmt me ss
        return $ int 1 <> semi <+> text v <> text ":" <+> block [d]
@@ -367,7 +380,7 @@ renderStmtConc me (SChoose (V v) s ss _)
                       , d
                       ]
   where
-    sz sm  = maybe err int $ M.lookup s sm
+    sz sm  = maybe err (int . length) $ M.lookup s sm
     err = error ("Unknown set (renderStmtConc): " ++ show s)
 
 renderStmtConc me (SBlock ss _)
@@ -815,6 +828,13 @@ buildMValMap te pm
     pids = M.keys pm
     go m ti t = buildMValMapTy pids ti t `M.union` m
 
+buildSetMap :: Config a -> M.Map Set [(Int, Pid)]                
+buildSetMap c
+  = M.fromListWith (++) (absMap ++ ufMap)
+  where
+    absMap = [ (s, [(0, p)])   | (p@(PAbs _ s), _)      <- cProcs c ]
+    ufMap  = [ (s, [(i+1, p)]) | (p@(PUnfold _ s i), _) <- cProcs c ]
+
 updUnfold :: (PidMap, Int) -> Pid -> (PidMap, Int)
 updUnfold (m, i) p@(PUnfold v s _)
   = (M.insertWith upd p (j, 1) m, i)
@@ -856,9 +876,10 @@ render c@(Config { cTypes = ts, cSets = bs })
     <$$> text "#line 1 \"main\""
     <$$> renderMain pMap unfolded
   where
-    unfolded               = filterBoundedAbs
-                           . freshIds
+    unfolded               = freshIds
                            . instAbs
+                           . unfoldLoops
+                           . filterBoundedAbs
                            $ unfold c
 
     filterBoundedAbs x     = x { cProcs = [ p | p <- cProcs x
@@ -869,8 +890,8 @@ render c@(Config { cTypes = ts, cSets = bs })
     vMap                   = buildMValMap ts pMap
     procMap                = buildProcMap unfolded
     mtype                  = renderMConstrs ts
-    procs                  = renderProcs unfolded pMap sMap vMap procMap
-    sMap                   = M.foldrWithKey goKey M.empty pMap
+    procs                  = renderProcs unfolded pMap sMap vMap
+    sMap                   = buildSetMap unfolded
     goKey (PAbs _ s) (_,n) m = M.insert s n m
     goKey _          _     m = m
 
