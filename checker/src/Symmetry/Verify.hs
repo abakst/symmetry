@@ -106,7 +106,10 @@ run1Cfg opt outd cfg
          runCmd verb "CHECKING MODEL:" outd panCmd
 
        if (optVerify opt) then
-         not <$> fileExists (outTrail outd)
+         do failure <- fileExists (outTrail outd)
+            let unfolded = filterBoundedAbs . freshIds . instAbs $ unfold cfgOut
+            when failure (printTrace verb outd unfolded)
+            return $ not failure
        else
          return True
   where
