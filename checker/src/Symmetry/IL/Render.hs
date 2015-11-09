@@ -890,7 +890,7 @@ render c@(Config { cTypes = ts, cSets = bs })
     vMap                   = buildMValMap ts pMap
     procMap                = buildProcMap unfolded
     mtype                  = renderMConstrs ts
-    procs                  = renderProcs unfolded pMap sMap vMap
+    procs                  = renderProcs unfolded pMap sMap vMap procMap
     sMap                   = buildSetMap unfolded
     goKey (PAbs _ s) (_,n) m = M.insert s n m
     goKey _          _     m = m
