@@ -162,8 +162,8 @@ outTrace = "/tmp/trace"
 
 spinTrailCmd  :: String -> CreateProcess
 spinTrailCmd f = shell ("spin -p -t " ++ f ++
-                        "| sed '/Error/Q' | sed '/:init:/d' " ++
-                        "| grep -P '^\\s*\\d+:' >" ++ outTrace)
+                        "| sed '/:init:/d' " ++
+                        "| grep -E '^[[:space:]]*[[:digit:]]+:' >" ++ outTrace)
 
 
 type IdStmtMap = M.Map Int (Stmt Int)
