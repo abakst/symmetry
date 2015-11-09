@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Symmetry.IL.AST where
 
 import           Prelude hiding (concatMap, mapM, foldl, concat)
@@ -10,12 +11,12 @@ import           Data.Maybe
 import           Control.Monad.State hiding (mapM)
 import           Data.Typeable
 import           Data.Generics
-import           Data.List (nub, isPrefixOf)
+import           Data.List (nub, isPrefixOf, intersperse)
 import qualified Data.Map.Strict as M
 import Text.PrettyPrint.Leijen as P hiding ((<$>))
 
 setSize :: Int
-setSize = infty
+setSize = 1
 
 infty :: Int
 infty = 2
@@ -417,6 +418,40 @@ filterCoherent s@(SLoop {})
        return s { loopBody = s' }
 
 filterCoherent s = Just s
+
+unfoldLoops :: forall a.
+               (Eq a, Data a, Typeable a)
+            => Config a
+            -> Config a
+unfoldLoops c@Config { cProcs = ps }
+  = c { cProcs = everywhere (mkT go) ps }
+  where
+    pids = map fst ps
+    go :: Stmt a -> Stmt a
+    go = unfold1Loop pids
+
+unfold1Loop :: (Eq a, Data a, Typeable a)
+            => [Pid]
+            -> Stmt a
+            -> Stmt a
+unfold1Loop ps (SIter v set body i)
+  = case abss of
+      []    ->
+        SBlock ufStmts i
+      [p] ->
+        SBlock ( absLoop p :
+                 (intersperse (absLoop p) ufStmts) ++
+                 [absLoop p] ) i
+                                 
+      _ -> error "unexpected case in unfold1Loop"
+  where
+    absLoop p = SIter v set (doSub p) i
+    doSub p = subst (sub1Pid v p) body
+    abss = [ p | p@(PAbs _ set') <- ps, set' == set ]
+    ufs = [ p | p@(PUnfold _ set' _) <- ps, set' == set ]
+    ufStmts = map doSub ufs
+
+unfold1Loop _ s = s
 
 -- | Substitution of PidVars for Pids
 type PidSubst = [(Var, Pid)]

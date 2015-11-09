@@ -489,7 +489,7 @@ symOr  _ _ = arb
 symLam :: (SymbEx a -> SymbEx b) -> SymbEx (a -> b)
 -------------------------------------------------
 symLam f
-  = SE . return $ AArrow Nothing $ \a -> f (SE $ return a)
+  = SE . return . AArrow Nothing $ \a -> f (SE $ return a)
 
 -------------------------------------------------
 symApp :: SymbEx (a -> b) -> SymbEx a -> SymbEx b
@@ -515,7 +515,8 @@ symCons x l
                        Just xv' -> AList Nothing (Just $ xv `join` xv')
 
 symMatchList :: forall a b.
-                SymbEx [a]
+               (?callStack :: CallStack, Typeable a, ArbPat SymbEx a)
+             => SymbEx [a]
              -> SymbEx (() -> b)
              -> SymbEx ((a, [a]) -> b)
              -> SymbEx b         
@@ -524,7 +525,8 @@ symMatchList l nilCase consCase
             lv    <- runSE l
             case lv of
               AList _ (Just v) -> do
-                      let tl = SE . return $ AList Nothing Nothing
+                      v <- runSE arb
+                      let tl = SE . return $ AList Nothing (Just v)
                       cv <- runSE $ symApp consCase (pair (SE . return $ v) tl)
                       return (cv `join` nilv)
               AList _ Nothing  -> return nilv
@@ -563,7 +565,7 @@ symFixM f
                   let v = IL.LV $ "L" ++ show n
                       sv = IL.SVar v  ()
                       g = SE . return . AArrow Nothing $ \a -> SE $ return (AProc Nothing sv a)
-                  AArrow _ h <- runSE (app f g)
+                  AArrow _ h  <- runSE (app f g)
                   AProc b s r <- prohibitSpawn $ runSE (h a)
                   return $ AProc b (IL.SLoop v s ()) r
   where
@@ -768,7 +770,6 @@ instance Symantics SymbEx where
   -- Lists
   nil       = symNil
   cons      = symCons
-  matchList = symMatchList
 
   lam       = symLam
   app       = symApp
@@ -794,3 +795,4 @@ instance Symantics SymbEx where
   send = symSend
 
   match = symMatch
+  matchList = symMatchList

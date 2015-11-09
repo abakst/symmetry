@@ -29,7 +29,7 @@ any_nat :: Symantics repr => repr (() -> Process repr Int)
 any_nat  = lam $ \_ -> ret (int 42)
 
 any_list :: Symantics repr => repr (() -> Process repr [Int])
-any_list = lam $ \_ -> ret (cons (int 1) (cons (int 2) nil))
+any_list = lam $ \_ -> ret (cons (int 1) (cons (int 2) (cons (int 3) nil)))
 
 id :: Symantics repr => repr (a-> Process repr a)
 id  = lam $ \x -> ret x
@@ -61,9 +61,10 @@ ifte b t e = match b (lam $ \_ -> t) (lam $ \_ -> e)
 type T_lookup a b = (a, ([(a,b)], (Either () b)))
 
 f_lookup :: ( ?callStack :: CallStack
-            , Symantics repr
-            , ArbPat repr ()
-            , Ord a, Ord b, Typeable b
+            , DSL repr
+            , Typeable a, Typeable b
+            , ArbPat repr a, ArbPat repr b
+            , Ord a
             )
          => repr ((T_lookup a b -> Process repr (T_lookup a b))
                   -> T_lookup a b -> Process repr (T_lookup a b))
@@ -81,9 +82,10 @@ f_lookup  = lam $ \lookup -> lam $ \arg ->
                                                   (app lookup $ pair3 k tl r))
 
 lookup :: ( ?callStack :: CallStack
-          , Symantics repr
-          , ArbPat repr ()
-          , Ord a, Ord b, Typeable b
+          , DSL repr
+          , Ord a
+          , Typeable a, Typeable b
+          , ArbPat repr a, ArbPat repr b
           )
        => repr (a -> [(a,b)] -> Process repr (Either () b))
 lookup  = lam $ \k -> lam $ \m ->
@@ -94,8 +96,7 @@ print :: Symantics repr => repr (a -> Process repr ())
 print  = lam $ \_ -> ret tt
 
 mod :: ( ?callStack :: CallStack
-       , Symantics repr
-       , ArbPat repr ()
+       , DSL repr
        ) => repr (Int -> Int -> Process repr Int)
 mod  = lam $ \a -> lam $ \b ->
          do let f_mod = lam $ \mod -> lam $ \ab ->
@@ -108,11 +109,9 @@ mod  = lam $ \a -> lam $ \b ->
             ret $ proj1 r
 
 match3 :: ( ?callStack :: CallStack
-          , Symantics repr
+          , DSL repr
           , Typeable a, Typeable b, Typeable c
-          , ArbPat repr a
-          , ArbPat repr b
-          , ArbPat repr c
+          , ArbPat repr a, ArbPat repr b, ArbPat repr c
           )
        => repr (Either a (Either b c))
        -> repr (a -> r) -> repr (b -> r) -> repr (c -> r)
@@ -120,12 +119,9 @@ match3 :: ( ?callStack :: CallStack
 match3 msg f1 f2 f3 = match msg f1 $ lam (\e1 -> match e1 f2 f3)
 
 match4 :: ( ?callStack :: CallStack
-          , Symantics repr
+          , DSL repr
           , Typeable a, Typeable b, Typeable c, Typeable d
-          , ArbPat repr a
-          , ArbPat repr b
-          , ArbPat repr c
-          , ArbPat repr d
+          , ArbPat repr a, ArbPat repr b, ArbPat repr c, ArbPat repr d
           )
        => repr (Either a (Either b (Either c d)))
        -> repr (a -> r) -> repr (b -> r) -> repr (c -> r) -> repr (d -> r)
@@ -135,13 +131,9 @@ match4 msg f1 f2 f3 f4 = match msg f1 . lam $ \e1 ->
                              match e2 f3 f4
 
 match5 :: ( ?callStack :: CallStack
-          , Symantics repr
+          , DSL repr
           , Typeable a, Typeable b, Typeable c, Typeable d, Typeable e
-          , ArbPat repr a
-          , ArbPat repr b
-          , ArbPat repr c
-          , ArbPat repr d
-          , ArbPat repr e
+          , ArbPat repr a, ArbPat repr b, ArbPat repr c, ArbPat repr d, ArbPat repr e
           )
        => repr (Either a (Either b (Either c (Either d e))))
        -> repr (a -> r) -> repr (b -> r) -> repr (c -> r) -> repr (d -> r) -> repr (e -> r)
@@ -152,8 +144,7 @@ match5 msg f1 f2 f3 f4 f5 = match msg f1 $ lam $ \e1 ->
                                  match e3 f4 f5
 
 compare :: ( ?callStack :: CallStack
-           , Symantics repr
-           , ArbPat repr ()
+           , DSL repr
            , Ord a
            )
         => repr (a -> a -> (Either () (Either () ())))

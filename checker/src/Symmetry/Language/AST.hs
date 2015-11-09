@@ -56,8 +56,6 @@ class Symantics repr where
   -- Lists
   nil       :: repr [a]
   cons      :: repr a   -> repr [a] -> repr [a]
-  matchList :: (?callStack :: CallStack)
-            => repr [a] -> repr (() -> b) -> repr ((a, [a]) -> b) -> repr b
 
   -- Lambda Calculus:
   lam  :: (repr a -> repr b) -> repr (a -> b)
@@ -99,6 +97,8 @@ class Symantics repr where
 
   match :: (?callStack :: CallStack, Typeable a, Typeable b, ArbPat repr a, ArbPat repr b)
         => repr (a :+: b) -> repr (a -> c) -> repr (b -> c) -> repr c
+  matchList :: (?callStack :: CallStack, Typeable a, ArbPat repr a)
+            => repr [a] -> repr (() -> b) -> repr ((a, [a]) -> b) -> repr b
 
 class Pat pat where
   joinPat  :: pat a -> pat a -> pat a
