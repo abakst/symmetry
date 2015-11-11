@@ -624,6 +624,13 @@ symDoN n f
                       sv = IL.SVar v  ()
                   in IL.SLoop v ((s `seqStmt` sv) `joinStmt` skip) ()
 
+symLookup :: SymbEx (Pid RMulti)
+             -> SymbEx Int
+             -> SymbEx (Pid RSing)
+-------------------------------------------------
+symLookup p i
+  = undefined
+
 -------------------------------------------------
 symDoMany :: SymbEx (Pid RMulti)
           -> SymbEx (Pid RSing -> Process SymbEx a)
@@ -816,7 +823,11 @@ instance Symantics SymbEx where
   newRSing  = symNewRSing
   newRMulti = symNewRMulti
   doMany    = symDoMany
+<<<<<<< HEAD
   doN       = symDoN
+=======
+  lookup    = symLookup
+>>>>>>> 4ba8913c1b1cb33ac7d29cf5e871fefc9e5cab8f
   die       = symDie
 
   inl   = symInL

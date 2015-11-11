@@ -1,6 +1,6 @@
 TEST_FILES = $(wildcard *.hs)
 EXES_ALL   = $(patsubst %.hs,%,$(TEST_FILES))
-EXES       = $(filter-out SrcPipe, $(EXES_ALL))
+EXES       = $(filter-out SrcPipe DatabaseSample, $(EXES_ALL))
 TESTS      = $(patsubst %,test-%,$(EXES))
 
 SRC_DIR            = $(CURDIR)/../../src/Symmetry
