@@ -592,6 +592,14 @@ symNewRMulti
             return (AProc Nothing skip (ARoleMulti Nothing (RM n)))
 
 -------------------------------------------------
+symLookup :: SymbEx (Pid RMulti)
+             -> SymbEx Int
+             -> SymbEx (Pid RSing)
+-------------------------------------------------
+symLookup p i
+  = undefined
+
+-------------------------------------------------
 symDoMany :: SymbEx (Pid RMulti)
           -> SymbEx (Pid RSing -> Process SymbEx a)
           -> SymbEx (Process SymbEx [a])
@@ -783,6 +791,7 @@ instance Symantics SymbEx where
   newRSing  = symNewRSing
   newRMulti = symNewRMulti
   doMany    = symDoMany
+  lookup    = symLookup
   die       = symDie
 
   inl   = symInL

@@ -83,6 +83,7 @@ class Symantics repr where
   spawnMany :: (?callStack :: CallStack)
             => repr RMulti -> repr Int -> repr (Process repr ()) -> repr (Process repr (Pid RMulti))
   doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process repr a) -> repr (Process repr [a])
+  lookup    :: repr (Pid RMulti) -> repr Int -> repr (Pid RSing)
 
   die       :: repr (Process repr a)
 

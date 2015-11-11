@@ -75,7 +75,7 @@ f_database  = lam $ \database -> lam $ \l ->
                 do let allocHandler = lam $ \msg ->
                          do let key = proj1 msg
                                 p   = proj2 msg
-                            lookup_res <- app2 lookup key l
+                            lookup_res <- app2 SrcHelper.lookup key l
                             match lookup_res
                               (lam $ \_ -> do send p free_msg
                                               val <- recv_value
@@ -87,7 +87,7 @@ f_database  = lam $ \database -> lam $ \l ->
                    let lookupHandler = lam $ \msg ->
                          do let key = proj1 msg
                                 p   = proj2 msg
-                            lookup_res <- app2 lookup key l
+                            lookup_res <- app2 SrcHelper.lookup key l
                             send p lookup_res
                             app database l
                    msg :: repr ALV <- recv
