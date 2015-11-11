@@ -1,4 +1,3 @@
---runwith: --set-size=2
 {-# Language RebindableSyntax #-}
 {-# Language TypeOperators #-}
 {-# Language FlexibleContexts #-}
@@ -31,4 +30,4 @@ mainProc = lam $ \n -> exec $ do r <- newRMulti
                                  app (app master r) n
 
 main :: IO ()
-main = checkerMain (arb |> mainProc)
+main = checkerMain (int 3 |> mainProc)

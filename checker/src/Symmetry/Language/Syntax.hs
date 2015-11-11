@@ -1,10 +1,12 @@
 {-# Language RebindableSyntax #-}
 module Symmetry.Language.Syntax where
 
-import Prelude (error)
+import Prelude (Int)
 import Symmetry.Language.AST  
 
 -- Import this module and use with the RebindableSyntax Language extension
+(+) :: DSL repr => repr Int -> repr Int -> repr Int
+m + n = plus m n
 
 (>>=) :: Symantics repr
       => repr (Process repr a)

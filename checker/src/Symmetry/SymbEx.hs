@@ -22,7 +22,16 @@ import qualified Symmetry.IL.AST       as IL
 
 data Var a = V Int deriving (Ord, Eq, Show)
 
-type REnv = M.Map Role (IL.Stmt ())
+type REnv = M.Map Role (AbsVal Int, IL.Stmt ())
+
+envEq re1 re2
+  = M.keys re1 == M.keys re2 &&
+    M.foldlWithKey' check True re1
+  where
+    check b k (n,p) = let (n', p') = re2 M.! k in
+                      p == p' && checkN n n'
+    checkN :: AbsVal Int -> AbsVal Int -> Bool
+    checkN (AInt x y) (AInt x' y') = x == x' && y == y'
 
 data SymbState = SymbState { renv   :: REnv
                            , ctr    :: Int
@@ -40,15 +49,16 @@ stateToConfigs state
       types = tyenv state
       mkVars vs = map (IL.PVar . IL.V . ("x_"++) . show) [1..length vs]
       mk1Config renv
-                = IL.Config { IL.cTypes = types
-                            , IL.cSets  = []
-                            , IL.cProcs = procs
-                            , IL.cUnfold = []
-                            }
+                = IL.boundAbs $ IL.Config { IL.cTypes = types
+                                          , IL.cSets  = setBounds
+                                          , IL.cProcs = procs
+                                          , IL.cUnfold = []
+                                          }
         where
           kvs   = M.toList renv
-          concProcs = [ (IL.PConc n, s) | (S (RS n), s) <- kvs ]
-          absProcs  = [ (IL.PAbs (IL.V "i") (roleToSet r), s) | (M r, s) <- kvs ]
+          concProcs = [ (IL.PConc n, s) | (S (RS n), (_, s)) <- kvs ]
+          absProcs  = [ (IL.PAbs (IL.V "i") (roleToSet r), s) | (M r, (_, s)) <- kvs ]
+          setBounds = [ IL.Bounded (roleToSet r) x | (M r, (AInt _ (Just x), _)) <- kvs ]
           sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
           procs = concProcs ++ absProcs
 
@@ -79,7 +89,7 @@ freshVar = V <$> freshInt
 
 fresh :: AbsVal t -> SymbExM (AbsVal t)
 fresh (AUnit _)    = AUnit . Just <$> freshVar
-fresh (AInt _)     = AInt . Just <$> freshVar
+fresh (AInt _ n)   = (\v -> return (AInt (Just v) n))  =<< freshVar
 fresh (AString _)  = AString . Just <$> freshVar
 fresh (ASum _ l r) = do v  <- Just <$> freshVar
                         fl <- mapM fresh l
@@ -112,7 +122,7 @@ data AbsVal t where
               -> AbsVal Boolean
   --
   AUnit      :: Maybe (Var ()) -> AbsVal ()
-  AInt       :: Maybe (Var Int) -> AbsVal Int
+  AInt       :: Maybe (Var Int) -> Maybe Int -> AbsVal Int
   AString    :: Maybe (Var String) -> AbsVal String
   ASum       :: Maybe (Var (a :+: b)) -> Maybe (AbsVal a) -> Maybe (AbsVal b) -> AbsVal (a :+: b)
   AProd      :: Maybe (Var (a,b)) -> AbsVal a -> AbsVal b -> AbsVal (a, b)
@@ -126,7 +136,7 @@ data AbsVal t where
 
 instance Show (AbsVal t) where
   show (AUnit _) = "AUnit"
-  show (AInt _) = "AInt"
+  show (AInt _ _) = "AInt"
   show (AString _) = "AString"
   show (ASum _ l r) = show l ++ "+" ++ show r
   show (AProd _ l r) = show l ++ "*" ++ show r
@@ -181,7 +191,7 @@ instance ArbPat SymbEx () where
   arb = SE . return $ AUnit Nothing
 
 instance ArbPat SymbEx Int where            
-  arb = SE . return $ AInt Nothing
+  arb = SE . fresh $ AInt Nothing Nothing
 
 instance {-# OVERLAPPING #-} ArbPat SymbEx String where            
   arb = SE . return $ AString Nothing
@@ -232,7 +242,7 @@ join ABot x = x
 join x    ABot = x
 
 join (AUnit _) (AUnit _)      = AUnit Nothing
-join (AInt _)  (AInt _)       = AInt Nothing
+join (AInt _ _)  (AInt _ _)   = AInt Nothing Nothing
 join (AString _)  (AString _) = AString Nothing
 join (AList _ a) (AList _ b)  = AList Nothing (a `maybeJoin` b)
 
@@ -273,6 +283,9 @@ joinStmt s1 s2
 varToIL :: Var a -> IL.Var
 varToIL (V x) = IL.V ("x_" ++ show x)
 
+varToILSet :: Var a -> IL.Set
+varToILSet (V x) = IL.S ("x_" ++ show x)
+
 pidAbsValToIL :: (?callStack :: CallStack)
               => AbsVal (Pid RSing) -> IL.Pid
 pidAbsValToIL (APid Nothing (Pid (Just (RS r)))) = IL.PConc r
@@ -293,7 +306,7 @@ absToIL (ARoleSing _ _)  = error "TBD: absToIL ARoleSing"
 absToIL (ARoleMulti _ _)  = error "TBD: absToIL ARoleMulti"
 
 absToIL (AUnit _)     = [mkVal "Unit" []]
-absToIL (AInt  _)     = [mkVal "Int" []]
+absToIL (AInt  _ _)   = [mkVal "Int" []]
 absToIL (AString _)   = [mkVal "String" []]
 absToIL (AList _ _)   = [mkVal "List" []]
 
@@ -386,23 +399,23 @@ seqStmt s1 s2 = IL.SBlock [s1, s2] ()
 -- | Updates to roles
 -------------------------------------------------
 insRoleM :: (?callStack :: CallStack)
-         => Role -> SymbEx (Process SymbEx a) -> SymbExM ()
-insRoleM k p = do m <- gets renv
-                  case M.lookup k m of
-                    Nothing -> do
-                      oldMe <- gets me
-                      modify $ \s -> s { me = k }
-                      AProc _ st _ <- runSE p
-                      modify $ \s -> s { renv = M.insert k st (renv s), me = oldMe }
-                    Just _  ->
-                      error $ "insRoleM attempting to spawn already spawned role" ++ show k
+         => Role -> AbsVal Int -> SymbEx (Process SymbEx a) -> SymbExM ()
+insRoleM k n p = do m <- gets renv
+                    case M.lookup k m of
+                      Nothing -> do
+                        oldMe <- gets me
+                        modify $ \s -> s { me = k }
+                        AProc _ st _ <- runSE p
+                        modify $ \s -> s { renv = M.insert k (n, st) (renv s), me = oldMe }
+                      Just _  ->
+                        error $ "insRoleM attempting to spawn already spawned role" ++ show k
 
 symSpawnSingle :: (?callStack :: CallStack)
                => SymbEx RSing
                -> SymbEx (Process SymbEx a)
                -> SymbEx (Process SymbEx (Pid RSing))
 symSpawnSingle r p = SE $ do (ARoleSing _ r') <- runSE r
-                             insRoleM (S r') p
+                             insRoleM (S r') (AInt Nothing (Just 1)) p
                              return $ AProc Nothing skip (APid Nothing (Pid (Just r')))
 
 symSpawnMany :: (?callStack :: CallStack)
@@ -410,8 +423,9 @@ symSpawnMany :: (?callStack :: CallStack)
              -> SymbEx Int
              -> SymbEx (Process SymbEx a)
              -> SymbEx (Process SymbEx (Pid RMulti))
-symSpawnMany r _ p = SE $ do (ARoleMulti _ r') <- runSE r
-                             insRoleM (M r') p
+symSpawnMany r n p = SE $ do (ARoleMulti _ r') <- runSE r
+                             a                 <- runSE n
+                             insRoleM (M r') a p
                              return $ AProc Nothing skip (APidMulti Nothing (Pid (Just r')))
 
 -------------------------------------------------
@@ -427,8 +441,8 @@ symtt
 -------------------------------------------------
 symInt :: Int -> SymbEx Int
 -------------------------------------------------
-symInt _
-  = SE . return $ AInt Nothing
+symInt n
+  = SE . fresh $ AInt Nothing (Just n)
 
 -------------------------------------------------
 symStr :: String -> SymbEx String
@@ -573,7 +587,7 @@ symFixM f
       = do env <- gets renv
            r    <- m
            env' <- gets renv
-           when (env /= env') err
+           unless (envEq env env') err
            return r
     err
       = error "Spawning inside a loop prohibited! Use SpawnMany instead"
@@ -590,6 +604,25 @@ symNewRMulti :: SymbEx (Process SymbEx RMulti)
 symNewRMulti
   = SE $ do n <- freshInt
             return (AProc Nothing skip (ARoleMulti Nothing (RM n)))
+
+-------------------------------------------------
+symDoN :: SymbEx Int
+       -> SymbEx (Int -> Process SymbEx a)
+       -> SymbEx (Process SymbEx [a])
+-------------------------------------------------
+symDoN n f
+  = SE $ do v <- freshVar
+            AInt x nv <- runSE n
+            AArrow _ g <- runSE f
+            AProc _ s _ <- runSE (g (AInt Nothing Nothing))
+            return $ AProc Nothing (iter v x nv s) (error "TBD: symDoN")
+    where
+      iter v _ (Just n) s = IL.SIter (varToIL v) (IL.SInts n) s ()
+      iter v (Just x) _ s = IL.SIter (varToIL v) (varToILSet x) s ()
+      iter (V x) _ _ s    =
+                  let v = IL.LV $ "L" ++ show x
+                      sv = IL.SVar v  ()
+                  in IL.SLoop v ((s `seqStmt` sv) `joinStmt` skip) ()
 
 -------------------------------------------------
 symDoMany :: SymbEx (Pid RMulti)
@@ -614,7 +647,7 @@ symExec :: SymbEx (Process SymbEx a)
 symExec p
   = SE $ do (AProc _ st a) <- runSE p
             modify $ \s -> s { renv  = M.empty
-                             , renvs = M.insert (me s) st (renv s) : renvs s
+                             , renvs = M.insert (me s) (AInt Nothing (Just 1), st) (renv s) : renvs s
                              }
             return a
 
@@ -783,6 +816,7 @@ instance Symantics SymbEx where
   newRSing  = symNewRSing
   newRMulti = symNewRMulti
   doMany    = symDoMany
+  doN       = symDoN
   die       = symDie
 
   inl   = symInL

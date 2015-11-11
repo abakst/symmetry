@@ -346,23 +346,20 @@ renderStmtConc me (SCase l sl sr _)
 
 renderStmtConc _ (SSkip _)
   = return $ text "1 -> skip"
-    
-renderStmtConc me st@(SIter _ s ss _)
-  = do -- sm <- asks setMap
-       -- d  <- renderStmt me ss
-       -- let ps  = sm M.! s
-       --     [abs] = [p | (_, p@(PAbs _ _)) <- ps]
-       --     ufs = [ p | (_, p@(PUnfold _ _ _)) <- ps ]
 
-       --     go s p = [ufStmt p, s]
-
-       --     ufStmt p = renderStmt me $ subst (sub1Pid v p) ss
-       --     absStmt :: RenderM
-       --     absStmt = do d <- renderStmt me $ subst (sub1Pid v abs) ss
-       --                  return $ doLoop [ d, int 1 ]
-       -- body <- fmap seqStmts (sequence (absStmt : concatMap (go absStmt) ufs))
-       body <- renderStmt me ss
-       return $ desc (pretty st) (doLoop [body, text "break"])
+renderStmtConc me st@(SIter (V v) (SInts n) s _)
+  = do body <- renderStmt me s
+       return $ desc (pretty st) (forLoop (text v <+> colon <+> range) body)
+  where
+    range = int 1 <+> text ".." <+> int n
+       
+renderStmtConc me st@(SIter x@(V v) (S s) ss _)
+  = do body <- renderStmt me ss
+       return $ desc (pretty st) (forLoop range (assgnIt body))
+  where
+    assgnIt body = seqStmts [x <=> text s <> brackets itVar, body]
+    itVar = text ("_it_" ++ v)
+    range = itVar <+> text "in" <+> text s
 
 renderStmtConc me (SLoop (LV v) ss _)
   = do d <- renderStmt me ss
@@ -935,7 +932,6 @@ pretty_short (SCase l sl sr _) =
 
 process_to_str (pid,s) =
   text (pid_short pid) <+> text "=>" <+> int (annot s) <$> stmt_to_str s
-
 
 all_stmts :: [Process Int] -> Doc
 all_stmts procs = text "/*" <$>

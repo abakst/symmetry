@@ -22,15 +22,6 @@ class ( Symantics repr
 
 instance HelperSym SymbEx
 
-any_bool :: Symantics repr => repr (() -> Process repr Boolean)
-any_bool  = lam $ \_ -> ret (bool (Left ()))
-
-any_nat :: Symantics repr => repr (() -> Process repr Int)
-any_nat  = lam $ \_ -> ret (int 42)
-
-any_list :: Symantics repr => repr (() -> Process repr [Int])
-any_list = lam $ \_ -> ret (cons (int 1) (cons (int 2) (cons (int 3) nil)))
-
 id :: Symantics repr => repr (a-> Process repr a)
 id  = lam $ \x -> ret x
 

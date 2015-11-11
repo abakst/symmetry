@@ -22,6 +22,7 @@ infty :: Int
 infty = 2
 
 data Set = S String
+         | SInts Int
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data Var = V String
@@ -244,20 +245,20 @@ unfold c@(Config { cUnfold = us, cProcs = ps, cSets = bs })
                         ]
 
 unfoldAbs :: Config a -> Config a
-unfoldAbs c@(Config {cProcs = ps})
-  = c { cUnfold = us }
+unfoldAbs c@(Config {cProcs = ps, cSets = bs})
+  = c { cUnfold = us ++ cUnfold c }
   where
-    us = [ Conc s 1 | (PAbs v s, _) <- ps ]
+    us = [ Conc s 1 | (PAbs _ s, _) <- ps, not (isBound s bs) ]
 
 isBound :: Set -> [SetBound] -> Bool
 isBound s = any p
   where p (Bounded s' _) = s == s'
 
-boundAbs :: Int -> Config a -> Config a
-boundAbs n c@(Config {cProcs = ps})
-  = c { cUnfold = us, cSets = bs }
+boundAbs :: Config a -> Config a
+boundAbs c@(Config {cProcs = ps, cSets = bs})
+  = c { cUnfold = us }
   where
-    (us, bs) = unzip [ (Conc s n, Bounded s n) | (PAbs v s, _) <- ps ]
+    us = [ Conc s n | (PAbs _ s, _) <- ps , Bounded s' n <- bs , s == s']
 
 instConstr :: [Pid] -> MConstr -> [MConstr]
 instConstr dom c@(MTApp _ _)
@@ -423,35 +424,50 @@ unfoldLoops :: forall a.
                (Eq a, Data a, Typeable a)
             => Config a
             -> Config a
-unfoldLoops c@Config { cProcs = ps }
+unfoldLoops c@Config { cProcs = ps, cSets = bs }
   = c { cProcs = everywhere (mkT go) ps }
   where
     pids = map fst ps
     go :: Stmt a -> Stmt a
-    go = unfold1Loop pids
+    go = unfold1Loop pids bs
 
 unfold1Loop :: (Eq a, Data a, Typeable a)
             => [Pid]
+            -> [SetBound]
             -> Stmt a
             -> Stmt a
-unfold1Loop ps (SIter v set body i)
+unfold1Loop _ _ s@(SIter _ (SInts _) _ _)
+  = s
+unfold1Loop _ bs s@(SIter _ r _ _)
+  | r `elem` [ r' | Bounded r' _ <- bs ] = s
+unfold1Loop ps _ (SIter v@(V x) set body i)
   = case abss of
-      []    ->
-        SBlock ufStmts i
+      [] ->
+        let lv = LV ("L" ++  x) in
+        SLoop lv (SNonDet [ SBlock [body, SVar lv i] i
+                          , SSkip i
+                          ] i) i
       [p] ->
-        SBlock ( absLoop p :
-                 (intersperse (absLoop p) ufStmts) ++
-                 [absLoop p] ) i
-                                 
+        -- For each unfolded process, generate a block that
+        -- 1. loops for a while on the abs proc
+        -- 2. executes the body where an unfolded proc has been subbed
+        --    for the abs proc
+        -- 3. loops for a while on the abs proc
+        SBlock (foldr (\(s,us) ss -> s:us:ss) [absLoop p lvout] inter) i
+        where
+          inter = zip (map (absLoop p . lvin) [0..]) ufStmts
       _ -> error "unexpected case in unfold1Loop"
   where
-    absLoop p = SIter v set (doSub p) i
+    lvin i = LV ("L" ++ x ++ "_in_" ++ show i)
+    lvout = LV ("L" ++ x ++ "_out")
+    absLoop p v = SLoop v (SNonDet [SBlock [doSub p, SVar v i] i
+                                   ,SSkip i] i) i-- SIter v set (doSub p) i
     doSub p = subst (sub1Pid v p) body
     abss = [ p | p@(PAbs _ set') <- ps, set' == set ]
     ufs = [ p | p@(PUnfold _ set' _) <- ps, set' == set ]
     ufStmts = map doSub ufs
 
-unfold1Loop _ s = s
+unfold1Loop _ _ s = s
 
 -- | Substitution of PidVars for Pids
 type PidSubst = [(Var, Pid)]
@@ -629,7 +645,8 @@ instance Pretty Var where
   pretty (V x) = text x
 
 instance Pretty Set where
-  pretty (S x) = text x
+  pretty (S x)     = text x
+  pretty (SInts n) = brackets (int 1 <+> text ".." <+> int n)
 
 instance Pretty Pid where
   pretty (PConc x)
@@ -703,8 +720,9 @@ prettyMsg (t, c, v)
     text "C" <> int c <> parens (pretty v)
 
 instance Pretty (Config a) where
-  pretty (Config {cProcs = ps})
-    = vcat $ map go ps
+  pretty (Config {cProcs = ps, cSets = bs})
+    = vcat (map goB bs) <$$> vcat (map go ps)
     where
+      goB (Bounded s n) = text "|" <> pretty s <> text "|" <+> equals <+> int n
       go (pid, s) = text "Proc" <+> parens (pretty pid) <> colon <$$>
                     indent 2 (pretty s)
