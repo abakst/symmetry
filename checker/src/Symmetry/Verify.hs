@@ -22,7 +22,6 @@ import Text.PrettyPrint.Leijen  (pretty, nest, text, (<>), line)
 import qualified Data.Map.Strict as M
 
 data MainOptions = MainOptions { optVerify  :: Bool
-                               , optBounded :: Int
                                , optVerbose :: Bool
                                , optProcess :: Bool
                                , optModel   :: Bool
@@ -32,7 +31,6 @@ data MainOptions = MainOptions { optVerify  :: Bool
 instance Options MainOptions where
   defineOptions
     = MainOptions <$> simpleOption "verify" False "Run Verifier"
-                  <*> simpleOption "set-size" 0 "Concrete set size"
                   <*> simpleOption "verbose" False "Verbose Output"
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
                   <*> simpleOption "dump-model" False "Dump Spin model"
@@ -93,10 +91,8 @@ run1Cfg opt outd cfg
          removeFile (outTrail outd) `catch` \(_ :: IOException) ->
            return ()
 
-       let cfgOut = if setsz > 0 then
-                      boundAbs setsz cfg
-                    else
-                      unfoldAbs cfg
+       let cfgOut = unfoldAbs cfg
+
        when (optModel opt) $ do
          renderToFile (outf outd) cfgOut
 
@@ -114,7 +110,6 @@ run1Cfg opt outd cfg
          return True
   where
     verb = optVerbose opt
-    setsz = optBounded opt
     fileExists f = catch (openFile f ReadMode >> return True)
                          (\(_ :: IOException) -> return False)
     filterBoundedAbs c@(Config { cSets = bs }) =

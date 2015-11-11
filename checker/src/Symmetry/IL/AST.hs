@@ -665,7 +665,7 @@ instance Pretty (Stmt a) where
   pretty (SRecv m _)
     = text "recv" <+> prettyMsg m
 
-  pretty (SIter x xs s a)
+  pretty (SIter x xs s _)
     = text "for" <+> parens (pretty x <+> colon <+> pretty xs) <+> lbrace $$
       (indent 2 $ pretty s) $$
       rbrace
@@ -693,6 +693,9 @@ instance Pretty (Stmt a) where
 
   pretty (SNonDet ss _)
     = pretty ss
+
+  pretty (SNull _)
+    = text "<null>"
 
 prettyMsg :: (TId, CId, MConstr) -> Doc
 prettyMsg (t, c, v)
