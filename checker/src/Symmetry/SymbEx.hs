@@ -315,6 +315,7 @@ absToIL (APid (Just x) _)                     = [mkVal "Pid" [IL.PVar $ varToIL 
 absToIL (APid Nothing (Pid (Just (RS r))))    = [mkVal "Pid" [IL.PConc r]]
 absToIL (APid Nothing (Pid (Just (RSelf (S (RS r)))))) = [mkVal "Pid" [IL.PConc r]]
 absToIL (APid Nothing (Pid (Just (RSelf (M r))))) = [mkVal "Pid" [IL.PAbs (IL.V "i") (roleToSet r)]]
+absToIL (APid Nothing (Pid (Just (RElem (RM r))))) = error "TBD: elem"
 absToIL (APid Nothing (Pid Nothing))          = error "wut"
 
 
@@ -341,18 +342,29 @@ sendToIL p m = do
   g <- gets tyenv 
   let t  = absToILType m
   let cs = absToIL m
-  -- (t, cs) <- unPut $ put (SE $ return m)
   case IL.lookupType g t of
-    Just i  -> return $ nonDetSends p i g cs
+    Just i  -> nonDetSends i g cs p
     Nothing -> do i <- freshTId
                   let g' = M.insert i t g
                   modify $ \s -> s { tyenv = g' }
-                  return $ nonDetSends p i g' cs
+                  nonDetSends i g' cs p
   where
-    sends p i g cs       = map (flip (IL.SSend p) () . lkupMsg i g) cs
-    nonDetSends p i g cs = case sends (pidAbsValToIL p) i g cs of
-                             [s] -> s
-                             ss -> IL.SNonDet ss ()
+    mkSend msg p         = IL.SSend p msg ()
+    sends :: Int -> IL.MTypeEnv -> [IL.MConstr] -> [IL.Pid -> IL.Stmt ()]
+    sends i g cs       = map (mkSend . lkupMsg i g) cs
+    nonDetSends i g cs p = case sends i g cs of
+                             [s] -> choosePid p s
+                             ss  -> choosePid p (\p -> IL.SNonDet (map ($p) ss) ())
+
+choosePid :: (?callStack :: CallStack)
+          => AbsVal (Pid RSing) -> (IL.Pid -> IL.Stmt ()) -> SymbExM (IL.Stmt ())
+choosePid p@(APid _ (Pid (Just (RElem r)))) f
+  = do v <- freshVar
+       let pv = pidAbsValToIL (APid (Just v) (Pid Nothing))
+       return $ IL.SChoose (varToIL v) (roleToSet r) (f pv) ()
+choosePid p s
+  = return (s (pidAbsValToIL p))
+          
 
 recvToIL :: (?callStack :: CallStack)
          => (Typeable a) => AbsVal a -> SymbExM (IL.Stmt ())
@@ -371,7 +383,6 @@ recvToIL m = do
     nonDetRecvs i g cs = case recvs i g cs of
                            [r] -> r
                            rs  -> IL.SNonDet rs ()
-
                    
 lkupMsg i g c  = (i, lkup i g c, c)
   where
@@ -569,6 +580,17 @@ symBind mm mf
             return $ AProc Nothing (st `seqStmt` st') b
 
 -------------------------------------------------
+symForever :: (?callStack :: CallStack)
+           => SymbEx (Process SymbEx ()) -> SymbEx (Process SymbEx ())
+-------------------------------------------------
+symForever p
+  = SE $ do n <- freshInt
+            let v  = IL.LV $ "endL" ++ show n
+                sv = IL.SVar v ()
+            AProc b s r <- prohibitSpawn (runSE p)
+            return $ AProc b (IL.SLoop v (s `seqStmt` sv) ()) r
+
+-------------------------------------------------
 symFixM :: (?callStack :: CallStack)
         => SymbEx ((a -> Process SymbEx a) -> a -> Process SymbEx a)
         -> SymbEx (a -> Process SymbEx a)
@@ -582,15 +604,15 @@ symFixM f
                   AArrow _ h  <- runSE (app f g)
                   AProc b s r <- prohibitSpawn $ runSE (h a)
                   return $ AProc b (IL.SLoop v s ()) r
-  where
-    prohibitSpawn m
-      = do env <- gets renv
-           r    <- m
-           env' <- gets renv
-           unless (envEq env env') err
-           return r
-    err
-      = error "Spawning inside a loop prohibited! Use SpawnMany instead"
+
+prohibitSpawn m
+  = do env <- gets renv
+       r    <- m
+       env' <- gets renv
+       unless (envEq env env') err
+       return r
+err
+  = error "Spawning inside a loop prohibited! Use SpawnMany instead"
 -------------------------------------------------
 symNewRSing :: SymbEx (Process SymbEx RSing)
 -------------------------------------------------
@@ -625,11 +647,14 @@ symDoN n f
                   in IL.SLoop v ((s `seqStmt` sv) `joinStmt` skip) ()
 
 symLookup :: SymbEx (Pid RMulti)
-             -> SymbEx Int
-             -> SymbEx (Pid RSing)
+          -> SymbEx Int
+          -> SymbEx (Pid RSing)
 -------------------------------------------------
 symLookup p i
-  = undefined
+  = SE $ do APidMulti _ (Pid (Just r)) <- runSE p
+            AInt _ _                   <- runSE i
+            return $ APid Nothing (Pid (Just (RElem r)))
+                   
 
 -------------------------------------------------
 symDoMany :: SymbEx (Pid RMulti)
@@ -823,9 +848,10 @@ instance Symantics SymbEx where
   newRSing  = symNewRSing
   newRMulti = symNewRMulti
   doMany    = symDoMany
-  doN       = symDoN
   lookup    = symLookup
+  doN       = symDoN
   die       = symDie
+  forever   = symForever
 
   inl   = symInL
   inr   = symInR

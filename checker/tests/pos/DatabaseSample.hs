@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators #-}
+{-# Language TypeOperators #-}
 {-# Language RebindableSyntax #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language FlexibleContexts #-}
@@ -22,8 +22,11 @@ type GetMsgT = (Key, Pid RSing)
 type SetMsgT = (Key, Value)
 type MsgT    = GetMsgT :+: SetMsgT
 
-workerCount       = 10
-workerCount_div_2 = 5
+getMsg :: DSL repr => repr Key -> repr (Pid RSing) -> repr MsgT
+getMsg k p = inl (pair k p)
+
+setMsg :: DSL repr => repr Key -> repr Value -> repr MsgT
+setMsg k v = inr (pair k v)
 
 dbProc :: DSL repr => repr (Process repr ())
 dbProc  = do peers   <- newRMulti
@@ -44,9 +47,14 @@ loop  = lam $ \workers ->
           do let loop_h = lam $ \loop -> lam $ \arg ->
                             do req :: repr MsgT <- recv
                                let helper = lam $ \m -> lam $ \k ->
-                                     matchList (app keyspace (app ord k))
-                                       (lam $ \_  -> ret tt)
-                                       (lam $ \ht -> send (L.lookup workers (proj1 ht)) m)
+                                     -- matchList (app keyspace (app ord k))
+                                     --   (lam $ \_  -> return tt)
+                                     --   (lam $ \ht -> send (L.lookup workers (proj1 ht)) m)
+                                     -- we really want a function that selects one of the
+                                     -- workers, but just model that with arbitrary
+                                     -- choice for now
+                                     do let w = L.lookup workers arb
+                                        send w m
                                match req
                                  (lam $ \m -> app2 helper (inl m) (proj1 m))
                                  (lam $ \m -> app2 helper (inr m) (proj1 m))
@@ -58,12 +66,12 @@ createDB  = do r <- newRSing
                spawn r dbProc
 
 set :: DSL repr => repr (Database -> Key -> Value -> Process repr ())
-set  = lam $ \db -> lam $ \k -> lam $ \v -> send db (pair k v)
+set  = lam $ \db -> lam $ \k -> lam $ \v -> send db (setMsg k v)
 
 get :: DSL repr => repr (Database -> Key -> Process repr MV)
 get  = lam $ \db -> lam $ \k ->
          do me <- self
-            send db (pair k me)
+            send db (getMsg k me)
             msg :: repr MV <- recv
             return msg
 
@@ -96,6 +104,10 @@ master  = do db <- createDB
                              (lam $ \ht -> do let k = proj1 $ proj1 ht
                                               r <- app2 get db k
                                               ret tt)
+             forever $ return tt
+
+workerCount       = 4
+workerCount_div_2 = workerCount `div` 2
 
 main :: IO ()
 main  = checkerMain $ exec master

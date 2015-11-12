@@ -16,6 +16,7 @@ import GHC.Stack
 
 data RSing  = RS Int
             | RSelf Role
+            | RElem RMulti
               deriving (Ord, Eq, Show, Typeable)
 
 data RMulti = RM Int deriving (Ord, Eq, Show, Typeable)
@@ -85,6 +86,7 @@ class Symantics repr where
   doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process repr a) -> repr (Process repr [a])
   lookup    :: repr (Pid RMulti) -> repr Int -> repr (Pid RSing)
   doN       :: repr Int -> repr (Int -> Process repr a) -> repr (Process repr [a])
+  forever   :: repr (Process repr ()) -> repr (Process repr ())
 
   die       :: repr (Process repr a)
 

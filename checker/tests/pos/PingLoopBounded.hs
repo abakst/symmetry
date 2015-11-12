@@ -27,4 +27,4 @@ mainProc = lam $ \n -> exec $ do r <- newRSing
                                  app (app master r) n
 
 main :: IO ()
-main = checkerMain (int 10 |> mainProc)
+main = checkerMain (int 2 |> mainProc)

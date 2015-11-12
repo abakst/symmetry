@@ -276,8 +276,11 @@ sendMsg p q m@(ti, cj, _)
     go f (s, vk) = let tests = subToTests s in
                    seqStmts ((punctuate (text " && ") tests) ++
                              [incrVal (f p q (ti, cj, vk))])
-    subToTests (Subst {cPidSub = [], cLabSub = [], cIdxSub = isub})
-      = [ i <==> int n | ((i, _), n) <- isub ]
+    subToTests (Subst {cPidSub = psub, cLabSub = [], cIdxSub = isub})
+      = [ i <==> int n | ((i, _), n) <- isub ] ++
+        [ x <==> renderProcVar (subUnfoldIdx p) | (x, p) <- psub ]
+    subToTests s
+      = undefined
 
 pid_short    :: Pid -> String
 pid_short pid =
@@ -368,16 +371,16 @@ renderStmtConc me (SLoop (LV v) ss _)
 renderStmtConc _ (SVar (LV v) _)
   = return $ text "goto" <+> text v
 
-renderStmtConc me (SChoose (V v) s ss _)
+renderStmtConc me (SChoose x@(V v) s ss _)
   = do d <- renderStmt me ss
        sm <- asks setMap
-       return $ block [ text "select" <+>
-                        parens (text v <+> text ":" <+> int 0 <+> text ".." <+> sz sm)
+       let vs = map ((x <=>) . int) [0..(len sm)]
+       return $ block [ ifs vs
                       , renderProcName (PVar (V v)) <+> equals <+> renderProcName (PAbs (V v) s)
                       , d
                       ]
   where
-    sz sm  = maybe err (int . length) $ M.lookup s sm
+    len sm = maybe err (pred . length) $ M.lookup s sm
     err = error ("Unknown set (renderStmtConc): " ++ show s)
 
 renderStmtConc me (SBlock ss _)
