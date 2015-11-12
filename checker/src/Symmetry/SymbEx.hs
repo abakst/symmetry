@@ -315,6 +315,7 @@ absToIL (APid (Just x) _)                     = [mkVal "Pid" [IL.PVar $ varToIL 
 absToIL (APid Nothing (Pid (Just (RS r))))    = [mkVal "Pid" [IL.PConc r]]
 absToIL (APid Nothing (Pid (Just (RSelf (S (RS r)))))) = [mkVal "Pid" [IL.PConc r]]
 absToIL (APid Nothing (Pid (Just (RSelf (M r))))) = [mkVal "Pid" [IL.PAbs (IL.V "i") (roleToSet r)]]
+absToIL (APid Nothing (Pid (Just (RElem (RM r))))) = error "TBD: elem"
 absToIL (APid Nothing (Pid Nothing))          = error "wut"
 
 
@@ -341,18 +342,26 @@ sendToIL p m = do
   g <- gets tyenv 
   let t  = absToILType m
   let cs = absToIL m
-  -- (t, cs) <- unPut $ put (SE $ return m)
   case IL.lookupType g t of
-    Just i  -> return $ nonDetSends p i g cs
+    Just i  -> nonDetSends p i g cs
     Nothing -> do i <- freshTId
                   let g' = M.insert i t g
                   modify $ \s -> s { tyenv = g' }
-                  return $ nonDetSends p i g' cs
+                  nonDetSends p i g' cs
   where
     sends p i g cs       = map (flip (IL.SSend p) () . lkupMsg i g) cs
     nonDetSends p i g cs = case sends (pidAbsValToIL p) i g cs of
-                             [s] -> s
-                             ss -> IL.SNonDet ss ()
+                             [s] -> choosePid p s
+                             ss  -> choosePid p (IL.SNonDet ss ())
+
+choosePid :: (?callStack :: CallStack)
+          => AbsVal (Pid RSing) -> IL.Stmt () -> SymbExM (IL.Stmt ())
+choosePid (APid _ (Pid (Just (RElem r)))) s
+  = do v <- freshVar
+       return $ IL.SChoose (varToIL v) (roleToSet r) s ()
+choosePid _ s
+  = return s
+          
 
 recvToIL :: (?callStack :: CallStack)
          => (Typeable a) => AbsVal a -> SymbExM (IL.Stmt ())
@@ -371,7 +380,6 @@ recvToIL m = do
     nonDetRecvs i g cs = case recvs i g cs of
                            [r] -> r
                            rs  -> IL.SNonDet rs ()
-
                    
 lkupMsg i g c  = (i, lkup i g c, c)
   where
@@ -625,11 +633,14 @@ symDoN n f
                   in IL.SLoop v ((s `seqStmt` sv) `joinStmt` skip) ()
 
 symLookup :: SymbEx (Pid RMulti)
-             -> SymbEx Int
-             -> SymbEx (Pid RSing)
+          -> SymbEx Int
+          -> SymbEx (Pid RSing)
 -------------------------------------------------
 symLookup p i
-  = undefined
+  = SE $ do APidMulti _ (Pid (Just r)) <- runSE p
+            AInt _ _                   <- runSE i
+            return $ APid Nothing (Pid (Just (RElem r)))
+                   
 
 -------------------------------------------------
 symDoMany :: SymbEx (Pid RMulti)
@@ -823,11 +834,8 @@ instance Symantics SymbEx where
   newRSing  = symNewRSing
   newRMulti = symNewRMulti
   doMany    = symDoMany
-<<<<<<< HEAD
-  doN       = symDoN
-=======
   lookup    = symLookup
->>>>>>> 4ba8913c1b1cb33ac7d29cf5e871fefc9e5cab8f
+  doN       = symDoN
   die       = symDie
 
   inl   = symInL
