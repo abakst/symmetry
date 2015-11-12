@@ -823,11 +823,8 @@ instance Symantics SymbEx where
   newRSing  = symNewRSing
   newRMulti = symNewRMulti
   doMany    = symDoMany
-<<<<<<< HEAD
   doN       = symDoN
-=======
   lookup    = symLookup
->>>>>>> 4ba8913c1b1cb33ac7d29cf5e871fefc9e5cab8f
   die       = symDie
 
   inl   = symInL
