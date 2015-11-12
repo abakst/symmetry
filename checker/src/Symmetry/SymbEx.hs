@@ -587,7 +587,7 @@ symFixM :: (?callStack :: CallStack)
 symFixM f
   = SE . return . AArrow Nothing $ \a ->
           SE $ do n <- freshInt
-                  let v = IL.LV $ "L" ++ show n
+                  let v = IL.LV $ "endL" ++ show n
                       sv = IL.SVar v  ()
                       g = SE . return . AArrow Nothing $ \a -> SE $ return (AProc Nothing sv a)
                   AArrow _ h  <- runSE (app f g)
@@ -631,7 +631,7 @@ symDoN n f
       iter v _ (Just n) s = IL.SIter (varToIL v) (IL.SInts n) s ()
       iter v (Just x) _ s = IL.SIter (varToIL v) (varToILSet x) s ()
       iter (V x) _ _ s    =
-                  let v = IL.LV $ "L" ++ show x
+                  let v = IL.LV $ "endL" ++ show x
                       sv = IL.SVar v  ()
                   in IL.SLoop v ((s `seqStmt` sv) `joinStmt` skip) ()
 

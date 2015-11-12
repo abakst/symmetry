@@ -276,8 +276,11 @@ sendMsg p q m@(ti, cj, _)
     go f (s, vk) = let tests = subToTests s in
                    seqStmts ((punctuate (text " && ") tests) ++
                              [incrVal (f p q (ti, cj, vk))])
-    subToTests (Subst {cPidSub = [], cLabSub = [], cIdxSub = isub})
-      = [ i <==> int n | ((i, _), n) <- isub ]
+    subToTests (Subst {cPidSub = psub, cLabSub = [], cIdxSub = isub})
+      = [ i <==> int n | ((i, _), n) <- isub ] ++
+        [ x <==> renderProcVar (subUnfoldIdx p) | (x, p) <- psub ]
+    subToTests s
+      = undefined
 
 pid_short    :: Pid -> String
 pid_short pid =

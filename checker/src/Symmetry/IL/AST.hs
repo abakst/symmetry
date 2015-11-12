@@ -477,7 +477,7 @@ type LabelSubst = [(Var, Label)]
 data Subst = Subst { cPidSub :: PidSubst
                    , cLabSub :: LabelSubst
                    , cIdxSub :: IdxSub
-                   }
+                   } deriving (Eq, Show)
 
 sub1Pid   v p = emptySubst { cPidSub = [(v, p)] }
 sub1Label v l = emptySubst { cLabSub = [(v, l)] }
