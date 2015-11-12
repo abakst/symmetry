@@ -1,4 +1,3 @@
---runwith: --set-size=2
 {-# Language RebindableSyntax #-}
 {-# Language TypeOperators #-}
 {-# Language FlexibleContexts #-}
@@ -50,5 +49,5 @@ mainProc = lam $ \n -> exec $ do r <- newRMulti
                                  ret tt
 
 main :: IO ()
-main = checkerMain (int 10 |> mainProc)
+main = checkerMain (int 2 |> mainProc)
 

@@ -53,8 +53,11 @@ loop  = lam $ \workers ->
                                      -- we really want a function that selects one of the
                                      -- workers, but just model that with arbitrary
                                      -- choice for now
-                                     do let w = L.lookup workers arb
-                                        send w m
+                                     do let i = arb
+                                            w = L.lookup workers i
+                                        ifte (i `eq` (int 0))
+                                             (send w m)
+                                             (return tt)
                                match req
                                  (lam $ \m -> app2 helper (inl m) (proj1 m))
                                  (lam $ \m -> app2 helper (inr m) (proj1 m))

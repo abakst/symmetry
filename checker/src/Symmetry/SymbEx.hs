@@ -580,6 +580,17 @@ symBind mm mf
             return $ AProc Nothing (st `seqStmt` st') b
 
 -------------------------------------------------
+symForever :: (?callStack :: CallStack)
+           => SymbEx (Process SymbEx ()) -> SymbEx (Process SymbEx ())
+-------------------------------------------------
+symForever p
+  = SE $ do n <- freshInt
+            let v  = IL.LV $ "endL" ++ show n
+                sv = IL.SVar v ()
+            AProc b s r <- prohibitSpawn (runSE p)
+            return $ AProc b (IL.SLoop v (s `seqStmt` sv) ()) r
+
+-------------------------------------------------
 symFixM :: (?callStack :: CallStack)
         => SymbEx ((a -> Process SymbEx a) -> a -> Process SymbEx a)
         -> SymbEx (a -> Process SymbEx a)
@@ -587,21 +598,21 @@ symFixM :: (?callStack :: CallStack)
 symFixM f
   = SE . return . AArrow Nothing $ \a ->
           SE $ do n <- freshInt
-                  let v = IL.LV $ "endL" ++ show n
+                  let v = IL.LV $ "L" ++ show n
                       sv = IL.SVar v  ()
                       g = SE . return . AArrow Nothing $ \a -> SE $ return (AProc Nothing sv a)
                   AArrow _ h  <- runSE (app f g)
                   AProc b s r <- prohibitSpawn $ runSE (h a)
                   return $ AProc b (IL.SLoop v s ()) r
-  where
-    prohibitSpawn m
-      = do env <- gets renv
-           r    <- m
-           env' <- gets renv
-           unless (envEq env env') err
-           return r
-    err
-      = error "Spawning inside a loop prohibited! Use SpawnMany instead"
+
+prohibitSpawn m
+  = do env <- gets renv
+       r    <- m
+       env' <- gets renv
+       unless (envEq env env') err
+       return r
+err
+  = error "Spawning inside a loop prohibited! Use SpawnMany instead"
 -------------------------------------------------
 symNewRSing :: SymbEx (Process SymbEx RSing)
 -------------------------------------------------
@@ -631,7 +642,7 @@ symDoN n f
       iter v _ (Just n) s = IL.SIter (varToIL v) (IL.SInts n) s ()
       iter v (Just x) _ s = IL.SIter (varToIL v) (varToILSet x) s ()
       iter (V x) _ _ s    =
-                  let v = IL.LV $ "endL" ++ show x
+                  let v = IL.LV $ "L" ++ show x
                       sv = IL.SVar v  ()
                   in IL.SLoop v ((s `seqStmt` sv) `joinStmt` skip) ()
 
@@ -840,6 +851,7 @@ instance Symantics SymbEx where
   lookup    = symLookup
   doN       = symDoN
   die       = symDie
+  forever   = symForever
 
   inl   = symInL
   inr   = symInR
