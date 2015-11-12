@@ -15,40 +15,51 @@ import Symmetry.Verify
 import SrcHelper
 
 
--- 
-slave :: (DSL repr) => repr (Pid RSing -> Pid RSing -> Process repr ())
-slave =  lam $ \masterPid -> lam $ \workQueuePid ->   
-                do myPid <- self
-                   -- ask workQueue for work
-                   send workQueuePid myPid
-                   (num :: repr Int)  <- recv
-                   -- perform some local computation on num and send result to master
-                   send masterPid num
+type Sig  = Int :+: ()
 
+-- send workQueue its own pid. Wait for reply from workQueue, perform work and send result to master. 
+-- repeat until workQueue sends a null value.
+-- fixM can take multiple arguments?
+slave :: (DSL repr) => repr (Pid RSing -> Pid RSing -> Process repr ())
+slave =  let fix_f = lam $ \f -> lam $ \mPid -> lam $ \wqPid ->   
+                       do myPid <- self
+                          -- ask workQueue for work
+                          send wqPid myPid
+                          (v :: repr Sig)  <- recv
+                          match v 
+                            (lam $ \val  ->  do send mPid val 
+                                                app (app f mPid) wqPid)
+                            (lam $ \_    -> ret tt)
+          in lam $ \masterPid -> lam $ \workQueuePid -> do app (app (fixM fix_f) masterPid) workQueuePid
+                                                           ret tt
 
 -- Has n units of work. Wait for requests from slaves and allot them work.
--- todo: When n units are exhausted, send any more requests the value null.
+-- When n units are exhausted, send any more requests the value null.
+-- todo: how to represent infinite loop? 
+-- this workqueue process will NOT terminate. We are only checking for termination of master and slave nodes.
 workQueueProcess :: (DSL repr) => repr (Int -> Process repr ())
-workQueueProcess =  let allotWork x = do slavePid <- recv
-                                         send slavePid x
-                    in lam $ \n ->
-                           do doN n (lam $ \x -> allotWork x)
-                              return tt
+workQueueProcess =  let allotWork = lam $ \x -> do slavePid <- recv
+                                                   send slavePid x
+                    in lam $ \n -> do doN n allotWork
+                                      return tt
+    
                            
 
-
-master :: (DSL repr) => repr (RMulti -> Int -> Process repr [Int])
-master = lam $ \slaveRole  -> lam $ \n ->
+-- two different parameters : number of slaves = k, number of work units = n
+-- start k slaves. start workQueue with parameter. Wait for n results from the slaves.
+master :: (DSL repr) => repr (RMulti -> Int -> Int -> Process repr [Int])
+master = lam $ \slaveRole  -> lam $ \k -> lam $ \n ->
                do myPid <- self
                   workQueueRole <- newRSing
-                  -- start workQueue
+
+                  -- start workQueue with total work units = n
                   workQueuePid <- spawn workQueueRole (app workQueueProcess n)
                                         
-                  -- spawn the slaves
-                  slaves <- spawnMany slaveRole n (app (app slave myPid) workQueuePid)
+                  -- spawn k slaves
+                  slaves <- spawnMany slaveRole k (app (app slave myPid) workQueuePid)
       
-                  -- wait for results from slaves
-                  doMany slaves (lam $ \p -> do recv)
+                  -- wait for n results.
+                  doN n (lam $ \p -> do recv)
 
 mainProc :: (DSL repr) => repr (Int -> ())
 mainProc = lam $ \n -> exec $ do r <- newRMulti
