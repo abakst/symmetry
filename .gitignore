@@ -2,6 +2,7 @@
 nohup.out
 **/.symcheck
 trace.html
+TAGS
 
 # benchmark executables
 SrcConcDB
@@ -16,3 +17,4 @@ SrcSieve
 SrcStateFactory
 SrcStutter
 SrcStutter
+DatabaseSample
