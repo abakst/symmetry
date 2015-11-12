@@ -343,24 +343,27 @@ sendToIL p m = do
   let t  = absToILType m
   let cs = absToIL m
   case IL.lookupType g t of
-    Just i  -> nonDetSends p i g cs
+    Just i  -> nonDetSends i g cs p
     Nothing -> do i <- freshTId
                   let g' = M.insert i t g
                   modify $ \s -> s { tyenv = g' }
-                  nonDetSends p i g' cs
+                  nonDetSends i g' cs p
   where
-    sends p i g cs       = map (flip (IL.SSend p) () . lkupMsg i g) cs
-    nonDetSends p i g cs = case sends (pidAbsValToIL p) i g cs of
+    mkSend msg p         = IL.SSend p msg ()
+    sends :: Int -> IL.MTypeEnv -> [IL.MConstr] -> [IL.Pid -> IL.Stmt ()]
+    sends i g cs       = map (mkSend . lkupMsg i g) cs
+    nonDetSends i g cs p = case sends i g cs of
                              [s] -> choosePid p s
-                             ss  -> choosePid p (IL.SNonDet ss ())
+                             ss  -> choosePid p (\p -> IL.SNonDet (map ($p) ss) ())
 
 choosePid :: (?callStack :: CallStack)
-          => AbsVal (Pid RSing) -> IL.Stmt () -> SymbExM (IL.Stmt ())
-choosePid (APid _ (Pid (Just (RElem r)))) s
+          => AbsVal (Pid RSing) -> (IL.Pid -> IL.Stmt ()) -> SymbExM (IL.Stmt ())
+choosePid p@(APid _ (Pid (Just (RElem r)))) f
   = do v <- freshVar
-       return $ IL.SChoose (varToIL v) (roleToSet r) s ()
-choosePid _ s
-  = return s
+       let pv = pidAbsValToIL (APid (Just v) (Pid Nothing))
+       return $ IL.SChoose (varToIL v) (roleToSet r) (f pv) ()
+choosePid p s
+  = return (s (pidAbsValToIL p))
           
 
 recvToIL :: (?callStack :: CallStack)

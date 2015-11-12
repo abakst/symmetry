@@ -699,6 +699,11 @@ instance Pretty (Stmt a) where
         (align (vcat [text "| InL ->" <+> pretty sl,
                      text "| InR ->"  <+> pretty sr]))
 
+  pretty (SChoose v r s _)
+    = text "select" <+> pretty v <+>
+      text "from" <+> pretty r <+>
+      text "in" $$ indent 2 (align (pretty s))
+
   pretty (SDie _)
     = text "CRASH"
 
