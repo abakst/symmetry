@@ -17,6 +17,11 @@ import SrcHelper
 -- Signal : Either Int or () as termination signal
 type SigT  = Int :+: ()
 
+mkWork :: DSL repr => repr Int -> repr SigT
+mkWork = inl
+
+mkTerm :: DSL repr => repr SigT
+mkTerm = inr tt
 
 -- send workQueue its own pid. Wait for reply from workQueue, perform work and send result to master. 
 -- repeat until workQueue sends a null value.
@@ -39,23 +44,24 @@ slave =  lam $ \masterPid -> lam $ \workQueuePid -> app (fixM (app (app fix_f ma
 
 -- Has n units of work. Wait for requests from slaves and allot them work.
 -- When n units are exhausted, send any more requests from slaves the value null.
--- todo: add infinite loop.
+-- todo: add infinite loop. type errors
 -- this workqueue process will NOT terminate. We are only checking for termination of master and slave nodes.
-
-
-fix_loopInf :: (DSL repr) => repr ( (() -> Process repr ()) -> () -> Process repr ())
-fix_loopInf = lam $ \f -> lam $ \_ -> do slavePid <- recv
-                                         send slavePid tt
-                                         app f tt
-
 
 workQueueProcess :: (DSL repr) => repr (Int -> Process repr ())
 workQueueProcess =   
                      lam $ \n -> do doN n allotWork
-                                    app (fixM fix_loopInf) tt
+                                    ret tt
+                                    --app (fixM fix_loopInf) tt
+
+                                    forever $ do slavePid <- recv
+                                                 send slavePid mkTerm
                        
                        where allotWork = lam $ \x -> do slavePid <- recv
-                                                        send slavePid x
+                                                        send slavePid (mkWork x)
+                             {-fix_loopInf = lam $ \f -> lam $ \_ -> do (slavePid :: repr (Pid RSing)) <- recv
+                                                                      send slavePid (inr tt)
+                                                                      app f tt-}
+
                            
 
 -- two different parameters : number of slaves = k, number of work units = n
@@ -82,7 +88,7 @@ mainProc = lam $ \k -> lam $ \n -> exec $ do r <- newRMulti
 
 
 main :: IO ()
-main = checkerMain (app (app mainProc (int 4)) (int 3))
+main = checkerMain (app (app mainProc (int 2)) (int 2))
 
 
 
