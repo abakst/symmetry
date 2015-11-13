@@ -17,6 +17,11 @@ import SrcHelper
 -- Signal : Either Int or () as termination signal
 type SigT  = Int :+: ()
 
+mkWork :: DSL repr => repr Int -> repr SigT
+mkWork = inl
+
+mkTerm :: DSL repr => repr SigT
+mkTerm = inr tt
 
 -- send workQueue its own pid. Wait for reply from workQueue, perform work and send result to master. 
 -- repeat until workQueue sends a null value.
@@ -47,9 +52,12 @@ workQueueProcess =
                      lam $ \n -> do doN n allotWork
                                     ret tt
                                     --app (fixM fix_loopInf) tt
+
+                                    forever $ do slavePid <- recv
+                                                 send slavePid mkTerm
                        
                        where allotWork = lam $ \x -> do slavePid <- recv
-                                                        send slavePid x
+                                                        send slavePid (mkWork x)
                              {-fix_loopInf = lam $ \f -> lam $ \_ -> do (slavePid :: repr (Pid RSing)) <- recv
                                                                       send slavePid (inr tt)
                                                                       app f tt-}
@@ -80,7 +88,7 @@ mainProc = lam $ \k -> lam $ \n -> exec $ do r <- newRMulti
 
 
 main :: IO ()
-main = checkerMain (app (app mainProc (int 5)) (int 10))
+main = checkerMain (app (app mainProc (int 2)) (int 2))
 
 
 
