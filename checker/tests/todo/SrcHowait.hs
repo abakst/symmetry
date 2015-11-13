@@ -36,10 +36,9 @@ result_msg :: DSL repr => repr (Pid RSing -> Int -> Msg)
 result_msg  = lam $ \pid -> lam $ \n -> inr $ inr $ pair pid n
 
 howait :: DSL repr => repr (Process repr ())
-howait  = do n <- app any_nat tt
-             r <- newRSing
+howait  = do r <- newRSing
              s <- spawn r serve
-             app2 sp_wait1 (lam $ \x -> app2 client s x) n
+             app2 sp_wait1 (lam $ \x -> app2 client s x) arb
              return tt
 
 serve :: DSL repr => repr (Process repr ())

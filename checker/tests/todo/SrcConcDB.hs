@@ -102,24 +102,20 @@ database  = lam $ \l ->
 f_client :: CDBSem repr
          => repr ((Pid RSing -> Process repr (Pid RSing)) -> Pid RSing -> Process repr (Pid RSing))
 f_client  = lam $ \client -> lam $ \db ->
-              do choice <- app any_bool tt
-                 me     <- self
-                 let insert_h = do k <- app any_nat tt
-                                   send db (app2 alloc_msg k me)
+              do me     <- self
+                 let insert_h = do send db (app2 alloc_msg arb me)
                                    let free_h = lam $ \_ ->
-                                                  do v <- app any_nat tt
-                                                     send db (app2 value_msg v me)
+                                                  do send db (app2 value_msg arb me)
                                                      app client db
                                        alloc_h = lam $ \_ -> app client db
                                    msg :: repr FreeAllocated <- recv
                                    match msg free_h alloc_h
-                     lookup_h = do k <- app any_nat tt
-                                   send db (app2 lookup_msg k me)
+                     lookup_h = do send db (app2 lookup_msg arb me)
                                    msg :: repr LookupResT <- recv
                                    match msg
                                      (lam $ \_ -> app client db)
                                      (lam $ \x -> app client db)
-                 ifte choice insert_h lookup_h
+                 ifte arb insert_h lookup_h
 
 client :: CDBSem repr => repr (Pid RSing -> Process repr ())
 client  = lam $ \db -> do app (fixM f_client) db

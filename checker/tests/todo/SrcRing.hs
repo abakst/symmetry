@@ -44,8 +44,7 @@ recv_fwd  = do msg::repr Msg <- recv
                match3 msg reject reject id
 
 ring :: RingSem repr => repr (Process repr ())
-ring  = do xs :: repr [Int] <- app any_list tt
-           p <- app2 init_ring slave xs
+ring  = do p <- app2 init_ring slave arb
            app probe_ring p
 
 

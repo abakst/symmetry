@@ -23,9 +23,9 @@ create_msg1 :: SFSem repr => repr (Pid RSing -> Int -> Msg1)
 create_msg1  = lam $ \pid -> lam $ \n -> pair pid n
 
 state_factory :: SFSem repr => repr (Process repr ())
-state_factory  = do n1 <- app any_nat tt
-                    funWithState <- app2 factory n1 (lam $ \_ -> lam $ \_ -> app any_nat tt)
-                    n2 <- app any_nat tt
+state_factory  = do let n1 = arb
+                    funWithState <- app2 factory n1 (lam $ \_ -> lam $ \_ -> return arb)
+                    let n2 = arb
                     app2 call_loop n2 funWithState
                     ret tt
 
@@ -69,10 +69,10 @@ f_call_loop  =lam $ \call_loop -> lam $ \arg ->
                    let f = proj2 arg
                    ifte (lt n (int 1)) fail $
                      ifte (eq n (int 1))
-                       (do n <- app any_nat tt
+                       (do let n = arb
                            n' <- app f n
                            ret $ pair n' f)
-                       (do n <- app any_nat tt
+                       (do let n = arb
                            app f n
                            app call_loop $ pair (plus n (int (-1))) f)
 

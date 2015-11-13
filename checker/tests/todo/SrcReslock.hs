@@ -86,7 +86,6 @@ res_main = lam $ \res -> do app (fixM res_outer_loop) res
     res_locked_loop =
       lam $ \loop -> lam $ \arg ->
                      do let res = proj1 arg
-                            p   = proj2 arg
                             req_h = lam $ \req -> -- req :: Req p cmd
                                   do let p      = proj1 req
                                          cmd    = proj2 req
@@ -161,8 +160,7 @@ inc  = lam $ \c -> do app cell_lock c
 
 reslock_main :: ReslockSem repr => repr (Process repr ())
 reslock_main  = do c <- cell_start
-                   n <- app any_nat tt -- add n to c (which is 0)
-                   app2 add_to_cell c n
+                   app2 add_to_cell c arb
 
 add_to_cell :: ReslockSem repr => repr (Pid RSing -> Int -> Process repr ())
 add_to_cell  = lam $ \c -> lam $ \n ->
