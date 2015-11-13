@@ -20,7 +20,7 @@ build-lib:
 test: $(TESTS)
 
 $(TESTS): test-%: %
-	-./$< --verify
+	-./$< --dump-process --verify
 
 clean:
 	rm -f *.hi *.o $(EXES)
