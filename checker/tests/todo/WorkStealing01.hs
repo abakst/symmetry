@@ -39,21 +39,23 @@ slave =  lam $ \masterPid -> lam $ \workQueuePid -> app (fixM (app (app fix_f ma
 
 -- Has n units of work. Wait for requests from slaves and allot them work.
 -- When n units are exhausted, send any more requests from slaves the value null.
--- todo: add infinite loop. type errors
+-- todo: add infinite loop.
 -- this workqueue process will NOT terminate. We are only checking for termination of master and slave nodes.
+
+
+fix_loopInf :: (DSL repr) => repr ( (() -> Process repr ()) -> () -> Process repr ())
+fix_loopInf = lam $ \f -> lam $ \_ -> do slavePid <- recv
+                                         send slavePid tt
+                                         app f tt
+
 
 workQueueProcess :: (DSL repr) => repr (Int -> Process repr ())
 workQueueProcess =   
                      lam $ \n -> do doN n allotWork
-                                    ret tt
-                                    --app (fixM fix_loopInf) tt
+                                    app (fixM fix_loopInf) tt
                        
                        where allotWork = lam $ \x -> do slavePid <- recv
                                                         send slavePid x
-                             {-fix_loopInf = lam $ \f -> lam $ \_ -> do (slavePid :: repr (Pid RSing)) <- recv
-                                                                      send slavePid (inr tt)
-                                                                      app f tt-}
-
                            
 
 -- two different parameters : number of slaves = k, number of work units = n
@@ -80,7 +82,7 @@ mainProc = lam $ \k -> lam $ \n -> exec $ do r <- newRMulti
 
 
 main :: IO ()
-main = checkerMain (app (app mainProc (int 5)) (int 10))
+main = checkerMain (app (app mainProc (int 4)) (int 3))
 
 
 
