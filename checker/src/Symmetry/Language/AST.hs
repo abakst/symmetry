@@ -122,10 +122,14 @@ class (Symantics repr,
        ArbPat repr (),
        ArbPat repr Int,
        ArbPat repr String,
-       ArbPat repr (Pid RSing)) => DSL repr where         
+       ArbPat repr (Pid RSing),
+       ArbPat repr (Pid RMulti)
+      ) => DSL repr where         
 
 instance (Symantics repr,
           ArbPat repr (),
           ArbPat repr Int,
           ArbPat repr String,
-          ArbPat repr (Pid RSing)) => DSL repr where
+          ArbPat repr (Pid RSing),
+          ArbPat repr (Pid RMulti)
+         ) => DSL repr where

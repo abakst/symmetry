@@ -22,6 +22,7 @@ infty :: Int
 infty = 2
 
 data Set = S String
+         | SSetVar Var
          | SInts Int
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
@@ -645,7 +646,8 @@ instance Pretty Var where
   pretty (V x) = text x
 
 instance Pretty Set where
-  pretty (S x)     = text x
+  pretty (S x)        = text x
+  pretty (SSetVar x)  = pretty x
   pretty (SInts n) = brackets (int 1 <+> text ".." <+> int n)
 
 instance Pretty Pid where
