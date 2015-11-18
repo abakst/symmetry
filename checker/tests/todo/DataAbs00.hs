@@ -11,11 +11,13 @@ import Symmetry.Verify
 import Symmetry.SymbEx
 import SrcHelper
 
+type Msg = Int
+
 sender :: DSL repr => repr (Pid RSing -> Process repr ())
 sender  = lam $ \pid -> send pid (int 0)
 
 receiver :: DSL repr => repr (Process repr ())
-receiver  = do msg :: repr Int <- recv
+receiver  = do msg :: repr Msg <- recv
                ifte (eq msg (int 0)) (return tt) (fail)
 
 master :: DSL repr => repr (Process repr ())

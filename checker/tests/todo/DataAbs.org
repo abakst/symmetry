@@ -1,0 +1,126 @@
+#+TITLE: Data Abstraction
+
+* Simple Protocol
+
+#+BEGIN_SRC
+p0:
+  send p1 0
+
+p1:
+  do r :: Int <- recv
+     if (r = 0) then (return ()) else (fail)
+#+END_SRC
+
+* Using Data Abstraction
+
+** Pred data type
+
+#+BEGIN_SRC
+data PredValue       = 0 | 1 | 2 (for unknown predicates)
+
+data MConstr = MTApp  { tycon :: MTyCon, typreds :: [PredValue] }
+             | MCaseL Label MConstr
+             | MCaseR Label MConstr
+             | MTProd { proj1 :: MConstr, proj2 :: MConstr }
+             deriving (Ord, Eq, Read, Show, Typeable, Data)
+
+data UnknownVal = UV String
+
+data Pred = Pred {
+  predOp    :: Op (=, ≠, >, ≯, <, ≮, ...),
+  predConst :: Int | Boolean | String | Pid | ... | UnknownVal
+}
+#+END_SRC
+
+** Some ideas about WP
+
+*NOTE:* For brevity, I ommitted the "global predicate list" argument of WP
+
+Base cases:
+- WP(true)  = SSkip
+- WP(false) = SAssume [] []
+
+Disjunction:
+- IF   WP(cond_{1}) = s_{1}
+- AND  WP(cond_{2}) = s_{2}
+- THEN WP(cond_{1} ∨ cond_{2}) = SNonDet [s_{1}, s_{2}]
+
+Conjunction:
+- IF   WP(cond_{1}) = SAssume [P_{11}, P_{12}, ...] [V_{11}, V_{12}, ...]
+- AND  WP(cond_{2}) = SAssume [P_{21}, P_{22}, ...] [V_{21}, V_{22}, ...]
+- THEN WP(cond_{1} ∧ cond_{2}) = SAssume [P_{11}, P_{12}, ..., P_{21}, P_{22}, ...]
+                                         [V_{11}, V_{12}, ..., V_{21}, V_{22}, ...]
+*NOTE:*
+- IF   ∃j,k . P_{1j} = P_{2k} ∧ V_{1j} ≠ V_{2k}
+- THEN since cond_{1} ∧ cond_{2} = false, WP(cond_{1} ∧ cond_{2}) = SAssume [] []
+
+** New statement type
+
+#+BEGIN_SRC
+data Stmt a = ...
+            | SAssume { msgValue     :: [PredValue]
+                      , assumedValue :: [Boolean]
+                      , annot        :: a
+                      }
+#+END_SRC
+
+translates (roughly) into
+
+#+BEGIN_SRC
+def assume([], []) =
+  while (true)
+
+def assume([p1,p2,...,pn], [v1,v2,...,vn]) =
+  while ( (p1 != 2 && p1 != v1)   ||
+          (p2 != 2 && p2 != v2)   ||
+          ...                     ||
+          (pn != 2 && pn != vn));
+#+END_SRC
+
+** Current Approach
+
+#+BEGIN_SRC
+old_config = Config {
+  cTypes  = fromList [(0, fromList [(0,MTApp (MTyCon "Int") [])])],
+  cSets   = [],
+  cUnfold = [],
+  cProcs  = [(PConc 0, SSkip ()),
+             (PConc 1, SBlock [
+                         SRecv (0,0, MTApp (MTyCon "Int") []) (),
+                         SNonDet [SSkip (), SDie ()] ()
+                       ] ()),
+             (PConc 5, SSend (PConc 1) (0,0,MTApp (MTyCon "Int") []) ())
+            ]
+  }
+#+END_SRC
+
+** Proposed IL code for this protocol
+
+#+BEGIN_SRC
+new_config = Config {
+  cPreds  = [v > 0, v = 0]                                                  -- generate this somehow :)
+  cTypes  = fromList [(0, fromList [(0,MTApp (MTyCon "Int") [0,1])])],
+  cSets   = [],
+  cUnfold = [],
+  cProcs  = [(PConc 0, SSkip ()),
+             (PConc 1, SBlock [
+                         SRecv (0,0, MTApp (MTyCon "Int") [P1,P2]) (),      -- let SPIN figure out P1 and P2
+                                                                            -- P1 corresponds to v > 0
+                                                                            -- P2 corresponds to v = 0
+                         SNonDet [SBlock [SAssume [P2] [1] (),              -- generate this statement using WP
+                                          SSkip ()],
+                                  SBlock [SAssume [P2] [0] (),              -- generate this statement using WP
+                                          SDie  ()]] ()
+                       ] ()),
+             (PConc 5, SSend (PConc 1) (0,0,MTApp (MTyCon "Int") [0,1]) ()) -- send [0,1] as well to process 1
+            ]
+  }
+#+END_SRC
+
+** Remaining issues
+
+- How to extract the global predicate list (GPL)
+- Conversion from a DSL expression (e.g. ~eq n (int 0)~) to the corresponding
+  boolean expression (BE) (e.g. n > 0)
+- Calculation of the weakest precondition (WP : BE × GPL → Stmt)
+- Mapping between variables (that recv returns) and corresponding MConstr's (VarMap : Var → MConstr)

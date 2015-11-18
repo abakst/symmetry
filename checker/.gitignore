@@ -6,3 +6,6 @@ TAGS
 *.hi
 *.o
 *.#*
+
+# for org-mode exports
+*.html
