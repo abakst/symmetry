@@ -16,20 +16,19 @@ p1:
 ** Pred data type
 
 #+BEGIN_SRC
-data PredValue       = 0 | 1 | 2 (for unknown predicates)
+data PredValue = Bool | PV String -- variable for the predicate value
 
-data MConstr = MTApp  { tycon :: MTyCon, typreds :: [PredValue] }
+data Pred = Pred {
+  predOp    :: Op (=, ≠, >, ≯, <, ≮, ...),
+  predConst :: Int | Boolean | String | Pid | ... | CV String -- variable for the constant value
+}
+
+data MConstr = MTApp  { tycon :: MTyCon, typreds :: [(Pred,PredValue)] }
              | MCaseL Label MConstr
              | MCaseR Label MConstr
              | MTProd { proj1 :: MConstr, proj2 :: MConstr }
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data UnknownVal = UV String
-
-data Pred = Pred {
-  predOp    :: Op (=, ≠, >, ≯, <, ≮, ...),
-  predConst :: Int | Boolean | String | Pid | ... | UnknownVal
-}
 #+END_SRC
 
 ** Cubes and strongest predicate
@@ -72,10 +71,7 @@ def assume([]) =
   while (true)
 
 def assume([(p1,v1),(p2,v2),...,(pn,vn)]) =
-  while ( (p1 != 2 && p1 != v1)   ||
-          (p2 != 2 && p2 != v2)   ||
-          ...                     ||
-          (pn != 2 && pn != vn));
+  while ((p1 != v1) || (p2 != v2) || ... || (pn != vn));
 #+END_SRC
 
 ** How to use SAssume
@@ -120,21 +116,29 @@ old_config = Config {
 
 #+BEGIN_SRC
 new_config = Config {
-  cPreds  = [v > 0, v = 0]                                                  -- generate this somehow :)
+  cPreds  = [v>0, v=0]
   cTypes  = fromList [(0, fromList [(0,MTApp (MTyCon "Int") [0,1])])],
   cSets   = [],
   cUnfold = [],
   cProcs  = [(PConc 0, SSkip ()),
+             -- Receiver process
              (PConc 1, SBlock [
-                         SRecv (0,0, MTApp (MTyCon "Int") [P1,P2]) (),      -- let SPIN figure out P1 and P2
-                                                                            -- P1 corresponds to v > 0
-                                                                            -- P2 corresponds to v = 0
-                         SNonDet [SBlock [SAssume [(P1,0),(P2,1)] (),       -- generate this statement using G_{V}(n = 0)
-                                          SSkip ()],
-                                  SBlock [SAssume [(P2,0)] (),              -- generate this statement using G_{V}(n != 0)
-                                          SDie  ()]] ()
+                         SRecv (0,0, MTApp (MTyCon "Int") [(v>0,PV "p1") -- let SPIN figure out p1 and p2
+                                                          ,(v=0,PV "p2")
+                                                          ]) ()
+                        ,SNonDet [SBlock [SAssume [(PV "p1",0) -- generate SAssume using G_{V}(n = 0)
+                                                  ,(PV "p2",1)
+                                                  ] ()
+                                         ,SSkip ()
+                                         ]
+                                 ,SBlock [SAssume [(PV "p2",0)] () -- generate SAssume using G_{V}(n != 0)
+                                         ,SDie  ()
+                                         ]
+                                 ] ()
                        ] ()),
-             (PConc 5, SSend (PConc 1) (0,0,MTApp (MTyCon "Int") [0,1]) ()) -- send [0,1] as well to process 1
+             -- Sender process
+             (PConc 5, SSend (PConc 1) (0,0,MTApp (MTyCon "Int") [(v=0,True)]) ()) -- send (v=0) = True
+                                                                                   -- and  (v>0) = random()
             ]
   }
 #+END_SRC
@@ -142,7 +146,6 @@ new_config = Config {
 ** Remaining issues
 
 - How to extract the global predicate list E
-- Conversion from a DSL expression (e.g. ~eq n (int 0)~) to the corresponding
-  boolean expression (BE) (e.g. n > 0)
+- Conversion from a DSL expression (e.g. ~eq n (int 0)~) to the corresponding boolean expression (BE) (e.g. n > 0)
 - Implementation of G_{V}
 - Mapping between variables (that recv returns) and corresponding MConstr's (VarMap : Var → MConstr)
