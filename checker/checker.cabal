@@ -21,6 +21,9 @@ library
                    Symmetry.Language.Syntax
                    Symmetry.Language
                    Symmetry.IL.Render
+                   Symmetry.IL.Unfold
+                   Symmetry.IL.Subst
+                   Symmetry.IL.Inst
                    Symmetry.IL.AST
                    Symmetry.SymbEx
                    Symmetry.Verify

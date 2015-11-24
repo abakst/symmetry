@@ -10,6 +10,7 @@ module Symmetry.SymbEx where
 import           Prelude hiding (error, undefined)
 import           Data.Generics
 import           Data.Maybe
+import           Data.List (nub, (\\))
 import           Text.PrettyPrint.Leijen (pretty)
 
 import           GHC.Stack (CallStack)
@@ -53,6 +54,8 @@ stateToConfigs state
                                           , IL.cSets  = setBounds
                                           , IL.cProcs = procs
                                           , IL.cUnfold = []
+                                          , IL.cGlobals = globals
+                                          , IL.cGlobalSets = (globalSets \\ sets)
                                           }
         where
           kvs   = M.toList renv
@@ -61,6 +64,13 @@ stateToConfigs state
           setBounds = [ IL.Bounded (roleToSet r) x | (M r, (AInt _ (Just x), _)) <- kvs ]
           sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
           procs = concProcs ++ absProcs
+          globals = nub
+                  . concatMap IL.unboundVars
+                  $ map snd procs
+          globalSets = nub
+                     . concatMap IL.unboundSets
+                     $ map snd procs
+                           
 
 emptyState :: SymbState
 emptyState = SymbState { renv = M.empty
@@ -160,7 +170,7 @@ absToILType x = M.fromList . zip [0..] $ go (typeRep x)
         = [IL.MTApp (IL.MTyCon "Pid") [IL.PVar (IL.V "x")]]
       | tyConName (typeRepTyCon a) == "Pid" &&
         "RMulti" == (tyConName . typeRepTyCon $ head as)
-        = [IL.MTApp (IL.MTyCon "PidMulti") [IL.PVar (IL.V "x")]]
+        = [IL.MTApp (IL.MTyCon "PidMulti") []]
       | tyConName (typeRepTyCon a) == "[]" &&
         tyConName (typeRepTyCon $ head as) == "Char"
         = [IL.MTApp (IL.MTyCon "String") []]
@@ -292,6 +302,9 @@ varToIL (V x) = IL.V ("x_" ++ show x)
 varToILSet :: Var a -> IL.Set
 varToILSet (V x) = IL.S ("x_" ++ show x)
 
+varToILSetVar :: Var a -> IL.Set
+varToILSetVar (V x) = IL.SV ("x_" ++ show x)
+
 pidAbsValToIL :: (?callStack :: CallStack)
               => AbsVal (Pid RSing) -> IL.Pid
 pidAbsValToIL (APid Nothing (Pid (Just (RS r)))) = IL.PConc r
@@ -324,8 +337,8 @@ absToIL (APid Nothing (Pid (Just (RSelf (M r))))) = [mkVal "Pid" [IL.PAbs (IL.V 
 absToIL (APid Nothing (Pid (Just (RElem (RM r))))) = error "TBD: elem"
 absToIL (APid Nothing (Pid Nothing))          = error "wut"
 
-absToIL (APidMulti (Just x) _)              = [mkVal "PidMulti" [IL.PVar $ varToIL x]]
-absToIL (APidMulti Nothing (Pid (Just r)))  = [mkVal "PidMulti" [IL.PAbs (IL.V "i") (roleToSet r)]]
+absToIL (APidMulti (Just x) _)              = [mkVal "PidMulti" []]
+absToIL (APidMulti Nothing (Pid (Just r)))  = [mkVal "PidMulti" []]
 
 
 absToIL (ASum _ (Just a) Nothing)  = IL.MCaseL IL.LL <$> absToIL a
@@ -700,7 +713,7 @@ symDoMany p f
                           AProc Nothing (iterVar v x s) (error "TBD: symDoMany")
     where
       iter v r s    = IL.SIter (varToIL v) (roleToSet r) s ()
-      iterVar v x s = IL.SIter (varToIL v) (IL.SSetVar (varToIL x)) s ()
+      iterVar v x s = IL.SIter (varToIL v) (varToILSetVar x) s ()
 
 roleToSet :: RMulti -> IL.Set
 roleToSet (RM n) = IL.S $ "role_" ++ show n

@@ -34,4 +34,4 @@ master = lam $ \n -> do chatRole <- newRMulti
                         return tt
          -- 1. Spawn a bunch of clients
          -- 3. Send the "bunch" of clients to each client
-main = checkerMain (exec (app master (int 3)))
+main = checkerMain (exec (app master arb))

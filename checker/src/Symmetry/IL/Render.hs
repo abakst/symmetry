@@ -18,6 +18,9 @@ import           Text.Printf
 import           Data.List
 
 import           Symmetry.IL.AST
+import           Symmetry.IL.Unfold
+import           Symmetry.IL.Inst
+import           Symmetry.IL.Subst
 
 debug :: Show a => String -> a -> a
 debug msg x =
@@ -866,9 +869,16 @@ macros =
   , text decMacro
   ]
 
+declGlobals :: [Var] -> Doc
+declGlobals = vcat . map go
+  where
+    go (V v) = byte <+> text v <> semi
+
 render :: (Eq a, Show a, Data a) => Config a -> Doc
-render c@(Config { cTypes = ts, cSets = bs })
-  = all_stmts (cProcs unfolded) <$$> mtype
+render c@(Config { cTypes = ts, cSets = bs, cGlobals = gs })
+  =      all_stmts (cProcs unfolded)
+    <$$> mtype
+    <$$> declGlobals gs
     <$$> align (vcat macros)
     <$$> declProcVars pMap <> declSets bs
     <$$> declMailBoxes pMap vMap

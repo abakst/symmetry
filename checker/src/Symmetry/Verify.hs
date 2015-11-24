@@ -5,6 +5,8 @@ module Symmetry.Verify where
 import Symmetry.SymbEx
 import Symmetry.IL.Render
 import Symmetry.IL.AST
+import Symmetry.IL.Unfold
+import Symmetry.IL.Inst
 import Symmetry.IL.TrailParser
 
 import System.Console.ANSI
