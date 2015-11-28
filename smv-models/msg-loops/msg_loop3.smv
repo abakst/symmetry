@@ -1,0 +1,156 @@
+ordset NAT 0..;
+typedef PC_A { A_L0, A_L1, A_L2, A_L3 };
+typedef PC_B { B_L0, B_L1, B_L2, B_L3 };
+typedef PROC { PA, PB };
+
+module main(sched, n)
+{
+  abstract inject_bug : boolean;
+  input n : NAT;
+  r : boolean;
+  input sched : PROC;
+  pc_a : PC_A;
+  pc_b : PC_B;
+  ptr_a_r : NAT;
+  ptr_a_w : NAT;
+  ptr_b_r : NAT;
+  ptr_b_w : NAT;
+
+  a_idx : NAT;
+  b_idx : NAT;
+
+  blocked_a : boolean;
+  blocked_b : boolean;
+  done_a : boolean;
+  done_b : boolean;
+
+  mbox_b : array NAT of NAT;
+  mbox_a : array NAT of NAT;
+
+  init(pc_a) := A_L0;
+  init(ptr_a_r) := 0;
+  init(ptr_a_w) := 0;
+  init(a_idx) := 0;
+
+  init(pc_b) := B_L0;
+  init(ptr_b_r) := 0;
+  init(ptr_b_w) := 0;
+  init(b_idx) := 0;
+
+  init(r) := {0, 1};
+
+  blocked_a := 0;
+  blocked_b := (pc_b = B_L0 | pc_b = B_L1) & (ptr_b_r >= ptr_b_w); 
+  done_a  := pc_a = A_L3;
+  done_b  := pc_b = B_L3;
+
+  inject_bug := 0;
+  default {
+    next(n) := n;
+    next(r) := {0, 1};
+    forall (i in NAT)
+    {
+      next(mbox_a[i]) := mbox_a[i];
+      next(mbox_b[i]) := mbox_b[i];
+    }
+
+    next(pc_a) := pc_a;
+    next(ptr_a_r) := ptr_a_r;
+    next(ptr_a_w) := ptr_a_w;
+    next(a_idx) := a_idx;
+
+    next(pc_b) := pc_b;
+    next(ptr_b_r) := ptr_b_r;
+    next(ptr_b_w) := ptr_b_w;
+    next(b_idx) := b_idx;
+
+    next(sched) := {PA, PB};
+  } in {
+    case {
+         (sched = PA & pc_a = A_L0) :
+         /** send(B, Int) **/
+         {
+           next(pc_a)            := A_L1;
+           next(ptr_b_w)         := ptr_b_w + 1;
+           next(mbox_b[ptr_b_w]) := a_idx;
+         }
+         (sched = PA & pc_a = A_L1) :
+         /** send(B, Int) **/
+         {
+           next(pc_a)            := A_L2;
+           next(ptr_b_w)         := ptr_b_w + 1;
+           next(mbox_b[ptr_b_w]) := a_idx;
+         }
+         (sched = PA & pc_a = A_L2) :
+         /** i++; if (i < n) goto 0 **/
+         {
+           next(a_idx) := a_idx + 1;
+           if (a_idx >= n) {
+             next(pc_a) := A_L3;
+           } else {
+             next(pc_a) := A_L0;
+           }
+         }
+
+         /** recv(Int) **/
+         (sched = PB & pc_b = B_L0 & ptr_b_r < ptr_b_w) :
+         {
+           next(pc_b)    := B_L1;
+           next(ptr_b_r) := ptr_b_r + 1;
+         }
+         /** recv(Int) **/
+         (sched = PB & pc_b = B_L1 & ptr_b_r < ptr_b_w) :
+         {
+           next(pc_b)    := B_L2;
+           next(ptr_b_r) := ptr_b_r + 1;
+         }
+         /** if (i < n) goto 0 **/
+         (sched = PB & pc_b = B_L2) :
+         {
+           next(b_idx) := b_idx + 1;
+           if (b_idx >= n) {
+             next(pc_b) := B_L3;
+           } else {
+             next(pc_b) := B_L0;
+           }
+         }
+       }
+    }
+
+  a_send_tag : assert G ((pc_a = A_L0 -> a_idx <= ptr_b_w) &
+                         (pc_a = A_L1 -> a_idx <= ptr_b_w - 1) &
+                         (pc_a = A_L2 -> a_idx <= ptr_b_w - 2));
+
+  b_recv_tag : assert G ((pc_b = B_L0 -> b_idx = ptr_b_r) &
+                         (pc_b = B_L1 -> b_idx = ptr_b_r - 1) &
+                         (pc_b = B_L2 -> b_idx = ptr_b_r - 2));
+
+  /** Deadlock states **/
+  deadlocked : boolean;
+  deadlocked := ((blocked_b & done_a) |
+                 (blocked_a & done_b) |
+                 (blocked_a & blocked_b));
+
+  deadlock_free : assert G ~ deadlocked;
+
+  /** The proof **/
+  forall (i in NAT) forall (j in NAT) forall (k in NAT) {
+    subcase
+      sub_deadlock_free[i][j][k] of deadlock_free for i = b_idx & j = a_idx & k = n;
+    using
+      NAT->{0,j-2,j-1,j,k},
+      a_send_tag, 
+      b_recv_tag, 
+      (deadlock_free)
+    prove sub_deadlock_free[i][j][k];
+  }
+
+  forall (i in NAT) forall (j in NAT) forall (k in NAT) {
+    subcase sub_a_send_tag[i][j][k] of a_send_tag for i = a_idx & j = ptr_b_w & n = k;
+    using NAT->{0,j-2,j-1,j,k}, (a_send_tag) prove sub_a_send_tag[i][j][k];
+
+    subcase sub_b_recv_tag[i][j][k] of b_recv_tag for i = b_idx & j = ptr_b_r & n = k;
+    using NAT->{0,j-2,j-1,j,k}, (b_recv_tag) prove sub_b_recv_tag[i][j][k];
+  }
+
+}

@@ -1,0 +1,164 @@
+ordset NAT 0..;
+typedef PC_A { A_L0, A_L1, A_L2, A_L3 };
+typedef PC_B { B_L0, B_L1, B_L2 };
+typedef PC_C { C_L0, C_L1, C_L2 };
+typedef PROC { PA, PB, PC };
+
+module main(sched, n)
+{
+  input n : NAT;
+  input sched : PROC;
+  pc_a : PC_A;
+  pc_b : PC_B;
+  pc_c : PC_C;
+  ptr_a_r : NAT;
+  ptr_a_w : NAT;
+
+  a_idx : NAT;
+  b_idx : NAT;
+  c_idx : NAT;
+
+  abstract blocked_a : boolean;
+  abstract done_a : boolean;
+  abstract done_b : boolean;
+  abstract done_c : boolean;
+
+  mbox_a : array NAT of NAT;
+
+  init(pc_a) := A_L0;
+  init(pc_b) := B_L0;
+  init(pc_c) := C_L0;
+  init(ptr_a_r) := 0;
+  init(ptr_a_w) := 0;
+  init(a_idx) := 0;
+  init(b_idx) := 0;
+  init(c_idx) := 0;
+
+  blocked_a := (pc_a = A_L0 | pc_a = A_L1) & (ptr_a_r >= ptr_a_w);
+  done_a  := pc_a = A_L3;
+  done_b  := pc_b = B_L2;
+  done_c  := pc_b = C_L2;
+
+  default {
+    next(n) := n;
+    forall (i in NAT)
+    {
+      next(mbox_a[i]) := mbox_a[i];
+    }
+
+    next(pc_a) := pc_a;
+    next(ptr_a_r) := ptr_a_r;
+    next(ptr_a_w) := ptr_a_w;
+    next(a_idx) := a_idx;
+
+    next(pc_b) := pc_b;
+    next(b_idx) := b_idx;
+
+    next(pc_c) := pc_c;
+    next(c_idx) := c_idx;
+
+    next(sched) := {PA, PB, PC};
+  } in {
+    case {
+         (sched = PA & pc_a = A_L0 & ptr_a_r < ptr_a_w) :
+         /** recv(Int) **/
+         {
+           next(pc_a)            := A_L1;
+           next(ptr_a_r)         := ptr_a_r + 1;
+         }
+         (sched = PA & pc_a = A_L1 & ptr_a_r < ptr_a_w) :
+         /** recv(Int) **/
+         {
+           next(pc_a)            := A_L2;
+           next(ptr_a_r)         := ptr_a_r + 1;
+         }
+         (sched = PA & pc_a = A_L2) :
+         /** i++; if (i < n) goto 0 **/
+         {
+           next(a_idx) := a_idx + 1;
+           if (a_idx >= n) {
+             next(pc_a) := A_L3;
+           } else {
+             next(pc_a) := A_L0;
+           }
+         }
+
+         /** send(A,Int) **/
+         (sched = PB & pc_b = B_L0) :
+         {
+           next(pc_b)    := B_L1;
+           next(ptr_a_w) := ptr_a_w + 1;
+         }
+         /** if (i < n) goto 0 **/
+         (sched = PB & pc_b = B_L1) :
+         {
+           next(b_idx) := b_idx + 1;
+           if (b_idx >= n) {
+             next(pc_b) := B_L2;
+           } else {
+             next(pc_b) := B_L0;
+           }
+         }
+
+         /** send(A,Int) **/
+         (sched = PC & pc_c = C_L0) :
+         {
+           next(pc_c)    := C_L1;
+           next(ptr_a_w) := ptr_a_w + 1;
+         }
+         /** if (i < n) goto 0 **/
+         (sched = PC & pc_c = C_L1) :
+         {
+           next(c_idx) := c_idx + 1;
+           if (c_idx >= n) {
+             next(pc_c) := C_L2;
+           } else {
+             next(pc_c) := C_L0;
+           }
+         }
+       }
+    }
+
+  a_recv_tag : assert G ((pc_a = A_L0 -> a_idx <= ptr_a_r) &
+                         (pc_a = A_L1 -> a_idx <= ptr_a_r - 1) &
+                         (pc_a = A_L2 -> a_idx <= ptr_a_r - 2));
+
+  b_send_tag : assert G ((pc_b = B_L0 -> b_idx <= ptr_a_w) &
+                         (pc_b = B_L1 -> b_idx <= ptr_a_w - 1) &
+                         (pc_b = B_L2 -> b_idx <= ptr_a_w));
+
+  c_send_tag : assert G ((pc_c = C_L0 -> c_idx <= ptr_a_w) &
+                         (pc_c = C_L1 -> c_idx <= ptr_a_w - 1) &
+                         (pc_c = C_L2 -> c_idx <= ptr_a_w));
+
+  deadlocked : boolean;
+  deadlocked := blocked_a & done_b & done_c;
+
+  /** Deadlock states **/
+  deadlock_free : assert G ~ deadlocked;
+
+  /** The proof **/
+  forall (i in NAT) forall (j in NAT) forall (k in NAT) {
+    subcase
+      sub_deadlock_free[i][j][k] of deadlock_free for i = a_idx & j = b_idx & k = n;
+    using
+      NAT->{0,j-2,j-1,j,k},
+      a_recv_tag, 
+      b_send_tag, 
+      c_send_tag, 
+      (deadlock_free)
+    prove sub_deadlock_free[i][j][k];
+  }
+
+  forall (i in NAT) forall (j in NAT) forall (k in NAT) {
+    subcase sub_a_recv_tag[i][j][k] of a_recv_tag for i = a_idx & j = ptr_a_r & n = k;
+    using NAT->{0,j-2,j-1,j,k}, (a_recv_tag) prove sub_a_recv_tag[i][j][k];
+
+    subcase sub_b_send_tag[i][j][k] of b_send_tag for i = b_idx & j = ptr_a_w & n = k;
+    using NAT->{0,j-2,j-1,j,k}, (b_send_tag) prove sub_b_send_tag[i][j][k];
+
+    subcase sub_c_send_tag[i][j][k] of c_send_tag for i = c_idx & j = ptr_a_w & n = k;
+    using NAT->{0,j-2,j-1,j,k}, (c_send_tag) prove sub_c_send_tag[i][j][k];
+  }
+
+}

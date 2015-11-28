@@ -1,0 +1,113 @@
+ordset NAT 0..;
+typedef LOC { P0_0, P0_1, P0_2, P1_0, P1_1, P1_2 };
+typedef PROC { PA, PB };
+
+module main(sched, n, r)
+{
+  abstract inject_bug : boolean;
+  input n : NAT;
+  input r : boolean;
+  input sched : PROC;
+  pc_a : LOC;
+  pc_b : LOC;
+  ptr_a : NAT;
+  ptr_b : NAT;
+
+  a_idx : NAT;
+  b_idx : NAT;
+
+  blocked : boolean;
+  done : boolean;
+
+  mbox : array NAT of NAT;
+
+  init(pc_a) := P0_0;
+  init(ptr_a) := 0;
+  init(a_idx) := 0;
+
+  init(pc_b) := P1_0;
+  init(ptr_b) := 0;
+  init(b_idx) := 0;
+  
+
+  blocked := (pc_b = P1_0) & (ptr_a <= ptr_b);
+  done    := pc_a = P0_2;
+
+  inject_bug := 0;
+  
+  default {
+    next(r) := {0, 1};
+    next(n) := n;
+    forall (i in NAT) 
+      next(mbox[i]) := mbox[i];
+
+    next(pc_a) := pc_a;
+    next(ptr_a) := ptr_a;
+    next(a_idx) := a_idx;
+
+    next(pc_b) := pc_b;
+    next(ptr_b) := ptr_b;
+    next(b_idx) := b_idx;
+
+    next(sched) := {PA, PB};
+  } in {
+    case {
+         (sched = PA & pc_a = P0_0) :
+         {
+           next(mbox[ptr_a]) := a_idx;
+           next(pc_a) := P0_1;
+           if (~inject_bug | r) {
+             next(ptr_a) := ptr_a + 1;
+           } else {
+             next(ptr_a) := ptr_a;
+           }
+           next(a_idx) := a_idx + 1;
+         }
+         (sched = PA & pc_a = P0_1) :
+         {
+           if (a_idx >= n) {
+             next(pc_a) := P0_2;
+           } else {
+             next(pc_a) := P0_0;
+           }
+         }
+         (sched = PB & pc_b = P1_0 & ptr_a > ptr_b) :
+         {
+           next(ptr_b) := ptr_b + 1;
+           next(pc_b) := P1_1;
+           next(b_idx) := b_idx + 1;
+         }
+         (sched = PB & pc_b = P1_1) :
+         {
+           if (b_idx >= n) {
+             next(pc_b) := P1_2;
+           } else {
+             next(pc_b) := P1_0;
+           }
+         }
+       }
+    }
+
+  a_send_tag : assert G (a_idx = ptr_a);
+  forall (i in NAT) forall (j in NAT) forall (k in NAT) {
+    subcase sub_a_send_tag[i][j][k] of a_send_tag for i = a_idx & j = ptr_a & n = k;
+    using NAT->{0,i,j,k}, (a_send_tag) prove sub_a_send_tag[i][j][k];
+  }
+  b_send_tag : assert G (b_idx = ptr_b);
+  forall (i in NAT) forall (j in NAT) forall (k in NAT) {
+    subcase sub_b_send_tag[i][j][k] of b_send_tag for i = b_idx & j = ptr_b & n = k;
+    using NAT->{0,i,j,k}, (b_send_tag) prove sub_b_send_tag[i][j][k];
+  }
+
+  deadlock_free : assert G (n > 0 -> ~ (blocked & done));
+  forall (i in NAT) forall (j in NAT) forall (k in NAT){
+    subcase
+      sub_deadlock_free[i][j][k] of deadlock_free for i = a_idx & j = b_idx & k = n;
+    using
+      NAT->{0,i,j-1,j,k},
+      a_send_tag, 
+      b_send_tag, 
+      (deadlock_free)
+    prove sub_deadlock_free[i][j][k];
+  }
+}
