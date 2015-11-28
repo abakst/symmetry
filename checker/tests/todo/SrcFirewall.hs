@@ -37,8 +37,7 @@ recv_answer  = do msg :: repr Msg <- recv
                   match msg reject id
 
 firewall :: FirewallSem repr => repr (Process repr ())
-firewall  = do l :: repr [Int] <- app any_list tt
-               app start l
+firewall  = do app start arb
 
 start :: FirewallSem repr => repr ([Int] -> Process repr ())
 start  = lam $ \l -> do r_srv <- newRSing
