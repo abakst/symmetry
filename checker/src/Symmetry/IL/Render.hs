@@ -140,9 +140,9 @@ inrCstr = text "RR"
 renderSendMsg :: MConstr -> Doc
 renderSendMsg = hcat . punctuate comma . go
   where
-    go m@(MTApp _ [])
+    go m@(MTApp _ [] _)
       = [renderMConstr m]
-    go m@(MTApp _ _)
+    go m@(MTApp _ _ _)
       = renderMConstr m : (punctuate comma $ renderPids m)
     go (MCaseL l c) = renderLabel l : go c
     go (MCaseR l c) = renderLabel l : go c
@@ -155,9 +155,9 @@ renderLabel (VL (V x)) = text x
 renderRecvMsg :: MConstr -> Doc
 renderRecvMsg = hcat . punctuate comma . go
   where
-    go m@(MTApp _ [])
+    go m@(MTApp _ [] _)
       = [renderMConstr m]
-    go m@(MTApp _ _)
+    go m@(MTApp _ _ _)
       = renderMConstr m : (punctuate comma $ renderEvalPids m)
     go (MCaseL l c) = renderLabel l : go c
     go (MCaseR l c) = renderLabel l : go c
@@ -765,7 +765,7 @@ chanMsgType
   = enclose lbrace rbrace . hcat . punctuate comma . chanMsgType'
 
 chanMsgType' :: MConstr -> [Doc]
-chanMsgType' (MTApp _ as)
+chanMsgType' (MTApp {tyargs = as})
   = text "mtype" : map (const byte) as
 chanMsgType' (MCaseL _ c)
   = text "mtype" : chanMsgType' c

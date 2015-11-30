@@ -154,22 +154,22 @@ absToILType x = M.fromList . zip [0..] $ go (typeRep x)
     go :: TypeRep -> [IL.MConstr]
     go a
       | tyConName (typeRepTyCon a) == "()"
-        = [IL.MTApp (IL.MTyCon "Unit") []]
+        = [IL.MTApp (IL.MTyCon "Unit") [] []]
       | tyConName (typeRepTyCon a) == "Pid" &&
         "RSing" == (tyConName . typeRepTyCon $ head as)
-        = [IL.MTApp (IL.MTyCon "Pid") [IL.PVar (IL.V "x")]]
+        = [IL.MTApp (IL.MTyCon "Pid") [IL.PVar (IL.V "x")] []]
       | tyConName (typeRepTyCon a) == "[]" &&
         tyConName (typeRepTyCon $ head as) == "Char"
-        = [IL.MTApp (IL.MTyCon "String") []]
+        = [IL.MTApp (IL.MTyCon "String") [] []]
       | tyConName (typeRepTyCon a) == "[]"
-        = [IL.MTApp (IL.MTyCon ("List" {- ++ concat [ tyConName $ typeRepTyCon a | a <- as ] -})) []]
+        = [IL.MTApp (IL.MTyCon ("List" {- ++ concat [ tyConName $ typeRepTyCon a | a <- as ] -})) [] []]
       | tyConName (typeRepTyCon a) == "Either"
         =    (IL.MCaseL IL.LL <$> go (head as))
           ++ (IL.MCaseR IL.RL <$> go (as !! 1))
       | tyConName (typeRepTyCon a) == "(,)"
         = [IL.MTProd c1 c2 | c1 <- go (head as), c2 <- go (as !! 1)]
       | otherwise
-        = [IL.MTApp (IL.MTyCon (tyConName $ typeRepTyCon a)) []]
+        = [IL.MTApp (IL.MTyCon (tyConName $ typeRepTyCon a)) [] []]
       where
         as = typeRepArgs a
 
@@ -296,7 +296,7 @@ pidAbsValToIL _                 = error "pidAbsValToIL: back to the drawing boar
 
 
 mkVal :: String -> [IL.Pid] -> IL.MConstr
-mkVal s = IL.MTApp (IL.MTyCon s)
+mkVal s ps = IL.MTApp (IL.MTyCon s) ps []
 
 absToIL :: (?callStack :: CallStack)
         => AbsVal a -> [IL.MConstr]

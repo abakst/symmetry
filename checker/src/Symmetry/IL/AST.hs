@@ -4,7 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Symmetry.IL.AST where
 
-import           Prelude hiding (concatMap, mapM, foldl, concat)
+import           Prelude hiding (concatMap, mapM, foldl, concat, LT, EQ, GT)
 import           Data.Traversable
 import           Data.Foldable
 import           Data.Maybe
@@ -60,13 +60,32 @@ subUnfoldIdx :: Pid -> Pid
 subUnfoldIdx (PUnfold _ s i) = PUnfold (V (show i)) s i
 subUnfoldIdx p = p
 
+data PredValue = PB    Bool
+               | PVVar Var -- variable for the predicate value
+               deriving (Ord, Eq, Read, Show, Typeable, Data)
+
+data Op = LT | LE | EQ | NE | GE | GT
+          deriving (Ord, Eq, Read, Show, Typeable, Data)
+
+data Const = CI   Int
+           | CB   Bool
+           | CS   String
+           | CVar Var -- variable for the constant value
+           deriving (Ord, Eq, Read, Show, Typeable, Data)
+
+data Pred = Pred { predOp    :: Op
+                 , predConst :: Const }
+            deriving (Ord, Eq, Read, Show, Typeable, Data)
+
 data Label = LL | RL | VL Var
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data MConstr = MTApp  { tycon :: MTyCon, tyargs :: [Pid] }
+data MConstr = MTApp { tycon   :: MTyCon
+                     , tyargs  :: [Pid]
+                     , typreds :: [(Pred,PredValue)]
+                     }
              | MCaseL Label MConstr
              | MCaseR Label MConstr
-             -- | MTSum MConstr MConstr
              | MTProd { proj1 :: MConstr, proj2 :: MConstr }
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
@@ -202,6 +221,9 @@ data Stmt a = SSkip { annot :: a }
             | SDie { annot :: a }
             {- These do not appear in the source: -}
             | SNull { annot :: a }
+            | SAssume { assumptions :: [(PredValue, Bool)]
+                      , annot       :: a
+                      }
             -- | SVarDecl Var a
             -- | STest Var a
          deriving (Eq, Read, Show, Functor, Foldable, Data, Typeable)
@@ -261,7 +283,7 @@ boundAbs c@(Config {cProcs = ps, cSets = bs})
     us = [ Conc s n | (PAbs _ s, _) <- ps , Bounded s' n <- bs , s == s']
 
 instConstr :: [Pid] -> MConstr -> [MConstr]
-instConstr dom c@(MTApp _ _)
+instConstr dom c@(MTApp _ _ _)
   = map (`substCstr` c) . allSubs dom $ pvars c
 instConstr dom (MCaseL _ c)
   = [MCaseL LL c' | c' <- instConstr dom c]
@@ -326,18 +348,25 @@ allSubs dom (x:xs)
     subs v  = [ emptySubst { cPidSub = [(v, p)] } | p <- dom ]
 
 pvars :: MConstr -> [Var]
-pvars (MTApp _ xs)   = [v | PVar v <- xs]
+pvars (MTApp _ xs _) = [v | PVar v <- xs]
 pvars (MCaseL _ c)   = pvars c
 pvars (MCaseR _ c)   = pvars c
 pvars (MTProd c1 c2) = nub (pvars c1 ++ pvars c2)
 
 lvars :: MConstr -> [Var]
-lvars (MTApp _ _)       = []
+lvars (MTApp _ _ _)     = []
 lvars (MCaseL (VL l) c) = l : lvars c
 lvars (MCaseR (VL l) c) = l : lvars c
 lvars (MCaseL _ c)      = lvars c
 lvars (MCaseR _ c)      = lvars c
 lvars (MTProd c1 c2)    = nub (lvars c1 ++ lvars c2)
+
+-- collects all predicate - variable pairs from the type
+bvars :: MConstr -> [(Pred,Var)]
+bvars (MTApp _ _ xs) = [ (p,v) | (p,PVVar v) <- xs ]
+bvars (MCaseL _ c)   = bvars c
+bvars (MCaseR _ c)   = bvars c
+bvars (MTProd c1 c2) = nub (bvars c1 ++ bvars c2)
 
 instAbs :: (Show a, Eq a, Data a) => Config a -> Config a
 instAbs c@(Config { cProcs = ps })
@@ -532,10 +561,10 @@ subst s (SCase v l r a)
 subst _ s = s
 
 substCstr :: Subst -> MConstr -> MConstr
-substCstr sub (MTApp tc as) = MTApp tc $ map (substPid sub) as
-substCstr sub (MCaseL l c)  = MCaseL (substLabel sub l) $ substCstr sub c
-substCstr sub (MCaseR l c)  = MCaseR (substLabel sub l) $ substCstr sub c
-substCstr sub (MTProd c c') = MTProd (substCstr sub c) (substCstr sub c')
+substCstr sub (MTApp tc as p) = MTApp tc (map (substPid sub) as) p
+substCstr sub (MCaseL l c)    = MCaseL (substLabel sub l) $ substCstr sub c
+substCstr sub (MCaseR l c)    = MCaseR (substLabel sub l) $ substCstr sub c
+substCstr sub (MTProd c c')   = MTProd (substCstr sub c) (substCstr sub c')
 
 substMS :: Subst -> (TId, CId, MConstr) -> (TId, CId, MConstr)
 substMS sub (ti,ci,m)
@@ -666,11 +695,11 @@ instance Pretty Label where
   pretty (VL x) = pretty x
 
 instance Pretty MConstr where
-  pretty (MTApp tc [])   = text (untycon tc)
-  pretty (MTApp tc args) = text (untycon tc) <> pretty args
-  pretty (MCaseL l t)    = pretty l <+> pretty t
-  pretty (MCaseR l t)    = pretty l <+> pretty t
-  pretty (MTProd t1 t2)  = parens (pretty t1 <> text ", " <> pretty t2)
+  pretty (MTApp tc [] _)   = text (untycon tc)
+  pretty (MTApp tc args _) = text (untycon tc) <> pretty args
+  pretty (MCaseL l t)      = pretty l <+> pretty t
+  pretty (MCaseR l t)      = pretty l <+> pretty t
+  pretty (MTProd t1 t2)    = parens (pretty t1 <> text ", " <> pretty t2)
 
 instance Pretty (Stmt a) where
   pretty (SSkip _)
@@ -718,6 +747,21 @@ instance Pretty (Stmt a) where
 
   pretty (SNull _)
     = text "<null>"
+
+instance Pretty PredValue where
+  pretty (PB b)    = pretty b
+  pretty (PVVar v) = pretty v
+
+instance Pretty Const where
+  pretty (CI i)   = pretty i
+  pretty (CB b)   = pretty b
+  pretty (CS s)   = pretty s
+  pretty (CVar v) = pretty v
+
+instance Pretty Op where
+  pretty o =
+    case o of
+      LT -> text "<"
 
 prettyMsg :: (TId, CId, MConstr) -> Doc
 prettyMsg (t, c, v)
