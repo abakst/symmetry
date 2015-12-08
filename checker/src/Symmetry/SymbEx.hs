@@ -10,6 +10,7 @@ module Symmetry.SymbEx where
 import           Prelude hiding (error, undefined)
 import           Data.Generics
 import           Data.Maybe
+import           Data.List (nub, (\\))
 import           Text.PrettyPrint.Leijen (pretty)
 
 import           GHC.Stack (CallStack)
@@ -36,7 +37,7 @@ envEq re1 re2
 data SymbState = SymbState { renv   :: REnv
                            , ctr    :: Int
                            , ntypes :: Int
-                           , me     :: Role
+                           , me     :: (AbsVal Int, Role)
                            , renvs  :: [REnv]
                            , tyenv  :: IL.MTypeEnv
                            }
@@ -53,6 +54,8 @@ stateToConfigs state
                                           , IL.cSets  = setBounds
                                           , IL.cProcs = procs
                                           , IL.cUnfold = []
+                                          , IL.cGlobals = globals
+                                          , IL.cGlobalSets = (globalSets \\ sets)
                                           }
         where
           kvs   = M.toList renv
@@ -61,13 +64,20 @@ stateToConfigs state
           setBounds = [ IL.Bounded (roleToSet r) x | (M r, (AInt _ (Just x), _)) <- kvs ]
           sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
           procs = concProcs ++ absProcs
+          globals = nub
+                  . concatMap IL.unboundVars
+                  $ map snd procs
+          globalSets = nub
+                     . concatMap IL.unboundSets
+                     $ map snd procs
+                           
 
 emptyState :: SymbState
 emptyState = SymbState { renv = M.empty
                        , renvs = []
                        , ctr = 1
                        , ntypes = 0
-                       , me = S (RS 0)
+                       , me = (AInt Nothing (Just 1), S (RS 0))
                        , tyenv = M.empty
                        }
 
@@ -158,6 +168,9 @@ absToILType x = M.fromList . zip [0..] $ go (typeRep x)
       | tyConName (typeRepTyCon a) == "Pid" &&
         "RSing" == (tyConName . typeRepTyCon $ head as)
         = [IL.MTApp (IL.MTyCon "Pid") [IL.PVar (IL.V "x")]]
+      | tyConName (typeRepTyCon a) == "Pid" &&
+        "RMulti" == (tyConName . typeRepTyCon $ head as)
+        = [IL.MTApp (IL.MTyCon "PidMulti") []]
       | tyConName (typeRepTyCon a) == "[]" &&
         tyConName (typeRepTyCon $ head as) == "Char"
         = [IL.MTApp (IL.MTyCon "String") []]
@@ -198,6 +211,9 @@ instance {-# OVERLAPPING #-} ArbPat SymbEx String where
 
 instance ArbPat SymbEx (Pid RSing) where            
   arb = SE . return $ APid Nothing (Pid Nothing)
+
+instance ArbPat SymbEx (Pid RMulti) where            
+  arb = SE . return $ APidMulti Nothing (Pid Nothing)
 
 instance {-# OVERLAPPABLE #-} ArbPat SymbEx a => ArbPat SymbEx [a] where
   arb = SE $ do a <- runSE arb
@@ -286,6 +302,9 @@ varToIL (V x) = IL.V ("x_" ++ show x)
 varToILSet :: Var a -> IL.Set
 varToILSet (V x) = IL.S ("x_" ++ show x)
 
+varToILSetVar :: Var a -> IL.Set
+varToILSetVar (V x) = IL.SV ("x_" ++ show x)
+
 pidAbsValToIL :: (?callStack :: CallStack)
               => AbsVal (Pid RSing) -> IL.Pid
 pidAbsValToIL (APid Nothing (Pid (Just (RS r)))) = IL.PConc r
@@ -317,6 +336,9 @@ absToIL (APid Nothing (Pid (Just (RSelf (S (RS r)))))) = [mkVal "Pid" [IL.PConc 
 absToIL (APid Nothing (Pid (Just (RSelf (M r))))) = [mkVal "Pid" [IL.PAbs (IL.V "i") (roleToSet r)]]
 absToIL (APid Nothing (Pid (Just (RElem (RM r))))) = error "TBD: elem"
 absToIL (APid Nothing (Pid Nothing))          = error "wut"
+
+absToIL (APidMulti (Just x) _)              = [mkVal "PidMulti" []]
+absToIL (APidMulti Nothing (Pid (Just r)))  = [mkVal "PidMulti" []]
 
 
 absToIL (ASum _ (Just a) Nothing)  = IL.MCaseL IL.LL <$> absToIL a
@@ -354,7 +376,7 @@ sendToIL p m = do
     sends i g cs       = map (mkSend . lkupMsg i g) cs
     nonDetSends i g cs p = case sends i g cs of
                              [s] -> choosePid p s
-                             ss  -> choosePid p (\p -> IL.SNonDet (map ($p) ss) ())
+                             ss  -> choosePid p (\p -> IL.SNonDet (map ($ p) ss) ())
 
 choosePid :: (?callStack :: CallStack)
           => AbsVal (Pid RSing) -> (IL.Pid -> IL.Stmt ()) -> SymbExM (IL.Stmt ())
@@ -415,7 +437,7 @@ insRoleM k n p = do m <- gets renv
                     case M.lookup k m of
                       Nothing -> do
                         oldMe <- gets me
-                        modify $ \s -> s { me = k }
+                        modify $ \s -> s { me = (n, k) }
                         AProc _ st _ <- runSE p
                         modify $ \s -> s { renv = M.insert k (n, st) (renv s), me = oldMe }
                       Just _  ->
@@ -425,9 +447,23 @@ symSpawnSingle :: (?callStack :: CallStack)
                => SymbEx RSing
                -> SymbEx (Process SymbEx a)
                -> SymbEx (Process SymbEx (Pid RSing))
-symSpawnSingle r p = SE $ do (ARoleSing _ r') <- runSE r
-                             insRoleM (S r') (AInt Nothing (Just 1)) p
-                             return $ AProc Nothing skip (APid Nothing (Pid (Just r')))
+symSpawnSingle r p = SE $ do (ARoleSing _ r'@(RS j)) <- runSE r
+                             meCtxt <- gets me
+                             case meCtxt of
+                               (_, S (RSelf (S _))) -> do 
+                                 insRoleM (S r') (AInt Nothing (Just 1)) p
+                                 return $ AProc Nothing skip (APid Nothing (Pid (Just r')))
+                               (_, S (RS _))        -> do
+                                 insRoleM (S r') (AInt Nothing (Just 1)) p
+                                 return $ AProc Nothing skip (APid Nothing (Pid (Just r')))
+                               (n, _)               -> do
+                                 m <- gets renv
+                                 let r'' = RM j
+                                 when (isJust (M.lookup (M r'') m)) err
+                                 insRoleM (M r'') n p
+                                 return $ AProc Nothing skip (APid Nothing (Pid (Just (RElem r''))))
+  where
+    err = error "Attempting to spawn already spawned role"
 
 symSpawnMany :: (?callStack :: CallStack)
              => SymbEx RMulti
@@ -436,7 +472,11 @@ symSpawnMany :: (?callStack :: CallStack)
              -> SymbEx (Process SymbEx (Pid RMulti))
 symSpawnMany r n p = SE $ do (ARoleMulti _ r') <- runSE r
                              a                 <- runSE n
-                             insRoleM (M r') a p
+                             (k, _)            <- gets me
+                             let num = case k of
+                                         AInt _ (Just 1) -> a
+                                         _               -> AInt Nothing Nothing
+                             insRoleM (M r') num p
                              return $ AProc Nothing skip (APidMulti Nothing (Pid (Just r')))
 
 -------------------------------------------------
@@ -560,7 +600,7 @@ symMatchList l nilCase consCase
 symSelf :: SymbEx (Process SymbEx (Pid RSing))
 -------------------------------------------------
 symSelf
-  = SE $ do r <- gets me
+  = SE $ do (_, r) <- gets me
             let role = RSelf r
             return . AProc Nothing skip $ APid Nothing (Pid (Just role))
 
@@ -663,12 +703,17 @@ symDoMany :: SymbEx (Pid RMulti)
 -------------------------------------------------
 symDoMany p f
   = SE $ do v <- freshVar
-            APidMulti _ (Pid (Just r)) <- runSE p
+            APidMulti x pid {- (Pid (Just r)) -} <- runSE p
             AArrow _ g                 <- runSE f
             AProc _ s _                <- runSE (g (APid (Just v) (Pid Nothing)))
-            return (AProc Nothing (iter v r s) (error "TBD: symDoMany"))
+            return $ case (x, pid) of
+                       (_, Pid (Just r)) -> 
+                          AProc Nothing (iter v r s) (error "TBD: symDoMany")
+                       (Just x, _) ->
+                          AProc Nothing (iterVar v x s) (error "TBD: symDoMany")
     where
-      iter v r s = IL.SIter (varToIL v) (roleToSet r) s ()
+      iter v r s    = IL.SIter (varToIL v) (roleToSet r) s ()
+      iterVar v x s = IL.SIter (varToIL v) (varToILSetVar x) s ()
 
 roleToSet :: RMulti -> IL.Set
 roleToSet (RM n) = IL.S $ "role_" ++ show n
@@ -679,7 +724,7 @@ symExec :: SymbEx (Process SymbEx a)
 symExec p
   = SE $ do (AProc _ st a) <- runSE p
             modify $ \s -> s { renv  = M.empty
-                             , renvs = M.insert (me s) (AInt Nothing (Just 1), st) (renv s) : renvs s
+                             , renvs = M.insert (snd $ me s) (AInt Nothing (Just 1), st) (renv s) : renvs s
                              }
             return a
 
