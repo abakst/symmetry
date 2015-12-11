@@ -3,11 +3,11 @@
 module Symmetry.Verify where
 
 import Symmetry.SymbEx
-import Symmetry.IL.Render
+import Symmetry.IL.Render.Horn
 import Symmetry.IL.AST
-import Symmetry.IL.Unfold
-import Symmetry.IL.Inst
-import Symmetry.IL.TrailParser
+-- import Symmetry.IL.Unfold
+-- import Symmetry.IL.Inst
+-- import Symmetry.IL.TrailParser
 
 import System.Console.ANSI
 import Control.Exception
@@ -93,21 +93,17 @@ run1Cfg opt outd cfg
          removeFile (outTrail outd) `catch` \(_ :: IOException) ->
            return ()
 
-       let cfgOut = unfoldAbs cfg
-
-       when (optModel opt) $ do
-         renderToFile (outf outd) cfgOut
-
-       when (optVerify opt) $ do 
-         runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName)
-         runCmd verb "COMPILING VERIFIER:" outd ccCmd
-         runCmd verb "CHECKING MODEL:" outd panCmd
+       -- when (optVerify opt) $ do 
+       --   runChecker cfg
+         -- runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName)
+         -- runCmd verb "COMPILING VERIFIER:" outd ccCmd
+         -- runCmd verb "CHECKING MODEL:" outd panCmd
 
        if (optVerify opt) then
-         do failure <- fileExists (outTrail outd)
-            let unfolded = filterBoundedAbs . freshIds . instAbs $ unfold cfgOut
-            when failure (printTrace verb outd unfolded)
-            return $ not failure
+         runChecker cfg
+         -- do failure <- fileExists (outTrail outd)
+         --    let unfolded = filterBoundedAbs . freshIds . instAbs $ unfold cfgOut
+            -- return $ not failure
        else
          return True
   where
@@ -178,16 +174,6 @@ buildIdStmtMap                         :: Config Int -> IdStmtMap
 buildIdStmtMap (Config { cProcs = ps }) =
   let pairs = [ (annot s,s) | (pid,main_s) <- ps, s <- (flattenStmt main_s) ]
    in M.fromList pairs
-
-printTrace            :: Bool -> FilePath -> Config Int -> IO ()
-printTrace verb outd c = do let pml = outf outd
-                            runCmd verb "RE-RUNNING THE TRACE:" outd $ spinTrailCmd pml
-                            ts <- readTrails outTrace
-                            let idStmtMap = buildIdStmtMap c
-                            let getS m t = M.findWithDefault (SNull (-1)) (stmtId t) m
-                            dangerZone "Counter Example:"
-                            let tnss = map (\t -> (procId t, getS idStmtMap t)) ts
-                            forM_ (zip [1..] tnss) (print . error_print_helper)
 
 dangerZone str =
   do setSGR [SetConsoleIntensity BoldIntensity, SetColor Foreground Vivid Red]

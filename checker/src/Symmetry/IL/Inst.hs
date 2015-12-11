@@ -26,7 +26,7 @@ instAbs c@(Config { cProcs = ps })
 
 inst1Abs :: (Show a, Data a, Eq a) => [Pid] -> Process a -> Process a
 inst1Abs d (p, s)
-  = (p, flattenNonDet . instStmt d $ instLabels s)
+  = (p, flattenNonDet . instStmt d $ {- instLabels -} s)
   where
     -- All values of match vars:
     lsubs        = foldl' go [emptySubst] ls

@@ -59,6 +59,27 @@ isBounded _ _           = False
 data Label = LL | RL | VL Var
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
+data ILType = TUnit | TInt | TPid | TProd ILType ILType | TSum ILType ILType                      
+             deriving (Ord, Eq, Read, Show, Typeable, Data)
+
+data ILPat = PUnit
+           | PInt Var
+           | PPid Var
+           | PProd ILPat ILPat
+           | PSum  ILPat ILPat
+             deriving (Ord, Eq, Read, Show, Typeable, Data)
+
+data ILExpr = EUnit
+            | EInt           
+            | EPid Pid
+            | EVar Var
+            | ELeft ILExpr
+            | ERight ILExpr
+            | EPair ILExpr ILExpr
+             deriving (Ord, Eq, Read, Show, Typeable, Data)
+
+-- send(p, EPid p)                      
+
 data MConstr = MTApp  { tycon :: MTyCon, tyargs :: [Pid] }
              | MCaseL Label MConstr
              | MCaseR Label MConstr
@@ -102,12 +123,12 @@ data Stmt a = SSkip { annot :: a }
                      , annot :: a
                      }
 
-            | SSend  { sndPid :: Pid
-                     , sndMsg :: (TId, CId, MConstr)
+            | SSend  { sndPid :: ILExpr-- Pid
+                     , sndMsg :: (ILType, ILExpr)
                      , annot  :: a
                      }
 
-            | SRecv  { rcvMsg :: (TId, CId, MConstr)
+            | SRecv  { rcvMsg :: (ILType, Var)
                      , annot  :: a
                      }
 
@@ -178,10 +199,10 @@ unboundVars s
     bound   = nub $ everything (++) (mkQ [] go) s
     absIdx  = nub $ everything (++) (mkQ [] goAbs) s
     go :: Data a => Stmt a -> [Var]
-    go (SRecv (_,_,v) _) = lvars v ++ pvars v
-    go (i@SIter {})      = [iterVar i]
-    go (i@SChoose {})    = [chooseVar i]
-    go _                 = []
+    go (SRecv (_,x) _) = [x]
+    go (i@SIter {})    = [iterVar i]
+    go (i@SChoose {})  = [chooseVar i]
+    go _               = []
     goAbs :: Pid -> [Var]
     goAbs (PAbs v _) = [v]
     goAbs _          = []
@@ -195,7 +216,7 @@ unboundSets s
     isSetVar _           = False
     boundSetVars         = nub $ everything (++) (mkQ [] go) s
     go :: Data a => Stmt a -> [Set]
-    go (SRecv (_,_,v) _) = listify isSetVar v 
+    go (SRecv (_,_) _)   = []
     go _                 = []
 
 endLabels :: (Data a, Typeable a) => Stmt a -> [LVar]
@@ -211,19 +232,23 @@ boundAbs c@(Config {cProcs = ps, cSets = bs})
   where
     us = [ Conc s n | (PAbs _ s, _) <- ps , Bounded s' n <- bs , s == s']
 
-pvars :: MConstr -> [Var]
-pvars (MTApp _ xs)   = [v | PVar v <- xs]
-pvars (MCaseL _ c)   = pvars c
-pvars (MCaseR _ c)   = pvars c
-pvars (MTProd c1 c2) = nub (pvars c1 ++ pvars c2)
+vars :: ILPat -> [Var]
+vars = nub . listify (const True)
 
-lvars :: MConstr -> [Var]
-lvars (MTApp _ _)       = []
-lvars (MCaseL (VL l) c) = l : lvars c
-lvars (MCaseR (VL l) c) = l : lvars c
-lvars (MCaseL _ c)      = lvars c
-lvars (MCaseR _ c)      = lvars c
-lvars (MTProd c1 c2)    = nub (lvars c1 ++ lvars c2)
+-- pvars :: MConstr -> [Var]
+-- pvars
+-- pvars (MTApp _ xs)   = [v | PVar v <- xs]
+-- pvars (MCaseL _ c)   = pvars c
+-- pvars (MCaseR _ c)   = pvars c
+-- pvars (MTProd c1 c2) = nub (pvars c1 ++ pvars c2)
+
+-- lvars ::  -> [Var]
+-- lvars (MTApp _ _)       = []
+-- lvars (MCaseL (VL l) c) = l : lvars c
+-- lvars (MCaseR (VL l) c) = l : lvars c
+-- lvars (MCaseL _ c)      = lvars c
+-- lvars (MCaseR _ c)      = lvars c
+-- lvars (MTProd c1 c2)    = nub (lvars c1 ++ lvars c2)
 
 -- | Typeclass tomfoolery
 instance Traversable Stmt where
@@ -274,7 +299,7 @@ lastStmts s@(SSend _ _ _)    = [s]
 lastStmts s@(SRecv _ _)      = [s]
 lastStmts s@(SNonDet ss _)   = concatMap lastStmts ss
 lastStmts (SChoose _ _ s _) = lastStmts s
-lastStmts (SIter _ _ s _)   = lastStmts s
+lastStmts s@(SIter _ _ _ _) = [s]
 lastStmts (SLoop _ s _)     = lastStmts s
 lastStmts (SCase _ sl sr _) = lastStmts sl ++ lastStmts sr
 lastStmts s@(SDie a)        = [s]
@@ -313,6 +338,9 @@ freshId
             put (n + 1)
             return n
 
+freshStmtIds :: Stmt a -> Stmt Int                   
+freshStmtIds s = evalState (freshId s) 0
+
 freshIds :: Config a -> Config Int
 freshIds (c @ Config { cProcs = ps })
   = c { cProcs = evalState (mapM (mapM freshId) ps) 1 }
@@ -349,15 +377,38 @@ instance Pretty MConstr where
   pretty (MCaseR l t)    = pretty l <+> pretty t
   pretty (MTProd t1 t2)  = parens (pretty t1 <> text ", " <> pretty t2)
 
+instance Pretty ILExpr where
+  pretty EUnit     = text "()"
+  pretty EInt      = text "int"
+  pretty (EVar v)  = pretty v
+  pretty (EPid p)  = pretty p
+  pretty (ELeft  e) = text "inl" <> parens (pretty e)
+  pretty (ERight e) = text "inr" <> parens (pretty e)
+  pretty (EPair e1 e2) = tupled [pretty e1, pretty e2]
+
+instance Pretty ILPat where
+  pretty (PUnit )      = text "()"
+  pretty (PInt v)      = text "int" <+> pretty v
+  pretty (PPid v)      = text "pid" <+> pretty v
+  pretty (PSum p1 p2)  = parens (pretty p1 <+> text "+" <+> pretty p2)
+  pretty (PProd p1 p2) = parens (pretty p1 <+> text "*" <+> pretty p2)
+
+instance Pretty ILType where
+  pretty TUnit     = text "()"
+  pretty TInt      = text "int"
+  pretty TPid      = text "pid"
+  pretty (TSum p1 p2)  = parens (pretty p1 <+> text "+" <+> pretty p2)
+  pretty (TProd p1 p2) = parens (pretty p1 <+> text "*" <+> pretty p2)
+
 instance Pretty (Stmt a) where
   pretty (SSkip _)
     = text "<skip>"
 
-  pretty (SSend p m _)
-    = text "send" <+> pretty p <+> prettyMsg m
+  pretty (SSend p (t,e) _)
+    = text "send" <+> pretty p <+> parens (pretty e <+> text "::" <+> pretty t)
 
-  pretty (SRecv m _)
-    = text "recv" <+> prettyMsg m
+  pretty (SRecv (t,x) _)
+    = text "recv" <+> parens (pretty x <+> text "::" <+> pretty t)
 
   pretty (SIter x xs s _)
     = text "for" <+> parens (pretty x <+> colon <+> pretty xs) <+> lbrace $$
