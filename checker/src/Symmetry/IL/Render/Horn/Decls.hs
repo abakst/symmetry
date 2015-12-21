@@ -3,6 +3,7 @@
 module Symmetry.IL.Render.Horn.Decls where
 
 import           Data.Map
+import           Data.List       as List
 import           Data.Generics hiding (empty)
 import           Control.Monad.Reader
 import           Language.Haskell.Syntax
@@ -11,10 +12,10 @@ import           Language.Haskell.Pretty
 import           Symmetry.IL.AST as AST
 import           Symmetry.IL.Render.Horn.Types
 
-basicDataDecl n cs
-  = HsDataDecl emptyLoc [] n [] cs []             
+basicDataDecl n tvs cs clss 
+  = HsDataDecl emptyLoc [] n tvs cs clss
 recordDataDecl r n fs
-  = basicDataDecl n [HsRecDecl emptyLoc r fs]
+  = basicDataDecl n [] [HsRecDecl emptyLoc r fs]
 
 pcTypeNameOfPid :: Pid -> String
 pcTypeNameOfPid p = prefix "PC" $ pidString p
@@ -22,29 +23,22 @@ pcTypeNameOfPid p = prefix "PC" $ pidString p
 pcTypeOfProc :: Process Int
              -> HsDecl
 pcTypeOfProc (p, s)
-  = basicDataDecl tyName [tagCon (locName p i) | i <- locs]
+  = basicDataDecl tyName [] [tagCon (locName p i) | i <- locs] [eqClass]
   where
     tyName = name $ pcTypeNameOfPid p
     locs = everything (++) (mkQ [] go) s
     go :: AST.Stmt Int -> [Int]
     go s = [annot s]
 
-recvVars :: forall a. (Data a, Typeable a) => AST.Stmt a -> [Var]
-recvVars s
-  = everything (++) (mkQ [] go) s
-  where
-    go :: AST.Stmt a -> [Var]
-    go (SRecv t _) = listify (const True) t
-    go _           = []
-
 stateFieldsOfProc :: Process Int -> [([HsName], HsBangType)]
 stateFieldsOfProc (p, s)
-  = if isAbs p then goAbs <$> fs else go <$> fs
+  = if isAbs p then roleField p : (goAbs <$> fs) else go <$> fs
   where
     fs = [name (prefix stateString v) | V v <- vs ]
     vs = recvVars s
     go f = ([f], bangTy valType)
     goAbs f = ([f], bangTy $ intMapType valType)
+    roleField (PAbs _ (S s)) = ([name (prefix stateString s)], bangTy intType)
 
 intFieldsOfProc :: Process Int -> [([HsName], HsBangType)]              
 intFieldsOfProc (p, s)
@@ -58,23 +52,57 @@ intFieldsOfProc (p, s)
     go (SIter { iterVar = i }) = [i]
     go _                       = []
 
-pidTypeOfConfig :: Config a -> HsDecl
-pidTypeOfConfig Config { cProcs = ps }
-  = basicDataDecl pidTyName fs
+countersOfProc :: Process Int
+                  -> [([HsName], HsBangType)]
+countersOfProc (p@(PAbs _ _), s)
+  = [ ([pcCounterName], bangTy pcCounterTy)
+    , ([rdCounterName], bangTy rdCounterTy)
+    , ([wrCounterName], bangTy wrCounterTy)
+    ]
   where
-    fs = [tagCon (pidNameOfPid p)                  | (p@(PConc _),_)  <- ps] ++
-         [valCon (pidNameOfPid p) [bangTy intType] | (p@(PAbs _ _),_) <- ps]
+    pcCounterName = pidLocCounterName p
+    pcCounterTy   = mapType intType intType
+    rdCounterName = pidRdCounterName p
+    rdCounterTy   = mapType intType intType
+    wrCounterName = pidWrCounterName p
+    wrCounterTy   = mapType intType intType
+countersOfProc _
+  = []
+
+pidInjectiveFns :: Config a -> [HsDecl]
+pidInjectiveFns Config { cProcs = ps }                                 
+  = [ HsFunBind $ fnMatch p | (p, _) <- ps ]
+    where
+      fnName    = name . prefix "is" . unName . pidNameOfPid
+      trueRHS   = HsUnGuardedRhs true
+      falseRHS  = HsUnGuardedRhs false
+      fnMatch p = [ HsMatch emptyLoc (fnName p) [pidPatOfPid p] trueRHS []
+                  , HsMatch emptyLoc (fnName p) [HsPWildCard] falseRHS  []
+                  ]
+
+
+pidTypeOfConfig :: Config a -> [HsDecl]
+pidTypeOfConfig c@Config { cProcs = ps }
+  = [ basicDataDecl prePidTyName ts fs [eqClass]
+    , HsTypeDecl emptyLoc pidTyName [] pidTyApp] ++
+    pidInjectiveFns c
+  where
+    pidTyApp = List.foldl' HsTyApp (ty prePidTyName) (const intType <$> ts)
+    (absPs, concPs) = List.partition isAbs (fst <$> ps)
+    ts = (\(PAbs _ (S s)) -> name s) <$> absPs
+    fs = [tagCon (pidNameOfPid p)                  | p <- concPs] ++
+         [valCon (pidNameOfPid p) [bangTy (ty t)] | (p,t) <- zip absPs ts ]
 
 rdPtrMap, wrPtrMap, pcMap, bufMap :: ([HsName], HsBangType)
 rdPtrMap
   = ([ptrrName], bangTy (mapType keyTy valTy))
      where
-       keyTy = HsTyTuple [pidType, intType]
+       keyTy = ty ptrKeyTyName
        valTy = intType
 wrPtrMap
   = ([ptrwName], bangTy (mapType keyTy valTy))
      where
-       keyTy = HsTyTuple [pidType, intType]
+       keyTy = ty ptrKeyTyName
        valTy = intType
 pcMap
   = ([pcName], bangTy (mapType keyTy valTy))
@@ -84,16 +112,17 @@ pcMap
 bufMap
   = ([msgBufName], bangTy (mapType keyTy valTy))
     where
-      keyTy = HsTyTuple [pidType, intType, intType]
+      keyTy = ty msgKeyTyName
       valTy = valType
-           
+
 stateTypeOfConfig :: Config Int
                   -> HsDecl
 stateTypeOfConfig Config { cProcs = ps }
-  = recordDataDecl stateTyName stateTyName procState
+  = recordDataDecl stateTyName stateTyName procState []
   where
     procState = concatMap stateFieldsOfProc ps ++
                 concatMap intFieldsOfProc ps   ++
+                concatMap countersOfProc ps ++
                 [ rdPtrMap, wrPtrMap, bufMap, pcMap ]
 
 pcTypesOfConfig :: Config Int -> [HsDecl]
@@ -101,7 +130,7 @@ pcTypesOfConfig Config { cProcs = ps }
   = pcTypeOfProc <$> ps
 
 mapDecls :: [HsDecl]
-mapDecls = [ mapTypeDecl, mapGetType, mapGetDecl, mapPutType, mapPutDecl ]
+mapDecls = [ mapTypeDecl, mapGetType, mapGetDecl, mapPutType, mapPutDecl, ptrKeyTyDecl, msgKeyTyDecl ]
   where
     k = name "k"
     v = name "v"
@@ -113,6 +142,13 @@ mapDecls = [ mapTypeDecl, mapGetType, mapGetDecl, mapPutType, mapPutDecl ]
     mapPutDecl  = HsFunBind [HsMatch emptyLoc mapPutName [] (HsUnGuardedRhs (var "undefined")) []]
     mapGetType  = HsTypeSig emptyLoc [mapGetName] (HsQualType [] (mapt $->$ kt $->$ vt))
     mapPutType  = HsTypeSig emptyLoc [mapPutName] (HsQualType [] (mapt $->$ kt $->$ vt $->$ mapt))
+    ptrKeyTyDecl= HsDataDecl emptyLoc [] ptrKeyTyName [] [HsConDecl emptyLoc ptrKeyTyName [ bangTy pidType
+                                                                                          , bangTy intType
+                                                                                          ]] [eqClass]
+    msgKeyTyDecl= HsDataDecl emptyLoc [] msgKeyTyName [] [HsConDecl emptyLoc msgKeyTyName [ bangTy pidType
+                                                                                          , bangTy intType
+                                                                                          , bangTy intType
+                                                                                          ]] [eqClass]
 
 infixr 5 $->$
 t1 $->$ t2 = HsTyFun t1 t2                                                                                                     
@@ -124,10 +160,12 @@ valDecl = HsDataDecl emptyLoc [] valTyName [] [ con unitValConsName []
                                               , con leftValConsName [bangTy valType]
                                               , con rightValConsName [bangTy valType]
                                               , con prodValConsName [bangTy valType, bangTy valType]
-                                              ] []
+                                              ] [eqClass]
   where
     con = HsConDecl emptyLoc
 
 declsOfConfig :: Config Int -> [HsDecl]    
 declsOfConfig c
-  = [pidTypeOfConfig c, stateTypeOfConfig c] ++ valDecl : mapDecls
+  = [valDecl, stateTypeOfConfig c] ++
+    pidTypeOfConfig c ++
+    mapDecls

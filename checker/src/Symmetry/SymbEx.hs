@@ -60,7 +60,7 @@ stateToConfigs state
         where
           kvs   = M.toList renv
           concProcs = [ (IL.PConc n, s) | (S (RS n), (_, s)) <- kvs ]
-          absProcs  = [ (IL.PAbs (IL.V "i") (roleToSet r), s) | (M r, (_, s)) <- kvs ]
+          absProcs  = [ (IL.PAbs (IL.V ("i" ++ roleToString r)) (roleToSet r), s) | (M r, (_, s)) <- kvs ]
           setBounds = [ IL.Bounded (roleToSet r) x | (M r, (AInt _ (Just x), _)) <- kvs ]
           sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
           procs = concProcs ++ absProcs
@@ -139,6 +139,7 @@ data AbsVal t where
   AList      :: Maybe (Var [a]) -> Maybe (AbsVal a) -> AbsVal [a]
   AArrow     :: Maybe (Var (a -> b)) -> (AbsVal a -> SymbEx b) -> AbsVal (a -> b)
   APid       :: Maybe (Var (Pid RSing)) -> L.Pid (Maybe RSing) -> AbsVal (Pid RSing)
+  APidElem   :: Maybe (Var (Pid RMulti)) -> Maybe (Var Int) -> L.Pid (Maybe RMulti) -> AbsVal (Pid RSing)
   APidMulti  :: Maybe (Var (Pid RMulti)) -> L.Pid (Maybe RMulti) -> AbsVal (Pid RMulti)
   ARoleSing  :: Maybe (Var RSing) -> RSing -> AbsVal RSing
   ARoleMulti :: Maybe (Var RMulti) -> RMulti -> AbsVal RMulti
@@ -328,10 +329,13 @@ absToIL (AInt  _ _)   = [IL.EInt]
 absToIL (AString _)   = error "TBD: absToIL String"
 absToIL (AList _ _)   = error "TBD: absToIL List"
 
+absToIL (APidElem Nothing (Just i) (Pid (Just r)))
+  = [IL.EPid (IL.PAbs (varToIL i) (roleToSet r))]
+
 absToIL (APid (Just x) _) = [IL.EVar (varToIL x)]
 absToIL (APid Nothing (Pid (Just (RS r))))             = [IL.EPid (IL.PConc r)]
 absToIL (APid Nothing (Pid (Just (RSelf (S (RS r)))))) = [IL.EPid (IL.PConc r)]
-absToIL (APid Nothing (Pid (Just (RSelf (M r)))))      = [IL.EPid (IL.PAbs (IL.V "i") (roleToSet r))]
+absToIL (APid Nothing (Pid (Just (RSelf (M r)))))      = [IL.EPid (IL.PAbs (IL.V ("i" ++ roleToString r)) (roleToSet r))]
 absToIL (APid Nothing (Pid (Just (RElem (RM r)))))     = error "TBD: elem"
 absToIL (APid Nothing (Pid Nothing))                   = error "wut"
 
@@ -704,21 +708,26 @@ symDoMany :: SymbEx (Pid RMulti)
           -> SymbEx (Process SymbEx [a])
 -------------------------------------------------
 symDoMany p f
-  = SE $ do v <- freshVar
-            APidMulti x pid {- (Pid (Just r)) -} <- runSE p
+  = SE $ do APidMulti x pid {- (Pid (Just r)) -} <- runSE p
             AArrow _ g                 <- runSE f
-            AProc _ s _                <- runSE (g (APid (Just v) (Pid Nothing)))
-            return $ case (x, pid) of
-                       (_, Pid (Just r)) -> 
-                          AProc Nothing (iter v r s) (error "TBD: symDoMany")
-                       (Just x, _) ->
-                          AProc Nothing (iterVar v x s) (error "TBD: symDoMany")
+            case (x, pid) of
+              (_, Pid (Just r)) -> do
+                v <- freshVar
+                AProc _ s _  <- runSE (g (APidElem Nothing (Just v) (Pid (Just r))))
+                return $ AProc Nothing (iter v r s) (error "TBD: symDoMany")
+              (Just x, _) -> do
+                v <- freshVar
+                AProc _ s _  <- runSE (g (APidElem (Just x) (Just v) (Pid Nothing)))
+                return $ AProc Nothing (iterVar v x s) (error "TBD: symDoMany")
     where
       iter v r s    = IL.SIter (varToIL v) (roleToSet r) s ()
       iterVar v x s = IL.SIter (varToIL v) (varToILSetVar x) s ()
 
 roleToSet :: RMulti -> IL.Set
-roleToSet (RM n) = IL.S $ "role_" ++ show n
+roleToSet r = IL.S $ roleToString r
+
+roleToString :: RMulti -> String
+roleToString (RM n) = "role_" ++ show n                   
 -------------------------------------------------
 symExec :: SymbEx (Process SymbEx a)
         -> SymbEx a

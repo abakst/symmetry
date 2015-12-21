@@ -30,29 +30,34 @@ blockedLocs :: Config Int -> [(Pid, [(ILType, Int)])]
 blockedLocs Config{ cProcs = ps }
   = blockedLocsOfProc <$> ps
 
-procAtRecv :: TyMap -> Pid -> (ILType, Int) -> HsExp
-procAtRecv m p (t, i)
-  = ands [ pcEq (pidCstrOfPid p) (toInteger i)
-         , lneg (lt (pidReadTy p tid) (pidWriteTy p tid))
-         ]
-    where
-      tid = lookupTy t m
+procAtRecv :: TyMap -> Pid -> [(ILType, Int)] -> HsExp
+procAtRecv _ p tis
+  = ors [ pcEq (pidCstrOfPid p) (toInteger i) | (_, i) <- tis ]
 
 procDone :: Pid -> HsExp
 procDone p
   = pcEq (pidCstrOfPid p) (-1)
-
     
-procBlockedOrDone :: TyMap -> Pid -> [(ILType, Int)] -> HsExp
-procBlockedOrDone m p recvs
-  = ors (procDone p : (procAtRecv m p <$> recvs))
-    
-deadlockExpr :: Config Int -> TyMap -> HsExp
-deadlockExpr c m
-  = ands [ ands [procBlockedOrDone m p (lkup p) | p <- ps]
-         , ors  [lneg (procDone p) | p <- ps]
-         ]
+procBlocked m p tis
+  = ors [ ands [pcEq (pidCstrOfPid p) (toInteger i),  blocked t] | (t, i) <- tis ]
   where
+    blocked t = let tid = lookupTy t m in
+                lte (pidWriteTy p tid) (pidReadTy p tid)
+
+deadlockFree :: Config Int -> TyMap -> HsExp
+deadlockFree c m
+  = lneg $ ands [allAtRecvOrDone, oneBlocked]
+  where
+    allAtRecvOrDone
+      = ands [ ors [procAtRecv m p (lkup p), procDone p] | p <- ps]
+    oneBlocked
+      = ors [ procBlocked m p (lkup p) | p <- ps ]
     ps   = fst <$> cProcs c
     locs = blockedLocs c
     lkup p = fromJust $ lookup p locs
+  --   absEnabled = ors [ absEnabled1 p ls | (p@(PAbs _ _), ls) <- locs ]
+  --   absEnabled1 p@(PAbs _ (S s)) ls
+  --     = lneg (eq (HsParen (sumLocs p (snd <$> ls))) (readGlobal s))
+  --   sumLocs p ls = HsParen $ foldr (go p) (rdL p (-1)) ls
+  --   go p l e = HsParen (var "+") $>$ rdL p l $>$ e
+  --   rdL p l      = readMap (pidPCCounterState p) (int l)
