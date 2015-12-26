@@ -8,6 +8,7 @@ import           Data.Generics
 import           Data.IntMap as M
 import           Data.List   as L
 import           Data.Maybe
+import           Text.PrettyPrint.Leijen (pretty)
 
 import           Symmetry.IL.AST as AST
 import           Symmetry.IL.Render.Horn.Spec
@@ -17,7 +18,7 @@ import           Symmetry.IL.Render.Horn.Types
 
 stmtGuardsOfStmt :: TyMap -> Pid -> Stmt Int -> [HsExp]
 stmtGuardsOfStmt m p (SRecv (t,_) _)
-  = [lt (pidReadTy p tid) (pidWriteTy p tid)]
+  = [lt (readMyPtrr p tid) (readMyPtrw p tid)]
     where
       tid = lookupTy t m
 stmtGuardsOfStmt _ _ _
@@ -25,7 +26,7 @@ stmtGuardsOfStmt _ _ _
     
 pcGuardOfStmt :: Pid -> Stmt Int -> HsExp
 pcGuardOfStmt p s 
-  = pcEq (pidCstrOfPid p) (toInteger (annot s))
+  = pcEq p (toInteger (annot s))
 
 mkGuard gs = HsGuardedRhs emptyLoc (ands gs)
 
@@ -68,7 +69,7 @@ stateUpdateOfStmt dom m cfg p (SRecv (t,V x) i)
     next = M.lookup i cfg
     tid = lookupTy t m
 
-stateUpdateOfStmt dom m cfg p (SSend q (t,e) i)
+stateUpdateOfStmt _ m cfg p (SSend q (t,e) i)
   = case (M.lookup i cfg, q) of
       (n, EPid q) ->
         [ (Nothing, nextPC p i n ++ sendTo q) ]
@@ -79,61 +80,49 @@ stateUpdateOfStmt dom m cfg p (SSend q (t,e) i)
       sendTo q = incPtrw tid p q ++
                  [writeMsgBuf p q tid e]
 
-stateUpdateOfStmt dom m cfg p SIter{iterSet = (S s), iterVar = (V v), annot = a}
+stateUpdateOfStmt _ _ cfg p SIter{iterSet = (S s), iterVar = (V v), annot = a}
   = case M.lookup a cfg of
-      Just [i,j] -> [ (Just (lte ve se)        , incr : updPC p a j)
-                    , (Just (lneg $ lte ve se) , updPC p a i)
+      Just [i,j] -> [ (Just (lt ve se)         , incr : updPC p a j)
+                    , (Just (lte se ve) , updPC p a i)
                     ]
-      Just [i]   -> [ (Just (lte ve se)        , incr : updPC p a i)
-                    , (Just (lneg $ lte ve se) , updPC p a (-1))
+      Just [i]   -> [ (Just (lt ve se)         , incr : updPC p a i)
+                    , (Just (lte se ve) , updPC p a (-1))
                     ]
     where
       incr = updField p v (inc (readStateField p v))
       ve = readStateField p v
       se = readStateField p s
 
-stateUpdateOfStmt _ _ _ _ _ = []
+stateUpdateOfStmt _ _ cfg p SBlock {annot = a}
+  = case M.findWithDefault [-1] a cfg of
+      [i] -> [ (Nothing, updPC p a i) ]
 
-{-
-runStateOfStmt :: [Pid] -> TyMap -> IntMap [Int] -> Pid -> Stmt Int -> [HsGuardedRhs]
-runStateOfStmt dom m cfg p s@SSend{sndPid = EVar (V v)}
-  = [mkGuard guards (HsCase (readStateField p v) [HsAlt emptyLoc (pat p) (nextCall p) [] | p <- dom])]
-  where
-    pat p' = HsPApp (UnQual pidValConsName) [pidPatOfPid p']
-    guards   = pcGuardOfStmt p s : stmtGuardsOfStmt m p s
-    stUpdate p' = let s' = s { sndPid = EPid p' } in
-                  let [(Nothing, pcu)] = pcUpdateOfStmt cfg p s' in
-                  pcu ++ stateUpdateOfStmt dom m p s'
-    nextCall p' = HsUnGuardedAlt $ HsVar (UnQual runStateName) $>$ updateState (stUpdate p')
-                                                               $>$ HsVar (UnQual schedName)
-
-runStateOfStmt dom m cfg p s =
-  [mkGuard (guards g) (nextCall us) | (g, us) <- pcUpdateOfStmt cfg p s]
-  where
-    baseGuards  = pcGuardOfStmt p s : stmtGuardsOfStmt m p s
-    guards g    = maybe baseGuards (\e -> e : baseGuards) g
-    stUpdate    = stateUpdateOfStmt dom m p s
-    nextCall us = HsVar (UnQual runStateName) $>$ updateState (us ++ stUpdate)
-                                              $>$ HsVar (UnQual schedName)
--}
+stateUpdateOfStmt _ _ _ _ s = error $ "TBD: " ++ show (pretty s)
 
 guardedCall gs rhs
   = HsGuardedRhs emptyLoc (ands gs) rhs
 
 guardsOfStmt m p s@(SRecv (t,e) i)
   = [ pcGuardOfStmt p s
-    , lt (pidReadTy p tid) (pidWriteTy p tid)
+    , lt (readMyPtrr p tid) (readMyPtrw p tid)
     ]
   where
     tid = lookupTy t m
 guardsOfStmt _ p s
   = [pcGuardOfStmt p s]
 
--- stateUpdateOfStmt :: [Pid] -> TyMap -> IntMap [Int] -> Pid -> Stmt Int -> [GuardedUpdate]
--- stateUpdateOfStmt dom m cfg p s
---   = [(merge g g', us ++ us') | (g, us) <- pcUpds, (g', us') <- fieldUpds ] 
---   where
---     fieldUpds = fieldUpdateOfStmt cfg m p s
+runStateOfStmt :: [Pid] -> TyMap -> IntMap [Int] -> Pid -> Stmt Int -> [HsGuardedRhs]
+runStateOfStmt dom m cfg p s@SSend { sndPid = EVar (V v) }
+  = [ guardedCall (guards Nothing) caseSplit ]
+  where
+    guards (Just e) = e : guardsOfStmt m p s
+    guards Nothing  = guardsOfStmt m p s
+    caseSplit = HsCase (readStateField p v) (caseAlt <$> dom)
+    caseAlt q = HsAlt emptyLoc (pat q) (call (updateState $ upds q)) []
+    call    e = HsUnGuardedAlt (varn runStateName $>$ e $>$ varn schedName)
+    pat     q = HsPApp (UnQual pidValConsName) [HsPParen (pidPatOfPid q)]
+    upds    q = let [(Nothing, us)] = stateUpdateOfStmt dom m cfg p s { sndPid = EPid q }
+                in us
 
 runStateOfStmt dom m cfg p s
   = [ guardedCall (guards g) (call us) | (g, us) <- stateUpdateOfStmt dom m cfg p s ]
@@ -206,7 +195,7 @@ render c
                 initSchedOfConfig c' ++
                 checkStateOfConfig c' ++
                 runStateOfConfig tyMap c' :
-                declsOfConfig c'
+                declsOfConfig tyMap c'
     c'        = c { cProcs = (freshStmtIds <$>) <$> cProcs c }
     lhimport  = HsImportDecl { importLoc = emptyLoc
                              , importModule = Module "Language.Haskell.Liquid.Prelude"

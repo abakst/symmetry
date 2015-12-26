@@ -93,37 +93,36 @@ pidTypeOfConfig c@Config { cProcs = ps }
     fs = [tagCon (pidNameOfPid p)                  | p <- concPs] ++
          [valCon (pidNameOfPid p) [bangTy (ty t)] | (p,t) <- zip absPs ts ]
 
-rdPtrMap, wrPtrMap, pcMap, bufMap :: ([HsName], HsBangType)
-rdPtrMap
-  = ([ptrrName], bangTy (mapType keyTy valTy))
-     where
-       keyTy = ty ptrKeyTyName
-       valTy = intType
-wrPtrMap
-  = ([ptrwName], bangTy (mapType keyTy valTy))
-     where
-       keyTy = ty ptrKeyTyName
-       valTy = intType
-pcMap
-  = ([pcName], bangTy (mapType keyTy valTy))
-     where
-       keyTy = pidType
-       valTy = intType
-bufMap
-  = ([msgBufName], bangTy (mapType keyTy valTy))
+ptrsOfProc :: TyMap -> Process Int -> [([HsName], HsBangType)]
+ptrsOfProc m (p, _)
+  = concatMap go ts
     where
-      keyTy = ty msgKeyTyName
-      valTy = valType
+      go :: Integer -> [([HsName], HsBangType)]
+      go t = [ ([pidRdPtrName t p], bangTy ptrTy)
+             , ([pidWrPtrName t p], bangTy ptrTy)
+             , ([pidMsgBufName t p], bangTy bufTy)
+             ]
+      ptrTy = if isAbs p then mapType intType intType else intType
+      bufTy = mapType (bufKeyTy p) valType
+      ts = snd <$> m
 
-stateTypeOfConfig :: Config Int
+pcOfProc :: Process Int -> ([HsName], HsBangType)
+pcOfProc (p, _)
+  = ([pcName p], bangTy pcType)
+  where
+    pcType = if isAbs p then mapType intType intType else intType
+
+stateTypeOfConfig :: TyMap
+                  -> Config Int
                   -> HsDecl
-stateTypeOfConfig Config { cProcs = ps }
+stateTypeOfConfig m Config { cProcs = ps }
   = recordDataDecl stateTyName stateTyName procState []
   where
     procState = concatMap stateFieldsOfProc ps ++
                 concatMap intFieldsOfProc ps   ++
                 concatMap countersOfProc ps ++
-                [ rdPtrMap, wrPtrMap, bufMap, pcMap ]
+                concatMap (ptrsOfProc m) ps ++
+                fmap pcOfProc ps
 
 pcTypesOfConfig :: Config Int -> [HsDecl]
 pcTypesOfConfig Config { cProcs = ps }
@@ -154,18 +153,20 @@ infixr 5 $->$
 t1 $->$ t2 = HsTyFun t1 t2                                                                                                     
 
 valDecl :: HsDecl
-valDecl = HsDataDecl emptyLoc [] valTyName [] [ con unitValConsName []
-                                              , con intValConsName [bangTy intType]
-                                              , con pidValConsName [bangTy pidType]
-                                              , con leftValConsName [bangTy valType]
-                                              , con rightValConsName [bangTy valType]
-                                              , con prodValConsName [bangTy valType, bangTy valType]
-                                              ] [eqClass]
+valDecl = HsDataDecl emptyLoc [] valTyName [] [ recCon unitValConsName []
+                                              , recCon intValConsName [bangTy intType]
+                                              , recCon pidValConsName [bangTy pidType]
+                                              , recCon leftValConsName [bangTy valType]
+                                              , recCon rightValConsName [bangTy valType]
+                                              , recCon prodValConsName [bangTy valType, bangTy valType]
+                                              ] []
   where
-    con = HsConDecl emptyLoc
+    recCon n ts  = HsRecDecl emptyLoc n [ ([accessor n i], t) | (t, i) <- zip ts [0..]]
+    accessor n i = name ("v" ++ unName n ++ show i)
+                   
 
-declsOfConfig :: Config Int -> [HsDecl]    
-declsOfConfig c
-  = [valDecl, stateTypeOfConfig c] ++
+declsOfConfig :: TyMap -> Config Int -> [HsDecl]    
+declsOfConfig m c
+  = [valDecl, stateTypeOfConfig m c] ++
     pidTypeOfConfig c ++
     mapDecls

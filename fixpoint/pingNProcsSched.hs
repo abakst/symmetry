@@ -7,14 +7,12 @@ import Language.Haskell.Liquid.Prelude (liquidAssume, liquidAssert)
           -> m1:Map Int Int 
           -> m2:Map Int Int
           -> m3:Map Int PC 
-          ->{v:[Sched<{\i -> 0 <= i && i < n && Map_select m1 i = 0 && Map_select m2 i = 0 && (Map_select m3 i = L0 || Map_select m3 i = L1)}>] | true} @-}
+          ->[{v:Sched<{i:Int | 0 <= i && i < n && Map_select m1 i = 0 && Map_select m2 i = 0 && (Map_select m3 i = L0 || Map_select m3 i = L1)}> | true}] @-}
 sched :: Int -> Map Int Int -> Map Int Int -> Map Int PC -> [Sched]         
 sched = undefined
 
+{-@ data Sched <p :: Int -> Prop> = PA | PB { fooo :: Int<p> } @-}
 data Sched = PA | PB Int
-{-@ data Sched <pi :: Int -> Prop> = PA 
-                                   | PB {pi :: Int<pb>}
-                                   | PC {pi :: Int<pi> @-}
 
 {-@ nonDetPos :: {v:Int | v > 0} @-}              
 nonDetPos :: Int
@@ -41,7 +39,7 @@ empPC = undefined
 get :: Map a b -> a -> b
 get m k = undefined
 
-{-@ put :: forall m:Map a b -> k:a -> val:b -> {v:Map a b | v = Map_store m k val } @-}
+{-@ put :: m:Map a b -> k:a -> val:b -> {v:Map a b | v = Map_store m k val } @-}
 put :: Map a b -> a -> b -> Map a b 
 put m k v = undefined
 
@@ -49,6 +47,9 @@ put m k v = undefined
 data PC = L0 | L1 | L2 deriving (Eq)           
 
 runState :: Int -> Int -> Map Int Int -> Map Int Int -> PC -> Map Int PC -> [Sched] -> ()
+-- Assert deadlock-freedom (deadlock if A is done and B(i) is blocked)
+runState  n a_i m_wr m_rd pca m_pcb [PB i]
+  = liquidAssert (not (pca == L1 && get m_pcb i == L0 && get m_rd i >= get m_wr i)) ()
 -- A: exit loop?
 runState n a_i m_wr m_rd L0 m_pcb (PA:ss)
   = if a_i < n then
@@ -72,12 +73,8 @@ runState n a_i m_wr m_rd pca m_pcb ((PB i):ss)
   | get m_pcb i == L1 = runState n a_i m_wr m_rd pca m_pcb ss
   | otherwise         = runState n a_i m_wr m_rd pca m_pcb ss
 
--- Assert deadlock-freedom (deadlock if A is done and B(i) is blocked)
--- runState  n a_i m_wr m_rd pca m_pcb ((PB i): ss)
---   = liquidAssert (not (pca == L1 && get m_pcb i == L0 && get m_rd i >= get m_wr i)) ()
-
-runState _ n a_i m_wr m_rd pca m_pcb 
-  = liquidAssume False ()
+-- runState _ n a_i m_wr m_rd pca m_pcb 
+--   = liquidAssume False ()
 
 {- doCheck :: {v:() | true} @-}
 doCheck :: ()

@@ -32,29 +32,43 @@ blockedLocs Config{ cProcs = ps }
 
 procAtRecv :: TyMap -> Pid -> [(ILType, Int)] -> HsExp
 procAtRecv _ p tis
-  = ors [ pcEq (pidCstrOfPid p) (toInteger i) | (_, i) <- tis ]
+  = ors [ pcEq p (toInteger i) | (_, i) <- tis ]
 
 procDone :: Pid -> HsExp
 procDone p
-  = pcEq (pidCstrOfPid p) (-1)
+  = pcEq p (-1)
     
 procBlocked m p tis
-  = ors [ ands [pcEq (pidCstrOfPid p) (toInteger i),  blocked t] | (t, i) <- tis ]
+  = ors [ ands [pcEq p (toInteger i),  blocked t] | (t, i) <- tis ]
   where
     blocked t = let tid = lookupTy t m in
-                lte (pidWriteTy p tid) (pidReadTy p tid)
+                lte (readMyPtrw p tid) (readMyPtrr p tid)
 
-deadlockFree :: Config Int -> TyMap -> HsExp
-deadlockFree c m
-  = lneg $ ands [allAtRecvOrDone, oneBlocked]
+deadlockConfigs :: Config Int -> TyMap -> HsExp
+deadlockConfigs c@Config { cProcs = ps } m
+  = ors (badConfig <$> locs)
   where
-    allAtRecvOrDone
-      = ands [ ors [procAtRecv m p (lkup p), procDone p] | p <- ps]
-    oneBlocked
-      = ors [ procBlocked m p (lkup p) | p <- ps ]
-    ps   = fst <$> cProcs c
-    locs = blockedLocs c
-    lkup p = fromJust $ lookup p locs
+    badConfig (p, tis) = ands [ procBlocked m p tis
+                              , ands [ blockedOrDone q | q <- fst <$> ps, p /= q ]
+                              ]
+    locs            = blockedLocs c
+    lkup p          = fromJust $ lookup p locs
+    blockedOrDone p = ors [ procDone p, procBlocked m p (lkup p) ]
+
+deadlockFree :: Config Int -> TyMap -> HsExp                      
+deadlockFree c m
+  = lneg $ deadlockConfigs c m
+-- deadlockFree :: Config Int -> TyMap -> HsExp
+-- deadlockFree c m
+--   = lneg $ ands [allAtRecvOrDone, oneBlocked]
+--   where
+--     allAtRecvOrDone
+--       = ands [ ors [procAtRecv m p (lkup p), procDone p] | p <- ps]
+--     oneBlocked
+--       = ors [ procBlocked m p (lkup p) | p <- ps ]
+--     ps   = fst <$> cProcs c
+--     locs = blockedLocs c
+--     lkup p = fromJust $ lookup p locs
   --   absEnabled = ors [ absEnabled1 p ls | (p@(PAbs _ _), ls) <- locs ]
   --   absEnabled1 p@(PAbs _ (S s)) ls
   --     = lneg (eq (HsParen (sumLocs p (snd <$> ls))) (readGlobal s))

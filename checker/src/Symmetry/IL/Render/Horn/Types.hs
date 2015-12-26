@@ -39,7 +39,7 @@ intTyString = "Int"
 valTyString = "Val"
 ptrKeyTyString = "PtrKey"
 msgKeyTyString = "MsgKey"
-mapTyString = "Map"
+mapTyString = "Map_t"
 pcCounterMapString = "PCK"
 rdCounterString = "RdK"
 wrCounterString = "WrK"
@@ -87,6 +87,26 @@ pidString :: Pid -> String
 pidString (PConc i)          = prefix "vP" $ show i
 pidString (PAbs (V v) (S s)) = prefix "vP" s
 
+pidWrPtrString :: Integer -> Pid -> String                               
+pidWrPtrString = pidPtrString ptrwString
+
+pidRdPtrString :: Integer -> Pid -> String                               
+pidRdPtrString = pidPtrString ptrrString
+
+pidMsgBufString :: Integer -> Pid -> String
+pidMsgBufString t p = prefix stateString .
+                      prefix (pidString p) .
+                      prefix msgBufString $ show t
+
+pidMsgBufName :: Integer -> Pid -> HsName
+pidMsgBufName t p = name $ pidMsgBufString t p
+
+pidPtrString :: String -> Integer -> Pid -> String
+pidPtrString s t p
+  = prefix stateString .
+    prefix s .
+    prefix (pidString p) $ show t
+
 pidLocCounterString :: Pid -> String
 pidLocCounterString p
   = prefix stateString $
@@ -114,19 +134,22 @@ pidWrCounterName :: Pid -> HsName
 pidWrCounterName p
   = name $ pidWrCounterString p
 
+pidRdPtrName t p = name $ pidRdPtrString t p                 
+pidWrPtrName t p = name $ pidWrPtrString t p                 
+
 locName p i = name ("L_" ++ pidString p ++ "_" ++ show i)
 
 prefix x y = x ++ "_" ++ y              
 
-stateString = "state"             
+stateString   = "state"             
 stateTyString = "State"
-pcString    = prefix stateString "PC"
-ptrrString    = prefix stateString "PtrR"
-ptrwString    = prefix stateString "PtrW"
-msgBufString  = prefix stateString "Buf"
+pcString p    = prefix stateString . prefix (pidString p) $ "PC"
+ptrrString    = "PtrR"
+ptrwString    = "PtrW"
+msgBufString  = "Buf"
 stateTyName = name stateTyString
 stateName   = name stateString
-pcName      = name pcString
+pcName p    = name (pcString p)
 ptrrName    = name ptrrString
 ptrwName    = name ptrwString
 msgBufName  = name msgBufString
@@ -166,6 +189,14 @@ initialSchedName   = name initialSchedString
 
 schedTy = HsTyApp list_tycon pidType
 
+bufKeyTy :: Pid -> HsType
+bufKeyTy p =
+  if isAbs p then
+    HsTyTuple [intType, intType]
+  else
+    intType
+          
+
 ----------------------                 
 -- Util Expressions
 ----------------------                 
@@ -174,6 +205,7 @@ true = HsCon (UnQual (name "True"))
 false = HsCon (UnQual (name "False"))
 
 var = HsVar . UnQual . name
+varn = HsVar . UnQual
 
 int :: Integral a => a -> HsExp      
 int n = if n < 0 then HsParen e else e
@@ -261,15 +293,20 @@ updField p f e
   where
     fname = name $ prefix stateString f
 
+readPCMap :: Pid -> HsExp
+readPCMap p@(PConc _)      = pcState p
+readPCMap p@(PAbs (V v) _) = readMap (pcState p) (var v)
+
+
 updPC :: Pid -> Int -> Int -> [HsFieldUpdate]
 updPC p pc pc'
   = if isAbs p then
-      [pcu, pcku]
+      [ HsFieldUpdate (UnQual (pcName p)) (writeMap (pcState p) (varn (idxNameOfPid p)) pce')
+      , pcku
+      ]
     else
-      [pcu]
+      [ HsFieldUpdate (UnQual (pcName p)) pce' ]
   where
-    pcu = HsFieldUpdate (UnQual pcName)
-          (writeMap pcState (pidCstrOfPid p) pce')
     pcku = HsFieldUpdate (UnQual (pidLocCounterName p))
                          (writeMap (writeMap pcmap pce
                                                (dec (readMap pcmap pce)))
@@ -293,8 +330,8 @@ condUpdPC p grd pc pc' pc''
                                    (inc (readMap pcmap pce')))
     pcmap = pidPCCounterState p                                   
     pce  = int pc
-    pcu = HsFieldUpdate (UnQual pcName)
-          (writeMap pcState (pidCstrOfPid p) pce')
+    pcu = HsFieldUpdate (UnQual (pcName p))
+          (writeMap (pcState p) (pidCstrOfPid p) pce')
     pce' = HsParen $ HsIf grd (int pc') (int pc'')
 
 expToVal :: Pid -> ILExpr -> HsExp
@@ -303,17 +340,21 @@ expToVal p EInt         = intCons
 expToVal p (EVar (V v)) = readStateField p v
 expToVal p (EPid q)     = pidCons $>$ pidCstrOfPid q
 
-pcState :: HsExp
-pcState = field pcName stateName
+pcState :: Pid -> HsExp
+pcState p = field (pcName p) stateName
 
 pidPCCounterState :: Pid -> HsExp
 pidPCCounterState p = field (pidLocCounterName p) stateName
 
-ptrrState :: HsExp          
-ptrrState = field ptrrName stateName
+ptrrState :: Integer -> Pid -> HsExp          
+ptrrState t p = field (pidRdPtrName t p) stateName
 
-ptrwState :: HsExp          
-ptrwState = field ptrwName stateName
+msgBufState :: Integer -> Pid -> HsExp                
+msgBufState t p
+  = field (pidMsgBufName t p) stateName
+
+ptrwState :: Integer -> Pid -> HsExp          
+ptrwState t p = field (pidWrPtrName t p) stateName
 
 pidWrCounterState :: Pid -> HsExp
 pidWrCounterState p = field (pidWrCounterName p) stateName
@@ -321,38 +362,45 @@ pidWrCounterState p = field (pidWrCounterName p) stateName
 pidRdCounterState :: Pid -> HsExp
 pidRdCounterState p = field (pidRdCounterName p) stateName
 
-msgBufState :: HsExp
-msgBufState = field msgBufName stateName            
-
 readMap :: HsExp -> HsExp -> HsExp
 readMap m k = HsParen (HsApp (HsApp mapGet m) k)
 
 writeMap :: HsExp -> HsExp -> HsExp -> HsExp
 writeMap m k v = HsParen (mapPut $>$ m $>$ k $>$ v)
 
-mkPtrKey :: HsExp -> HsExp -> HsExp
-mkPtrKey k1 k2 = HsParen (HsCon (UnQual ptrKeyTyName) $>$ k1 $>$ k2)
+mkPtrKey :: Pid -> Pid -> Integer -> HsExp
+mkPtrKey me p@(PConc _) t
+  = int t
+mkPtrKey me p@(PAbs (V v) _) t
+  = readStateField me v
 
-mkMsgKey :: HsExp -> HsExp -> HsExp -> HsExp
-mkMsgKey k1 k2 k3 = HsParen (HsCon (UnQual msgKeyTyName) $>$ k1 $>$ k2 $>$ k3)
+mkMsgKey :: Pid -> Pid -> HsExp -> HsExp
+mkMsgKey me p@(PConc _) e      = e
+mkMsgKey me p@(PAbs (V v) _) e = HsParen (tuple_con 1 $>$ readStateField me v $>$ e)
+-- mkMsgKey k1 k2 k3 = HsParen (HsCon (UnQual msgKeyTyName) $>$ k1 $>$ k2 $>$ k3)
 
-readPtrr :: Integer -> HsExp -> HsExp
-readPtrr i p = readMap ptrrState (mkPtrKey p (int i))
+readPtrr :: Integer -> Pid -> HsExp
+readPtrr i p@(PConc _)      = ptrrState i p
+readPtrr i p@(PAbs (V v) _) = readMap (ptrrState i p) (var v)
 
-readPtrw :: Integer -> HsExp -> HsExp
-readPtrw i p = readMap ptrwState (mkPtrKey p (int i))
+readPtrw :: Pid -> Integer -> Pid -> HsExp
+readPtrw me i p@(PConc _)      = ptrwState i p
+readPtrw me i p@(PAbs (V v) _) = readMap (ptrwState i p) (readStateField me v)
+
+readMyPtrr p tid = readPtrr tid p
+readMyPtrw p@(PConc _) tid      = ptrwState tid p
+readMyPtrw p@(PAbs (V v) _) tid = readMap (ptrwState tid p) (var v)
 
 readMsgBuf :: Pid -> Integer -> HsExp
-readMsgBuf p t = readMap msgBufState (mkMsgKey pe (int t) (readPtrr t pe))
-  where
-    pe = pidCstrOfPid p
+readMsgBuf me@(PConc _) t
+  = readMap (msgBufState t me) (readPtrr t me)
+readMsgBuf me@(PAbs (V v) _) t
+  = readMap (msgBufState t me) (HsParen (tuple_con 1 $>$ var v $>$ readPtrr t me))
 
 writeMsgBuf :: Pid -> Pid -> Integer -> ILExpr -> HsFieldUpdate         
 writeMsgBuf p q t e
-  = HsFieldUpdate (UnQual msgBufName)
-      (writeMap msgBufState (mkMsgKey pe (int t) (readPtrw t pe)) (HsParen (expToVal p e)))
-    where
-      pe = pidExprOfPid p q 
+  = HsFieldUpdate (UnQual (pidMsgBufName t q))
+      (writeMap (msgBufState t q) (mkMsgKey p q (readPtrw p t q)) (HsParen (expToVal p e)))
 
 -- A pid might be indexed by a local variable, so we need 'p'
 -- in order to look that variable up
@@ -362,16 +410,13 @@ pidExprOfPid _ q@(PConc _)
 pidExprOfPid p q@(PAbs (V v) (S s))
   = HsParen (HsCon (UnQual (pidNameOfPid q)) $>$ readStateField p v)
 
-readPCMap :: HsExp -> HsExp
-readPCMap p = readMap pcState p
-
 ptrwUpdate :: Integral a => a -> Pid -> Pid -> HsExp
-ptrwUpdate t p q
-  = writeMap ptrwState
-      (mkPtrKey pe (int (toInteger t)))
-      (inc (readPtrw (toInteger t) pe))
-    where
-      pe = pidExprOfPid p q 
+ptrwUpdate t p q@(PConc _)
+  = inc (readPtrw p (toInteger t) q)
+ptrwUpdate t p q@(PAbs _ _)
+  = writeMap (ptrwState (toInteger t) q)
+      (mkPtrKey p q (toInteger t))
+      (inc (readPtrw p (toInteger t) q))
 
 incPtrw :: Integral a => a -> Pid -> Pid -> [HsFieldUpdate]
 incPtrw t p q
@@ -380,7 +425,7 @@ incPtrw t p q
     else
       [ptrUpd]
     where
-      ptrUpd    = HsFieldUpdate (UnQual ptrwName) (ptrwUpdate t p q)
+      ptrUpd    = HsFieldUpdate (UnQual (pidWrPtrName (toInteger t) q)) (ptrwUpdate t p q)
       ptrCtrUpd = HsFieldUpdate (UnQual (pidWrCounterName q)) incPtrCtr
       incPtrCtr = writeMap (pidWrCounterState q)
                            tid 
@@ -390,14 +435,17 @@ incPtrw t p q
 incPtrr :: Integral a => a -> Pid -> [HsFieldUpdate]
 incPtrr t p
   = if isAbs p then
-      [ptrUpd, ptrCtrUpd]
+      [ HsFieldUpdate (UnQual (pidRdPtrName (toInteger t) p))
+         (writeMap (ptrrState (toInteger t) p)
+                   (varn (idxNameOfPid p))
+                   (inc (readPtrr (toInteger t) p)))
+      , ptrCtrUpd
+      ]
     else
-      [ptrUpd]
+      [ HsFieldUpdate (UnQual (pidRdPtrName (toInteger t) p))
+          (inc (readPtrr (toInteger t) p))
+      ]
     where
-      ptrUpd = HsFieldUpdate (UnQual ptrrName)
-                             (writeMap ptrrState
-                                (mkPtrKey (pidCstrOfPid p) tid)
-                             (inc (readPtrr (toInteger t) (pidCstrOfPid p))))
       ptrCtrUpd = HsFieldUpdate (UnQual (pidRdCounterName p)) incPtrCtr
       incPtrCtr = writeMap (pidRdCounterState p)
                            tid 
@@ -419,11 +467,8 @@ incPtrr t p
 updateState us
   = HsRecUpdate (HsVar (UnQual stateName)) us 
 
-pcEq :: HsExp -> Integer -> HsExp                
+pcEq :: Pid -> Integer -> HsExp                
 pcEq p i = readPCMap p `eq` HsParen (HsLit (HsInt i))
-
-pidReadTy p tid  = readPtrr tid (pidCstrOfPid p)
-pidWriteTy p tid = readPtrw tid (pidCstrOfPid p)
 
 assert :: HsExp -> HsExp
 assert e
