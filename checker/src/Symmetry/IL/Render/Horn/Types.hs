@@ -84,8 +84,8 @@ unName (HsIdent n) = n
 eqClass = UnQual (name "Eq")
 
 pidString :: Pid -> String
-pidString (PConc i)          = prefix "vP" $ show i
-pidString (PAbs (V v) (S s)) = prefix "vP" s
+pidString (PConc i)      = prefix "vP" $ show i
+pidString (PAbs _ (S s)) = prefix "vP" s
 
 pidWrPtrString :: Integer -> Pid -> String                               
 pidWrPtrString = pidPtrString ptrwString
@@ -159,7 +159,8 @@ pidNameOfPid p = name (pidTyString `prefix` pidString p)
 pidInjectiveName :: Pid -> HsName
 pidInjectiveName = name . prefix "is" . unName . pidNameOfPid
 
-idxNameOfPid (PAbs (V v) _) = name v
+idxNameOfPid (PAbs (V v) _)  = name v
+idxNameOfPid (PAbs (GV v) _) = name v
 
 pidCstrOfPid p@(PConc _)    = HsCon (UnQual (pidNameOfPid p))
 pidCstrOfPid p@(PAbs _ _)   = HsParen (HsApp (HsCon (UnQual (pidNameOfPid p)))
@@ -204,7 +205,14 @@ true, false :: HsExp
 true = HsCon (UnQual (name "True"))
 false = HsCon (UnQual (name "False"))
 
+pidVar :: Var -> HsExp
+pidVar (V v)  = var v        
+pidVar (GV v) = var v        
+
+var :: String -> HsExp
 var = HsVar . UnQual . name
+
+varn :: HsName -> HsExp
 varn = HsVar . UnQual
 
 int :: Integral a => a -> HsExp      
@@ -264,25 +272,23 @@ mapGet = HsVar (UnQual mapGetName)
 mapPut :: HsExp
 mapPut = HsVar (UnQual mapPutName)
 
-field :: HsName -> HsName -> HsExp
-field f s = HsParen (HsApp (HsVar (UnQual f) ) (HsVar (UnQual s)))
+-- field :: HsName -> HsName -> HsExp
+-- field f s = HsParen (HsApp (HsVar (UnQual f) ) (HsVar (UnQual s)))
 
 readGlobal :: String -> HsExp
-readGlobal f = field (name $ prefix stateString f) stateName
+readGlobal f = (var $ prefix stateString f) 
 
 readStateField :: Pid -> String -> HsExp            
 readStateField p f = if isAbs p then
-                   readMap (field fname stateName)
-                           (HsVar (UnQual (idxNameOfPid p)))
-                 else
-                   field fname stateName
+                       readMap (varn fname)
+                               (varn (idxNameOfPid p))
+                     else
+                       varn fname
   where
     fname = name $ prefix stateString f
 
 stateField :: String -> HsExp
-stateField f = field fname stateName
-  where
-    fname = name $ prefix stateString f
+stateField f = var (prefix stateString f)
 
 updField :: Pid -> String -> HsExp -> HsFieldUpdate
 updField p f e
@@ -295,8 +301,7 @@ updField p f e
 
 readPCMap :: Pid -> HsExp
 readPCMap p@(PConc _)      = pcState p
-readPCMap p@(PAbs (V v) _) = readMap (pcState p) (var v)
-
+readPCMap p@(PAbs v _) = readMap (pcState p) (pidVar v)
 
 updPC :: Pid -> Int -> Int -> [HsFieldUpdate]
 updPC p pc pc'
@@ -341,26 +346,26 @@ expToVal p (EVar (V v)) = readStateField p v
 expToVal p (EPid q)     = pidCons $>$ pidCstrOfPid q
 
 pcState :: Pid -> HsExp
-pcState p = field (pcName p) stateName
+pcState p = varn $ pcName p
 
 pidPCCounterState :: Pid -> HsExp
-pidPCCounterState p = field (pidLocCounterName p) stateName
+pidPCCounterState p = varn (pidLocCounterName p)
 
 ptrrState :: Integer -> Pid -> HsExp          
-ptrrState t p = field (pidRdPtrName t p) stateName
+ptrrState t p = varn (pidRdPtrName t p) 
 
 msgBufState :: Integer -> Pid -> HsExp                
 msgBufState t p
-  = field (pidMsgBufName t p) stateName
+  = varn (pidMsgBufName t p) 
 
 ptrwState :: Integer -> Pid -> HsExp          
-ptrwState t p = field (pidWrPtrName t p) stateName
+ptrwState t p = varn (pidWrPtrName t p)
 
 pidWrCounterState :: Pid -> HsExp
-pidWrCounterState p = field (pidWrCounterName p) stateName
+pidWrCounterState p = varn (pidWrCounterName p)
 
 pidRdCounterState :: Pid -> HsExp
-pidRdCounterState p = field (pidRdCounterName p) stateName
+pidRdCounterState p = varn (pidRdCounterName p)
 
 readMap :: HsExp -> HsExp -> HsExp
 readMap m k = HsParen (HsApp (HsApp mapGet m) k)
@@ -371,31 +376,38 @@ writeMap m k v = HsParen (mapPut $>$ m $>$ k $>$ v)
 mkPtrKey :: Pid -> Pid -> Integer -> HsExp
 mkPtrKey me p@(PConc _) t
   = int t
+mkPtrKey me p@(PAbs (GV v) _) t
+  = var v
 mkPtrKey me p@(PAbs (V v) _) t
   = readStateField me v
 
 mkMsgKey :: Pid -> Pid -> HsExp -> HsExp
 mkMsgKey me p@(PConc _) e      = e
 mkMsgKey me p@(PAbs (V v) _) e = HsParen (tuple_con 1 $>$ readStateField me v $>$ e)
+mkMsgKey me p@(PAbs (GV v) _) e = HsParen (tuple_con 1 $>$ var v $>$ e)
 -- mkMsgKey k1 k2 k3 = HsParen (HsCon (UnQual msgKeyTyName) $>$ k1 $>$ k2 $>$ k3)
 
 readPtrr :: Integer -> Pid -> HsExp
-readPtrr i p@(PConc _)      = ptrrState i p
-readPtrr i p@(PAbs (V v) _) = readMap (ptrrState i p) (var v)
+readPtrr i p@(PConc _)  = ptrrState i p
+readPtrr i p@(PAbs v _) = readMap (ptrrState i p) (pidVar v)
 
 readPtrw :: Pid -> Integer -> Pid -> HsExp
-readPtrw me i p@(PConc _)      = ptrwState i p
-readPtrw me i p@(PAbs (V v) _) = readMap (ptrwState i p) (readStateField me v)
+readPtrw me i p@(PConc _)       = ptrwState i p
+readPtrw me i p@(PAbs (V v) _)  = readMap (ptrwState i p) (readStateField me v)
+readPtrw me i p@(PAbs (GV v) _) = readMap (ptrwState i p) (var v)
 
 readMyPtrr p tid = readPtrr tid p
-readMyPtrw p@(PConc _) tid      = ptrwState tid p
-readMyPtrw p@(PAbs (V v) _) tid = readMap (ptrwState tid p) (var v)
+readMyPtrw p@(PConc _) tid       = ptrwState tid p
+readMyPtrw p@(PAbs (GV v) _) tid = readMap (ptrwState tid p) (var v)
+readMyPtrw p@(PAbs (V v) _) tid  = error "readMyPtrW -- Shouldn't happen?" -- readMap (ptrwState tid p) (var v)
 
 readMsgBuf :: Pid -> Integer -> HsExp
 readMsgBuf me@(PConc _) t
   = readMap (msgBufState t me) (readPtrr t me)
-readMsgBuf me@(PAbs (V v) _) t
+readMsgBuf me@(PAbs (GV v) _) t
   = readMap (msgBufState t me) (HsParen (tuple_con 1 $>$ var v $>$ readPtrr t me))
+readMsgBuf me@(PAbs (V v) _) t
+  = error "readMsgBuf Shouldn't happen?" -- readMap (msgBufState t me) (HsParen (tuple_con 1 $>$ var v $>$ readPtrr t me))
 
 writeMsgBuf :: Pid -> Pid -> Integer -> ILExpr -> HsFieldUpdate         
 writeMsgBuf p q t e

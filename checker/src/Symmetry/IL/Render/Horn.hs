@@ -132,11 +132,11 @@ runStateOfStmt dom m cfg p s
     call us         = HsVar (UnQual runStateName) $>$ updateState us
                                                   $>$ HsVar (UnQual schedName)
 
-runStateOfProc :: [Pid] -> TyMap -> Process Int -> HsMatch
-runStateOfProc dom m (p, s)
+runStateOfProc :: HsPat -> [Pid] -> TyMap -> Process Int -> HsMatch
+runStateOfProc stateMatch dom m (p, s)
   = HsMatch emptyLoc runStateName argMatch (HsGuardedRhss (concatMap (runStateOfStmt dom m cfg p) stmts)) []
     where
-      argMatch = [ HsPVar stateName, listHead (pidPatOfPid p) (HsPVar schedName)]
+      argMatch = [ stateMatch, listHead (pidPatOfPid p) (HsPVar schedName)]
       cfg      = nextStmts s
       stmts    = listify (const True :: Stmt Int -> Bool) s
 
@@ -144,8 +144,8 @@ runStateOfConfig :: TyMap -> Config Int -> HsDecl
 runStateOfConfig tyMap c@Config { cProcs = ps }
   = HsFunBind (transRel ++ [HsMatch emptyLoc runStateName args callAssert []])
   where
-    transRel = runStateOfProc dom tyMap <$> ps
-    args        = [HsPVar stateName, pids]
+    transRel = runStateOfProc statePattern dom tyMap <$> ps
+    args        = [statePattern, pids]
     callAssert  = HsUnGuardedRhs $ assert safetyE
     safetyE  = HsParen (deadlockFree c tyMap)
     dom    = fst <$> ps
@@ -154,6 +154,10 @@ runStateOfConfig tyMap c@Config { cProcs = ps }
     go p rest = HsPInfixApp (pidPatOfPid p)
                             (Special HsCons)
                             rest
+    fields = stateFieldsOfConfig tyMap c
+    statePattern = HsPAsPat stateName $
+                            HsPRec (UnQual stateTyName)
+                                   [HsPFieldPat (UnQual n) (HsPVar n) | ([n], _) <- fields]
 
 checkStateOfConfig :: Config Int -> [ HsDecl ]             
 checkStateOfConfig c

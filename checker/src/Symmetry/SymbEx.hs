@@ -60,7 +60,7 @@ stateToConfigs state
         where
           kvs   = M.toList renv
           concProcs = [ (IL.PConc n, s) | (S (RS n), (_, s)) <- kvs ]
-          absProcs  = [ (IL.PAbs (IL.V ("i" ++ roleToString r)) (roleToSet r), s) | (M r, (_, s)) <- kvs ]
+          absProcs  = [ (roleToPid r, s) | (M r, (_, s)) <- kvs ]
           setBounds = [ IL.Bounded (roleToSet r) x | (M r, (AInt _ (Just x), _)) <- kvs ]
           sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
           procs = concProcs ++ absProcs
@@ -71,6 +71,8 @@ stateToConfigs state
                      . concatMap IL.unboundSets
                      $ map snd procs
                            
+roleToPid :: RMulti -> IL.Pid
+roleToPid r = IL.PAbs (IL.GV ("i" ++ roleToString r)) (roleToSet r)
 
 emptyState :: SymbState
 emptyState = SymbState { renv = M.empty
@@ -335,7 +337,7 @@ absToIL (APidElem Nothing (Just i) (Pid (Just r)))
 absToIL (APid (Just x) _) = [IL.EVar (varToIL x)]
 absToIL (APid Nothing (Pid (Just (RS r))))             = [IL.EPid (IL.PConc r)]
 absToIL (APid Nothing (Pid (Just (RSelf (S (RS r)))))) = [IL.EPid (IL.PConc r)]
-absToIL (APid Nothing (Pid (Just (RSelf (M r)))))      = [IL.EPid (IL.PAbs (IL.V ("i" ++ roleToString r)) (roleToSet r))]
+absToIL (APid Nothing (Pid (Just (RSelf (M r)))))      = [IL.EPid (roleToPid r)]
 absToIL (APid Nothing (Pid (Just (RElem (RM r)))))     = error "TBD: elem"
 absToIL (APid Nothing (Pid Nothing))                   = error "wut"
 

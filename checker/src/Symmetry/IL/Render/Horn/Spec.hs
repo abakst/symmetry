@@ -36,6 +36,10 @@ eEq e1 e2 = PAtom Eq e1 e2
 eLe :: Expr -> Expr -> Pred            
 eLe e1 e2 = PAtom Le e1 e2            
 
+eILVar :: Var -> Expr            
+eILVar (V v)  = eVar v
+eILVar (GV v) = eVar v
+
 eZero :: Expr
 eZero = expr (0 :: Int)
 
@@ -81,16 +85,16 @@ initOfConcPid m p@(PConc _)
       rdLeWr t    = eLe (eRdPtr s t p) (eWrPtr s t p)
 
 schedPredOfPid :: TyMap -> Pid -> Symbol -> Pred
-schedPredOfPid m p@(PAbs (V v) (S s)) state
+schedPredOfPid m p@(PAbs v (S s)) state
   = subst1 (pAnd ([pcEqZero, idxBounds] ++
                   concat [[rdEqZero t, wrEqZero t, wrGtZero t] | t <- snd <$> m]))
            (symbol (idxNameOfPid p), eVar "v")
     where
       idxBounds  = eRange (eVar "v") (expr (0 :: Int)) (eReadState state (prefix stateString s))
-      pcEqZero   = eEqZero (eReadMap (eReadState state (pcName p)) (eVar v))
-      rdEqZero t = eRangeI eZero (eReadMap (eRdPtr state t p) (eVar v)) (eReadMap (eWrPtr state t p) (eVar v))
-      wrEqZero t = eEqZero (eReadMap (eWrPtr state t p) (eVar v))
-      wrGtZero t = eLe eZero (eReadMap (eWrPtr state t p) (eVar v))
+      pcEqZero   = eEqZero (eReadMap (eReadState state (pcName p)) (eILVar v))
+      rdEqZero t = eRangeI eZero (eReadMap (eRdPtr state t p) (eILVar v)) (eReadMap (eWrPtr state t p) (eILVar v))
+      wrEqZero t = eEqZero (eReadMap (eWrPtr state t p) (eILVar v))
+      wrGtZero t = eLe eZero (eReadMap (eWrPtr state t p) (eILVar v))
 
 schedPredsOfConfig :: TyMap -> Config Int -> Symbol -> [Pred]
 schedPredsOfConfig m Config {cProcs = ps} s

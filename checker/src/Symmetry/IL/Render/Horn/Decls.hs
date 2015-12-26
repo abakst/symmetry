@@ -112,17 +112,19 @@ pcOfProc (p, _)
   where
     pcType = if isAbs p then mapType intType intType else intType
 
+stateFieldsOfConfig :: TyMap -> Config Int -> [([HsName], HsBangType)]
+stateFieldsOfConfig m Config { cProcs = ps }
+  = concatMap stateFieldsOfProc ps ++
+    concatMap intFieldsOfProc   ps ++ 
+    concatMap countersOfProc    ps ++
+    concatMap (ptrsOfProc m)    ps ++
+    fmap      pcOfProc          ps
+              
 stateTypeOfConfig :: TyMap
                   -> Config Int
                   -> HsDecl
-stateTypeOfConfig m Config { cProcs = ps }
-  = recordDataDecl stateTyName stateTyName procState []
-  where
-    procState = concatMap stateFieldsOfProc ps ++
-                concatMap intFieldsOfProc ps   ++
-                concatMap countersOfProc ps ++
-                concatMap (ptrsOfProc m) ps ++
-                fmap pcOfProc ps
+stateTypeOfConfig m c
+  = recordDataDecl stateTyName stateTyName (stateFieldsOfConfig m c) []
 
 pcTypesOfConfig :: Config Int -> [HsDecl]
 pcTypesOfConfig Config { cProcs = ps }

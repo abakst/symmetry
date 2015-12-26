@@ -26,7 +26,8 @@ data Set = S String
          | SInts Int
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data Var = V String
+data Var = V String  -- Local Var
+         | GV String -- Global Var
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data LVar = LV { unlv :: String }
