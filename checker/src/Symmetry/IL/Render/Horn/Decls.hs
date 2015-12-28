@@ -32,13 +32,14 @@ pcTypeOfProc (p, s)
 
 stateFieldsOfProc :: Process Int -> [([HsName], HsBangType)]
 stateFieldsOfProc (p, s)
-  = if isAbs p then roleField p : (goAbs <$> fs) else go <$> fs
+  = if isAbs p then [ roleField p, unfolded p ]++ (goAbs <$> fs) else go <$> fs
   where
     fs = [name (prefix stateString v) | V v <- vs ]
     vs = recvVars s
     go f = ([f], bangTy valType)
     goAbs f = ([f], bangTy $ intMapType valType)
     roleField (PAbs _ (S s)) = ([name (prefix stateString s)], bangTy intType)
+    unfolded  (PAbs _ (S s)) = ([name (prefix stateString (s ++ "_k"))], bangTy intType)
 
 intFieldsOfProc :: Process Int -> [([HsName], HsBangType)]              
 intFieldsOfProc (p, s)

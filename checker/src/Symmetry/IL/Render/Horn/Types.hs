@@ -219,11 +219,18 @@ int :: Integral a => a -> HsExp
 int n = if n < 0 then HsParen e else e
   where e = HsLit (HsInt (toInteger n))
 
+plus, minus :: HsExp
+plus  = var "+"
+minus = var "-"
+
+add :: HsExp -> HsExp -> HsExp
+add x y = plus $>$ x $>$ y
+
 inc :: HsExp -> HsExp
-inc e = HsParen (HsParen (HsVar (UnQual (name "+"))) $>$ e $>$ int 1)
+inc e = HsParen (HsParen plus $>$ e $>$ int 1)
 
 dec :: HsExp -> HsExp
-dec e = HsParen (HsParen (HsVar (UnQual (name "-"))) $>$ e $>$ int 1)
+dec e = HsParen (HsParen minus $>$ e $>$ int 1)
 
 op :: String -> HsExp
 op = HsParen . HsVar . UnQual . name
@@ -300,41 +307,45 @@ updField p f e
     fname = name $ prefix stateString f
 
 readPCMap :: Pid -> HsExp
-readPCMap p@(PConc _)      = pcState p
+readPCMap p@(PConc _)  = pcState p
 readPCMap p@(PAbs v _) = readMap (pcState p) (pidVar v)
 
+updPCK :: Pid -> Int -> Int -> HsFieldUpdate                         
+updPCK p pc pc'
+  = HsFieldUpdate (UnQual (pidLocCounterName p))
+                  (writeMap (writeMap pcmap
+                                      pce
+                                      (dec (readMap pcmap pce)))
+                            pce'
+                            (inc (readMap pcmap pce')))
+  where
+    pcmap = pidPCCounterState p                                   
+    pce   = int pc
+    pce'  = int pc'
+
 updPC :: Pid -> Int -> Int -> [HsFieldUpdate]
-updPC p pc pc'
+updPC p _ pc'
   = if isAbs p then
-      [ HsFieldUpdate (UnQual (pcName p)) (writeMap (pcState p) (varn (idxNameOfPid p)) pce')
-      , pcku
-      ]
+      [ HsFieldUpdate (UnQual (pcName p)) (writeMap (pcState p) (varn (idxNameOfPid p)) pce') ]
     else
       [ HsFieldUpdate (UnQual (pcName p)) pce' ]
   where
-    pcku = HsFieldUpdate (UnQual (pidLocCounterName p))
-                         (writeMap (writeMap pcmap pce
-                                               (dec (readMap pcmap pce)))
-                                   pce'
-                                   (inc (readMap pcmap pce')))
-    pcmap = pidPCCounterState p                                   
-    pce  = int pc
+  --   pcku = HsFieldUpdate (UnQual (pidLocCounterName p))
+  --                        (writeMap (writeMap pcmap pce
+  --                                              (dec (readMap pcmap pce)))
+  --                                  pce'
+  --                                  (inc (readMap pcmap pce')))
+    -- pcmap = pidPCCounterState p                                   
+    -- pce  = int pc
     pce' = int pc'
 
 condUpdPC :: Pid -> HsExp -> Int -> Int -> Int -> [HsFieldUpdate]
-condUpdPC p grd pc pc' pc''
+condUpdPC p grd _ pc' pc''
   = if isAbs p then
-      [pcu, pcku]
+      error "TBD" -- [pcu, pcku]
     else
       [pcu]
   where
-    pcku = HsFieldUpdate (UnQual (pidLocCounterName p))
-                         (writeMap (writeMap pcmap pce
-                                               (dec (readMap pcmap pce)))
-                                   pce'
-                                   (inc (readMap pcmap pce')))
-    pcmap = pidPCCounterState p                                   
-    pce  = int pc
     pcu = HsFieldUpdate (UnQual (pcName p))
           (writeMap (pcState p) (pidCstrOfPid p) pce')
     pce' = HsParen $ HsIf grd (int pc') (int pc'')

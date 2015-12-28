@@ -30,72 +30,76 @@ pcGuardOfStmt p s
 
 mkGuard gs = HsGuardedRhs emptyLoc (ands gs)
 
-type GuardedUpdate = (Maybe HsExp, [HsFieldUpdate])             
+type GuardedUpdate = ([HsExp], [HsFieldUpdate])             
 
-pcUpdateOfStmt :: IntMap [Int] -> Pid -> Stmt Int -> [GuardedUpdate]
-pcUpdateOfStmt cfg p SIter {iterVar = (V v), iterSet = (S s) , annot = a}
-  = case M.lookup a cfg of
-      Just [i,j] -> [ (Just (lt ve se), updPC p a j),
-                      (Just (lneg (lt ve se)), updPC p a i)
-                    ]
-      Just [i]   -> [ (Just (lt ve se), updPC p a i),
-                      (Just (lneg (lt ve se)), updPC p a (-1))
-                    ]
-    where
-      ve = readStateField p v
-      se = readStateField p s
-                    
-pcUpdateOfStmt cfg p s
-  = case M.lookup (annot s) cfg of
-      Just [i] -> [(Nothing, updPC p (annot s) i)]
-      _        -> [(Nothing, updPC p (annot s) (-1))]
+updPCCounters :: Pid -> Int -> Int -> [GuardedUpdate]
+updPCCounters p@(PAbs _ (S s)) pc pc'
+  = [ ([grd], []), ([lneg grd], [pcku]) ]
+  where
+    grd = varn (idxNameOfPid p) `eq` (var (prefix stateString (s ++ "_k")))
+    pcku = HsFieldUpdate (UnQual (pidLocCounterName p))
+                         (writeMap (writeMap pcmap pce
+                                               (dec (readMap pcmap pce)))
+                                   pce'
+                                   (inc (readMap pcmap pce')))
+    pcmap = pidPCCounterState p                                   
+    pce   = int pc
+    pce'  = int pc'
+updPCCounters _ _ _
+  = []
 
--- stateUpdateOfStmt :: [Pid] -> TyMap -> Pid -> Stmt Int -> [HsFieldUpdate]                  
--- stateUpdateOfStmt dom m p (SSend (EPid q) (t,e) _)
---   = incPtrw tid p q ++
---     [ writeMsgBuf p q tid e
---     ]
---   where
---     tid = lookupTy t m
-nextPC :: Pid -> Int -> Maybe [Int] -> [HsFieldUpdate]
-nextPC p i (Just [j]) = updPC p i j
-nextPC p i Nothing    = updPC p i (-1)
+sequenceUpdates :: [GuardedUpdate] -> [GuardedUpdate] -> [GuardedUpdate]            
+sequenceUpdates gus []
+  = gus
+sequenceUpdates [] gus
+  = gus            
+sequenceUpdates gus gus'
+  = [ (g ++ g', us ++ us') | (g, us) <- gus, (g', us') <- gus' ]
+
+updatePC :: [HsExp] -> Pid -> Int -> Int -> [GuardedUpdate]    
+updatePC g p pc pc'
+  = sequenceUpdates [(g, updPC p pc pc')] (updPCCounters p pc pc')
+
+nextPC :: [HsExp] -> Pid -> Int -> Maybe [Int] -> [GuardedUpdate]
+nextPC g p i (Just [j])
+  = updatePC g p i j
+nextPC g p i Nothing
+  = updatePC g p i (-1)
+nextPC _ _ _ _
+  = error "nextPC"
 
 stateUpdateOfStmt :: [Pid] -> TyMap -> IntMap [Int] -> Pid -> Stmt Int -> [GuardedUpdate]
-stateUpdateOfStmt dom m cfg p (SRecv (t,V x) i)
-  = [(Nothing, nextPC p i next ++
-               incPtrr tid p   ++ [updField p x (readMsgBuf p tid)])]
+stateUpdateOfStmt _ m cfg p (SRecv (t,V x) i)
+  = nextPC [] p i next `sequenceUpdates`
+    [([], incPtrr tid p ++ [updField p x (readMsgBuf p tid)])]
   where
     next = M.lookup i cfg
     tid = lookupTy t m
 
 stateUpdateOfStmt _ m cfg p (SSend q (t,e) i)
-  = case (M.lookup i cfg, q) of
-      (n, EPid q) ->
-        [ (Nothing, nextPC p i n ++ sendTo q) ]
-      (n, EVar v) ->
-        [ (Nothing, nextPC p i n ++ sendTo (PVar v)) ]
+  = [([], sendTo pid)] `sequenceUpdates`
+    nextPC [] p i j
     where
+      (j, pid) = case (M.lookup i cfg, q) of
+                  (j, EPid q) -> (j, q)
+                  (j, EVar v) -> (j, PVar v)
       tid = lookupTy t m
       sendTo q = incPtrw tid p q ++
                  [writeMsgBuf p q tid e]
 
 stateUpdateOfStmt _ _ cfg p SIter{iterSet = (S s), iterVar = (V v), annot = a}
-  = case M.lookup a cfg of
-      Just [i,j] -> [ (Just (lt ve se)         , incr : updPC p a j)
-                    , (Just (lte se ve) , updPC p a i)
-                    ]
-      Just [i]   -> [ (Just (lt ve se)         , incr : updPC p a i)
-                    , (Just (lte se ve) , updPC p a (-1))
-                    ]
+  = [([], [incr])] `sequenceUpdates`
+    (updatePC [lt ve se] p a i ++ updatePC [lte se ve] p a j)
     where
+      (i, j) = case M.lookup a cfg of
+                 Just [i,j] -> (j, i)
+                 Just [i]   -> (i, -1)
       incr = updField p v (inc (readStateField p v))
       ve = readStateField p v
       se = readStateField p s
 
 stateUpdateOfStmt _ _ cfg p SBlock {annot = a}
-  = case M.findWithDefault [-1] a cfg of
-      [i] -> [ (Nothing, updPC p a i) ]
+  = nextPC [] p a $ M.lookup a cfg
 
 stateUpdateOfStmt _ _ _ _ s = error $ "TBD: " ++ show (pretty s)
 
@@ -121,16 +125,15 @@ runStateOfStmt dom m cfg p s@SSend { sndPid = EVar (V v) }
     caseAlt q = HsAlt emptyLoc (pat q) (call (updateState $ upds q)) []
     call    e = HsUnGuardedAlt (varn runStateName $>$ e $>$ varn schedName)
     pat     q = HsPApp (UnQual pidValConsName) [HsPParen (pidPatOfPid q)]
-    upds    q = let [(Nothing, us)] = stateUpdateOfStmt dom m cfg p s { sndPid = EPid q }
+    upds    q = let [([], us)] = stateUpdateOfStmt dom m cfg p s { sndPid = EPid q }
                 in us
 
 runStateOfStmt dom m cfg p s
   = [ guardedCall (guards g) (call us) | (g, us) <- stateUpdateOfStmt dom m cfg p s ]
   where
-    guards (Just e) = e : guardsOfStmt m p s
-    guards Nothing  = guardsOfStmt m p s
-    call us         = HsVar (UnQual runStateName) $>$ updateState us
-                                                  $>$ HsVar (UnQual schedName)
+    guards es = es ++ guardsOfStmt m p s
+    call us   = HsVar (UnQual runStateName) $>$ updateState us
+                                            $>$ HsVar (UnQual schedName)
 
 runStateOfProc :: HsPat -> [Pid] -> TyMap -> Process Int -> HsMatch
 runStateOfProc stateMatch dom m (p, s)

@@ -37,7 +37,19 @@ procAtRecv _ p tis
 procDone :: Pid -> HsExp
 procDone p
   = pcEq p (-1)
-    
+
+procBlocked :: TyMap -> Pid -> [(ILType, Int)] -> HsExp    
+procBlocked m p@(PAbs v (S s)) tis
+  = ands [ ors [ ands [ pcEq pk (toInteger i), blocked t ] | (t, i) <- tis ]
+         , eq (counters tis) (dec (var $ prefix stateString s))
+         ]
+  where
+    counters  = (foldl' add (readPCK (-1)) . (readPCK . snd <$>))
+    readPCK i = readMap (pidPCCounterState p) (int i)
+    blocked t = let tid = lookupTy t m in
+                lte (readMyPtrw pk tid) (readMyPtrr pk tid)
+    pk = PAbs (V (s ++ "_k")) (S s)
+
 procBlocked m p tis
   = ors [ ands [pcEq p (toInteger i),  blocked t] | (t, i) <- tis ]
   where
@@ -58,20 +70,3 @@ deadlockConfigs c@Config { cProcs = ps } m
 deadlockFree :: Config Int -> TyMap -> HsExp                      
 deadlockFree c m
   = lneg $ deadlockConfigs c m
--- deadlockFree :: Config Int -> TyMap -> HsExp
--- deadlockFree c m
---   = lneg $ ands [allAtRecvOrDone, oneBlocked]
---   where
---     allAtRecvOrDone
---       = ands [ ors [procAtRecv m p (lkup p), procDone p] | p <- ps]
---     oneBlocked
---       = ors [ procBlocked m p (lkup p) | p <- ps ]
---     ps   = fst <$> cProcs c
---     locs = blockedLocs c
---     lkup p = fromJust $ lookup p locs
-  --   absEnabled = ors [ absEnabled1 p ls | (p@(PAbs _ _), ls) <- locs ]
-  --   absEnabled1 p@(PAbs _ (S s)) ls
-  --     = lneg (eq (HsParen (sumLocs p (snd <$> ls))) (readGlobal s))
-  --   sumLocs p ls = HsParen $ foldr (go p) (rdL p (-1)) ls
-  --   go p l e = HsParen (var "+") $>$ rdL p l $>$ e
-  --   rdL p l      = readMap (pidPCCounterState p) (int l)
