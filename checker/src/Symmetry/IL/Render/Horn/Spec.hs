@@ -77,17 +77,22 @@ eWrPtr s t p
 
 initOfPid :: TyMap -> Process Int -> Pred
 initOfPid m (p@(PAbs _ (S s)), stmt)
-  = pAnd [ counterInit,
-           eRange (eReadState st eK)
-                  eZero (eReadState st (prefix stateString s))
-         , eEq counterSum setSize
-         ]
+  = pAnd preds 
   where
+    preds    = [ counterInit
+               , unfoldInit
+               , eRange (eReadState st eK)
+                 eZero (eReadState st (prefix stateString s))
+               , eEq counterSum setSize
+               ] ++ counterInits
     st       = "v"
-    eK       = prefix stateString (s ++ "_k")
-    counterInit = eEq setSize (readCtr 0)
-    setSize     = eDec (eReadState st (prefix stateString s))
-    counterSum  = foldl' (\e i -> ePlus e (readCtr i)) (readCtr (-1)) stmts
+    eK       = pidUnfoldName p
+    counterInit  = eEq setSize (readCtr 0)
+    unfoldInit   = eEq eZero (eReadMap (eReadState st (pcName p)) (eReadState st eK))
+    setSize      = eDec (eReadState st (prefix stateString s))
+    counterSum   = foldl' (\e i -> ePlus e (readCtr i)) (readCtr (-1)) stmts
+    counterInits = (\i -> eEq eZero (readCtr i)) <$> filter (/= 0) ((-1) : stmts)
+    counterBounds= (\i -> eLe eZero (readCtr i)) <$> filter (/= 0) stmts
     readCtr :: Int -> Expr
     readCtr i  = eReadMap (eReadState st (pidLocCounterName p)) (fixE i)
     fixE i     = if i < 0 then ECst (expr i) FInt else expr i
@@ -157,13 +162,17 @@ initSchedReft p
       args = printf "{v:Int | %s}" . predToString
              <$> p (symbol initialStateString)
 
+nonDetSpec :: String    
+nonDetSpec
+  = printf "{-@ %s :: %s -> {v:Int | true} @-}" nonDetString (prettyPrint schedTy)
+
 mapGetSpec :: String
 mapGetSpec
-  = printf "{-@ assume %s :: m:Map_t k v -> k:k -> {v:v | v = Map_select m k} @-}" mapGetString
+  = printf "{-@ %s :: m:Map_t k v -> k:k -> {v:v | v = Map_select m k} @-}" mapGetString
 
 mapPutSpec :: String
 mapPutSpec
-  = printf "{-@ assume %s :: m:Map_t k v -> k:k -> v:v -> {vv:Map_t k v | vv = Map_store m k v } @-}" mapPutString
+  = printf "{-@ %s :: m:Map_t k v -> k:k -> v:v -> {vv:Map_t k v | vv = Map_store m k v } @-}" mapPutString
 
 embedMap :: [String]
 embedMap = [ "{-@ embed Map_t as Map_t @-}"
@@ -177,14 +186,7 @@ measuresOfConfig Config { cProcs = ps }
   = unlines [ printf "{-@ measure %s @-}" (unName $ pidInjectiveName p) | (p, _) <- ps]
 
 builtinSpec :: [String]
-builtinSpec = embedMap ++
-              [ printf "{-@ data %s = %s { x%s_0 :: %s, x%s_1 :: Int } @-}"
-                      ptrKeyTyString ptrKeyTyString
-                      ptrKeyTyString pidTyString ptrKeyTyString
-              , printf "{-@ data %s = %s { x%s_0 :: %s, x%s_1 :: Int, x%s_2 :: Int } @-}"
-                      msgKeyTyString msgKeyTyString
-                      msgKeyTyString pidTyString msgKeyTyString msgKeyTyString
-              ]
+builtinSpec = nonDetSpec : embedMap 
 
 pidSpecString  Config { cProcs = ps }
   = case absPs of

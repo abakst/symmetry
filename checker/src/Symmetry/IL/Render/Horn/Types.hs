@@ -62,6 +62,8 @@ prodValConsName  = name "VPair"
 unitCons = HsCon (UnQual unitValConsName)                   
 intCons = HsCon (UnQual intValConsName)                   
 pidCons = HsCon (UnQual pidValConsName)                   
+leftCons = HsCon (UnQual leftValConsName)
+rightCons = HsCon (UnQual rightValConsName)
 
 ty n      = HsTyCon (UnQual n)
 bangTy t  = HsUnBangedTy t
@@ -165,6 +167,13 @@ idxNameOfPid (PAbs (GV v) _) = name v
 pidCstrOfPid p@(PConc _)    = HsCon (UnQual (pidNameOfPid p))
 pidCstrOfPid p@(PAbs _ _)   = HsParen (HsApp (HsCon (UnQual (pidNameOfPid p)))
                                              (HsVar (UnQual (idxNameOfPid p))))
+
+pidUnfoldString p@(PAbs _ (S s)) = prefix stateString $ prefix (pidString p) "k"
+pidUnfoldName   p                = name $ pidUnfoldString p
+
+roleSizeString (PAbs _ (S s)) = prefix stateString s                                   
+roleSizeName   p              = name $ roleSizeString p
+
 idxTyNames :: [Pid] -> [HsName]
 idxTyNames ps
   = zipWith const (name <$> ["i" ++ show i | _ <- ps, i <- [0..]]) ps
@@ -173,11 +182,13 @@ pidPatOfPid p@(PConc _)  = HsPApp (UnQual (pidNameOfPid p)) []
 pidPatOfPid p@(PAbs _ _) = HsPApp (UnQual (pidNameOfPid p)) [HsPVar (idxNameOfPid p)]
 
 mapGetString = "get"                           
+nonDetString = "nonDet"
 mapGetSpecString = "Map_select"
 mapPutString = "put"                           
 mapPutSpecString = "Map_store"
 mapGetName = name mapGetString
 mapPutName = name mapPutString
+nonDetName = name nonDetString
 
 runStateName = name $ "runState"
 checkName    = name $ "check"
@@ -206,7 +217,7 @@ true = HsCon (UnQual (name "True"))
 false = HsCon (UnQual (name "False"))
 
 pidVar :: Var -> HsExp
-pidVar (V v)  = var v        
+pidVar (V v)  = var (prefix stateString v)
 pidVar (GV v) = var v        
 
 var :: String -> HsExp
@@ -224,7 +235,7 @@ plus  = var "+"
 minus = var "-"
 
 add :: HsExp -> HsExp -> HsExp
-add x y = plus $>$ x $>$ y
+add x y = HsParen (HsParen plus $>$ x $>$ y)
 
 inc :: HsExp -> HsExp
 inc e = HsParen (HsParen plus $>$ e $>$ int 1)
@@ -266,6 +277,8 @@ ifLte i n e1 e2
 infixl 9 $>$
 m $>$ n = HsApp m n
 
+infixr 5 $->$
+t1 $->$ t2 = HsTyFun t1 t2                                                                                                     
 listHead :: HsPat -> HsPat -> HsPat          
 listHead pat rest
   = HsPApp (Special (HsCons)) [HsPParen pat, rest]
@@ -355,6 +368,8 @@ expToVal p EUnit        = unitCons
 expToVal p EInt         = intCons
 expToVal p (EVar (V v)) = readStateField p v
 expToVal p (EPid q)     = pidCons $>$ pidCstrOfPid q
+expToVal p (ELeft e)    = leftCons $>$ expToVal p e
+expToVal p (ERight e)   = rightCons $>$ expToVal p e
 
 pcState :: Pid -> HsExp
 pcState p = varn $ pcName p
@@ -416,11 +431,17 @@ readMsgBuf :: Pid -> Integer -> HsExp
 readMsgBuf me@(PConc _) t
   = readMap (msgBufState t me) (readPtrr t me)
 readMsgBuf me@(PAbs (GV v) _) t
-  = readMap (msgBufState t me) (HsParen (tuple_con 1 $>$ var v $>$ readPtrr t me))
+  = readMap (readMap (msgBufState t me) (var v)) (readPtrr t me)
 readMsgBuf me@(PAbs (V v) _) t
   = error "readMsgBuf Shouldn't happen?" -- readMap (msgBufState t me) (HsParen (tuple_con 1 $>$ var v $>$ readPtrr t me))
 
 writeMsgBuf :: Pid -> Pid -> Integer -> ILExpr -> HsFieldUpdate         
+writeMsgBuf p q@(PAbs v _) t e
+  = HsFieldUpdate (UnQual (pidMsgBufName t q))
+      (writeMap (msgBufState t q) (pidVar v)
+                (writeMap (readMap (msgBufState t q) (pidVar v))
+                          (readPtrw p t q)
+                          (HsParen (expToVal p e))))
 writeMsgBuf p q t e
   = HsFieldUpdate (UnQual (pidMsgBufName t q))
       (writeMap (msgBufState t q) (mkMsgKey p q (readPtrw p t q)) (HsParen (expToVal p e)))

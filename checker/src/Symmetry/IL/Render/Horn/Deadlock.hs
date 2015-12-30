@@ -39,16 +39,11 @@ procDone p
   = pcEq p (-1)
 
 procBlocked :: TyMap -> Pid -> [(ILType, Int)] -> HsExp    
-procBlocked m p@(PAbs v (S s)) tis
-  = ands [ ors [ ands [ pcEq pk (toInteger i), blocked t ] | (t, i) <- tis ]
-         , eq (counters tis) (dec (var $ prefix stateString s))
-         ]
+procBlocked m p@(PAbs _ _) tis
+  = ors [ ands [ pcEq p (toInteger i), blocked t ] | (t, i) <- tis ]
   where
-    counters  = (foldl' add (readPCK (-1)) . (readPCK . snd <$>))
-    readPCK i = readMap (pidPCCounterState p) (int i)
     blocked t = let tid = lookupTy t m in
-                lte (readMyPtrw pk tid) (readMyPtrr pk tid)
-    pk = PAbs (V (s ++ "_k")) (S s)
+                lte (readMyPtrw p tid) (readMyPtrr p tid)
 
 procBlocked m p tis
   = ors [ ands [pcEq p (toInteger i),  blocked t] | (t, i) <- tis ]
@@ -56,17 +51,20 @@ procBlocked m p tis
     blocked t = let tid = lookupTy t m in
                 lte (readMyPtrw p tid) (readMyPtrr p tid)
 
-deadlockConfigs :: Config Int -> TyMap -> HsExp
-deadlockConfigs c@Config { cProcs = ps } m
-  = ors (badConfig <$> locs)
+deadlockFree :: Config Int -> TyMap -> HsExp
+deadlockFree c@Config { cProcs = ps } m
+  = lneg $ ands [ assumption
+                , ors (badConfig <$> locs)
+                ]
   where
-    badConfig (p, tis) = ands [ procBlocked m p tis
-                              , ands [ blockedOrDone q | q <- fst <$> ps, p /= q ]
-                              ]
+    badConfig (p, tis) = procBlocked m p tis
+    assumption      = ands [ blockedOrDone q | q <- fst <$> ps ]
     locs            = blockedLocs c
     lkup p          = fromJust $ lookup p locs
-    blockedOrDone p = ors [ procDone p, procBlocked m p (lkup p) ]
-
-deadlockFree :: Config Int -> TyMap -> HsExp                      
-deadlockFree c m
-  = lneg $ deadlockConfigs c m
+    blockedOrDone p@(PConc _)  = ors [ procDone p, procBlocked m p (lkup p) ]
+    blockedOrDone p@(PAbs _ _) = ands [ ors [ procDone p, procBlocked m p (lkup p) ]
+                                      , eq (counters p (lkup p))
+                                           (dec (varn $ roleSizeName p))
+                                      ]
+    counters p  = (foldl' add (readPCK p (-1)) . (readPCK p . snd <$>))
+    readPCK p i = readMap (pidPCCounterState p) (int i)

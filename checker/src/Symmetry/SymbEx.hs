@@ -5,6 +5,7 @@
 {-# Language TypeFamilies #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language ImplicitParams #-}
+{-# Language ViewPatterns #-}
 module Symmetry.SymbEx where
 
 import           Prelude hiding (error, undefined)
@@ -104,8 +105,9 @@ fresh (AUnit _)    = AUnit . Just <$> freshVar
 fresh (AInt _ n)   = (\v -> return (AInt (Just v) n))  =<< freshVar
 fresh (AString _)  = AString . Just <$> freshVar
 fresh (ASum _ l r) = do v  <- Just <$> freshVar
-                        fl <- mapM fresh l
-                        fr <- mapM fresh r
+                        i  <- freshInt
+                        fl <- mapM ((setVar (V i) <$>) . fresh) l
+                        fr <- mapM ((setVar (V i) <$>) . fresh) r
                         return $ ASum v fl fr
 fresh (AProd _ l r) = do v  <- Just <$> freshVar
                          fl <- fresh l
@@ -157,9 +159,18 @@ instance Show (AbsVal t) where
 
 setVar :: Var t -> AbsVal t -> AbsVal t                
 setVar v (AUnit _)       = AUnit (Just v)
+setVar v (AInt _ i)      = AInt  (Just v) i
 setVar v (ASum _ l r)    = ASum  (Just v) l r
 setVar v (APid _ p)      = APid  (Just v) p
 setVar v (AProd _ p1 p2) = AProd (Just v) p1 p2
+
+getVar :: AbsVal t -> Maybe (Var t)                           
+getVar (AUnit v)     = v
+getVar (AString v)   = v
+getVar (AInt v _)    = v
+getVar (ASum v _ _)  = v
+getVar (AProd v _ _) = v
+getVar (APid v _)    = v
 
 absToILType :: Typeable t => AbsVal t -> IL.ILType
 absToILType x = go (typeRep x)
@@ -183,6 +194,8 @@ absToILType x = go (typeRep x)
         = IL.TSum (go (head as)) (go (as !! 1))
       | tyConName (typeRepTyCon a) == "(,)"
         = IL.TProd (go (head as)) (go (as !! 1))
+      | tyConName (typeRepTyCon a) == "Int"
+        = IL.TInt
       | otherwise
         = error "TBD: absToILType" 
       where
@@ -326,10 +339,11 @@ absToIL (AArrow _ _)  = error "TBD: absToIL AArrow"
 absToIL (ARoleSing _ _)  = error "TBD: absToIL ARoleSing"
 absToIL (ARoleMulti _ _)  = error "TBD: absToIL ARoleMulti"
 
-absToIL (AUnit _)     = [IL.EUnit]
-absToIL (AInt  _ _)   = [IL.EInt]
-absToIL (AString _)   = error "TBD: absToIL String"
-absToIL (AList _ _)   = error "TBD: absToIL List"
+absToIL (AUnit _)         = [IL.EUnit]
+absToIL (AInt (Just x) _) = [IL.EVar (varToIL x)]
+absToIL (AInt  _ _)       = [IL.EInt]
+absToIL (AString _)       = [IL.EString]
+absToIL (AList _ _)       = error "TBD: absToIL List"
 
 absToIL (APidElem Nothing (Just i) (Pid (Just r)))
   = [IL.EPid (IL.PAbs (varToIL i) (roleToSet r))]
@@ -391,7 +405,7 @@ choosePid :: (?callStack :: CallStack)
           => AbsVal (Pid RSing) -> (IL.ILExpr -> IL.Stmt ()) -> SymbExM (IL.Stmt ())
 choosePid p@(APid _ (Pid (Just (RElem r)))) f
   = do v <- freshVar
-       let pv = IL.EVar (varToIL v)
+       let pv = IL.EPid (IL.PAbs (varToIL v) (roleToSet r))-- IL.EVar (varToIL v)
        return $ IL.SChoose (varToIL v) (roleToSet r) (f pv) ()
 choosePid p s
   = return (s (absPidToExp p))
@@ -746,7 +760,7 @@ symRecv :: (?callStack :: CallStack, Typeable a, ArbPat SymbEx a)
         => SymbEx (Process SymbEx a)
 -------------------------------------------------
 symRecv
-  = SE $ do v     <- runSE arb
+  = SE $ do v     <- freshVal
             x     <- freshVar
             let val = setVar x v
             s     <- recvToIL val x
@@ -826,29 +840,28 @@ symMatchSum (ASum x vl vr) l r
       (Nothing, Nothing) -> do
         (v1, v2) <- case x of
                       Nothing -> error "does this happen?" -- return (Nothing, Nothing)
-                      _       -> do v1 <- freshVar
-                                    v2 <- freshVar
-                                    return (v1, v2)
+                      _       -> do i  <- freshInt -- instead of freshVar to reuse var in diff. branch
+                                    return (V i, V i)
         val1 <- setVar v1 <$> runSE arb
         val2 <- setVar v2 <$> runSE arb
         c1 <- runSE . app l . SE . return $ val1
         c2 <- runSE . app r . SE . return $ val2
-        return $ joinProcs x c1 c2
+        return $ joinProcs x (Just v1) (Just v2) c1 c2
       (Just a, Just b)  -> do 
         c1 <- runSE . app l . SE . return $ a
         c2 <- runSE . app r . SE . return $ b
         case x of
           Nothing -> 
-            return $ joinProcs Nothing c1 c2
+            return $ joinProcs Nothing (getVar a) (getVar b) c1 c2
           Just v -> 
-            return $ joinProcs (Just v) c1 c2
+            return $ joinProcs (Just v) (getVar a) (getVar b) c1 c2
 
-joinProcs :: forall a b.
+joinProcs :: forall a b x y.
              (?callStack :: CallStack)
-          => Maybe (Var b) -> AbsVal a -> AbsVal a -> AbsVal a
-joinProcs (Just x) (AProc _ s1 v1) (AProc _ s2 v2)
-  = AProc Nothing (IL.SCase (varToIL x) s1 s2 ()) (v1 `join` v2)
-joinProcs _ t1 t2
+          => Maybe (Var b) -> Maybe (Var x) -> Maybe (Var y) -> AbsVal a -> AbsVal a -> AbsVal a
+joinProcs (Just x) (Just x1) (Just x2) (AProc _ s1 v1) (AProc _ s2 v2)
+  = AProc Nothing (IL.SCase (varToIL x) (varToIL x1) (varToIL x2) s1 s2 ()) (v1 `join` v2)
+joinProcs _ _ _ t1 t2
   = t1 `join` t2
 
 symPair :: SymbEx a
