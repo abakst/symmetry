@@ -30,29 +30,43 @@ blockedLocs :: Config Int -> [(Pid, [(ILType, Int)])]
 blockedLocs Config{ cProcs = ps }
   = blockedLocsOfProc <$> ps
 
-procAtRecv :: TyMap -> Pid -> (ILType, Int) -> HsExp
-procAtRecv m p (t, i)
-  = ands [ pcEq (pidCstrOfPid p) (toInteger i)
-         , lneg (lt (pidReadTy p tid) (pidWriteTy p tid))
-         ]
-    where
-      tid = lookupTy t m
+procAtRecv :: TyMap -> Pid -> [(ILType, Int)] -> HsExp
+procAtRecv _ p tis
+  = ors [ pcEq p (toInteger i) | (_, i) <- tis ]
 
 procDone :: Pid -> HsExp
 procDone p
-  = pcEq (pidCstrOfPid p) (-1)
+  = pcEq p (-1)
 
-    
-procBlockedOrDone :: TyMap -> Pid -> [(ILType, Int)] -> HsExp
-procBlockedOrDone m p recvs
-  = ors (procDone p : (procAtRecv m p <$> recvs))
-    
-deadlockExpr :: Config Int -> TyMap -> HsExp
-deadlockExpr c m
-  = ands [ ands [procBlockedOrDone m p (lkup p) | p <- ps]
-         , ors  [lneg (procDone p) | p <- ps]
+procBlocked :: TyMap -> Pid -> [(ILType, Int)] -> HsExp    
+procBlocked m p@(PAbs v (S s)) tis
+  = ands [ ors [ ands [ pcEq pk (toInteger i), blocked t ] | (t, i) <- tis ]
+         , eq (counters tis) (dec (var $ prefix stateString s))
          ]
   where
-    ps   = fst <$> cProcs c
-    locs = blockedLocs c
-    lkup p = fromJust $ lookup p locs
+    counters  = (foldl' add (readPCK (-1)) . (readPCK . snd <$>))
+    readPCK i = readMap (pidPCCounterState p) (int i)
+    blocked t = let tid = lookupTy t m in
+                lte (readMyPtrw pk tid) (readMyPtrr pk tid)
+    pk = PAbs (V (s ++ "_k")) (S s)
+
+procBlocked m p tis
+  = ors [ ands [pcEq p (toInteger i),  blocked t] | (t, i) <- tis ]
+  where
+    blocked t = let tid = lookupTy t m in
+                lte (readMyPtrw p tid) (readMyPtrr p tid)
+
+deadlockConfigs :: Config Int -> TyMap -> HsExp
+deadlockConfigs c@Config { cProcs = ps } m
+  = ors (badConfig <$> locs)
+  where
+    badConfig (p, tis) = ands [ procBlocked m p tis
+                              , ands [ blockedOrDone q | q <- fst <$> ps, p /= q ]
+                              ]
+    locs            = blockedLocs c
+    lkup p          = fromJust $ lookup p locs
+    blockedOrDone p = ors [ procDone p, procBlocked m p (lkup p) ]
+
+deadlockFree :: Config Int -> TyMap -> HsExp                      
+deadlockFree c m
+  = lneg $ deadlockConfigs c m

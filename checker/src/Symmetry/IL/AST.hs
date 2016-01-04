@@ -12,6 +12,7 @@ import           Data.Typeable
 import           Data.Generics
 import           Data.List (nub, isPrefixOf, (\\))
 import qualified Data.Map.Strict as M
+import qualified Data.IntMap     as I
 import Text.PrettyPrint.Leijen as P hiding ((<$>))
 
 setSize :: Int
@@ -25,7 +26,8 @@ data Set = S String
          | SInts Int
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data Var = V String
+data Var = V String  -- Local Var
+         | GV String -- Global Var
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data LVar = LV { unlv :: String }
@@ -175,7 +177,7 @@ data Stmt a = SSkip { annot :: a }
             | SNull { annot :: a }
             -- | SVarDecl Var a
             -- | STest Var a
-         deriving (Eq, Read, Show, Functor, Foldable, Data, Typeable)
+         deriving (Ord, Eq, Read, Show, Functor, Foldable, Data, Typeable)
 
 data SetBound = Bounded Set Int
                 deriving (Eq, Read, Show, Typeable)
@@ -281,11 +283,11 @@ instance Traversable Stmt where
   traverse _ _
     = error "traverse undefined for non-source stmts"
 
-joinMaps :: M.Map Int [a] -> M.Map Int [a] -> M.Map Int [a]
-joinMaps = M.unionWith (++)
+joinMaps :: I.IntMap [a] -> I.IntMap [a] -> I.IntMap [a]
+joinMaps = I.unionWith (++)
 
-addNext :: Int -> [a] -> M.Map Int [a] -> M.Map Int [a]
-addNext i is = M.alter (fmap (++is)) i
+addNext :: Int -> [a] -> I.IntMap [a] -> I.IntMap [a]
+addNext i is = I.alter (fmap (++is)) i
 
 stmt :: (TId, [(CId, MConstr)], Stmt a) -> Stmt a
 stmt (_,_,s) = s
@@ -304,30 +306,30 @@ lastStmts (SLoop _ s _)     = lastStmts s
 lastStmts (SCase _ sl sr _) = lastStmts sl ++ lastStmts sr
 lastStmts s@(SDie a)        = [s]
 
-nextStmts :: Stmt Int -> M.Map Int [Int]
+nextStmts :: Stmt Int -> I.IntMap [Int]
 nextStmts (SNonDet ss i)
   = foldl' (\m -> joinMaps m . nextStmts)
-           (M.fromList [(i, map annot ss)])
+           (I.fromList [(i, map annot ss)])
            ss
 nextStmts (SBlock ss i)
-  = M.unionsWith (++) (seqstmts : ssnext)
+  = I.unionsWith (++) (seqstmts : ssnext)
     where
       ssnext   = map nextStmts ss
-      seqstmts = M.fromList . fst $ foldl' go ([], [i]) ss
+      seqstmts = I.fromList . fst $ foldl' go ([], [i]) ss
       go (m, is) s = ([(a, [annot s]) | a <- is] ++ m, map annot (lastStmts s))
 
 nextStmts (SIter _ _ s i)
-  = M.fromList ((i, [annot s]):[(annot j, [i]) | j <- lastStmts s])  `joinMaps` nextStmts s
+  = I.fromList ((i, [annot s]):[(annot j, [i]) | j <- lastStmts s])  `joinMaps` nextStmts s
 nextStmts (SLoop v s i)
-  = M.fromList ((i, [annot s]):[(j, [i]) | j <- js ]) `joinMaps` nextStmts s
+  = I.fromList ((i, [annot s]):[(j, [i]) | j <- js ]) `joinMaps` nextStmts s
   where
     js = [ j | SVar v' j <- listify (const True) s, v' == v]
 nextStmts (SChoose _ _ s i)
   = addNext i [annot s] $ nextStmts s
 nextStmts (SCase _ sl sr i)
-  = M.fromList [(i, [annot sl, annot sr])] `joinMaps` nextStmts sl `joinMaps` nextStmts sr
+  = I.fromList [(i, [annot sl, annot sr])] `joinMaps` nextStmts sl `joinMaps` nextStmts sr
 nextStmts _
-  = M.empty
+  = I.empty
 
 -- | Operations
 freshId :: Stmt a -> State Int (Stmt Int)
@@ -357,7 +359,7 @@ instance Pretty Pid where
   pretty (PConc x)
     = text "pid@" <> int x
   pretty (PAbs v vs)
-    = text "pid@(" <> pretty v <> colon <> pretty vs <> text ")"
+    = text "pid@" <> pretty vs <> brackets (pretty v)
   pretty (PVar v)
     = pretty v
   pretty (PUnfold _ s i)
@@ -464,3 +466,11 @@ instance Pretty (Config a) where
       goB (Bounded s n) = text "|" <> pretty s <> text "|" <+> equals <+> int n
       go (pid, s) = text "Proc" <+> parens (pretty pid) <> colon <$$>
                     indent 2 (pretty s)
+
+recvVars :: forall a. (Data a, Typeable a) => Stmt a -> [Var]
+recvVars s
+  = everything (++) (mkQ [] go) s
+  where
+    go :: Stmt a -> [Var]
+    go (SRecv t _) = listify (const True) t
+    go _           = []

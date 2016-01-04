@@ -22,8 +22,10 @@ library
                    Symmetry.Language
 --                   Symmetry.IL.Render.SPIN
                    Symmetry.IL.Render.Horn
+                   Symmetry.IL.Render.Horn.Spec
                    Symmetry.IL.Render.Horn.Decls
                    Symmetry.IL.Render.Horn.Types
+                   Symmetry.IL.Render.Horn.Deadlock
                    -- Symmetry.IL.Unfold
                    -- Symmetry.IL.Subst
                    -- Symmetry.IL.Inst
@@ -34,6 +36,7 @@ library
                    -- Symmetry.IL.TrailParser
   ghc-options: -fwarn-unused-binds
   build-depends:       base >=4.7
+                     , liquid-fixpoint >= 0.5
                      , containers >= 0.5.5.1
                      , directory >= 1.2.2.0
                      , filepath >= 1.3.0.2
@@ -50,6 +53,7 @@ library
                      , system-filepath >= 0.4.13.4
                      , template-haskell >= 2.10.0.0
                      , unordered-containers
+                     , fgl
                      , wl-pprint >=1.2 && <1.3
   hs-source-dirs:      src
                      , tests
