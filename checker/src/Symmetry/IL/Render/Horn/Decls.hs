@@ -82,8 +82,7 @@ pidInjectiveFns Config { cProcs = ps }
       fnMatch p = [ HsMatch emptyLoc (fnName p) [pidPatOfPid p] trueRHS []
                   , HsMatch emptyLoc (fnName p) [HsPWildCard] falseRHS  []
                   ]
-
-
+      
 pidTypeOfConfig :: Config a -> [HsDecl]
 pidTypeOfConfig c@Config { cProcs = ps }
   = [ basicDataDecl prePidTyName ts fs [eqClass]
@@ -123,7 +122,7 @@ stateFieldsOfConfig m Config { cProcs = ps, cGlobals = gs }
     concatMap countersOfProc    ps ++
     concatMap (ptrsOfProc m)    ps ++
     fmap      pcOfProc          ps ++
-    [ ([name (prefix stateString v)], bangTy valType) | (V v) <- gs ]           
+    [ ([name (prefix stateString v)], bangTy valType) | (V v, _) <- gs ]           
               
 stateTypeOfConfig :: TyMap
                   -> Config Int
@@ -163,21 +162,27 @@ mapDecls = [ mapTypeDecl, mapGetType, mapGetDecl, mapPutType, mapPutDecl{- , ptr
                                                                                           ]] [eqClass]
 
 valDecl :: HsDecl
-valDecl = HsDataDecl emptyLoc [] valTyName [] [ recCon unitValConsName []
-                                              , recCon intValConsName [bangTy intType]
-                                              , recCon pidValConsName [bangTy pidType]
-                                              , recCon leftValConsName [bangTy valType]
-                                              , recCon rightValConsName [bangTy valType]
-                                              , recCon prodValConsName [bangTy valType, bangTy valType]
-                                              ] []
+valDecl
+  = HsDataDecl emptyLoc [] valTyName [] (uncurry recCon <$> valConstructors) []
   where
     recCon n ts  = HsRecDecl emptyLoc n [ ([accessor n i], t) | (t, i) <- zip ts [0..]]
     accessor n i = name ("v" ++ unName n ++ show i)
-                   
+
+valFunctions :: [HsDecl]
+valFunctions
+  = HsTypeSig emptyLoc (valInjective . fst <$> valConstructors) (HsQualType [] (valType $->$ boolType))
+  : (mkMeasure . fst <$> valConstructors)
+  where
+    trueRhs     = HsUnGuardedRhs true
+    falseRhs    = HsUnGuardedRhs false
+    mkMeasure n = HsFunBind [ HsMatch emptyLoc (valInjective n) [HsPRec (UnQual n) []] trueRhs []
+                            , HsMatch emptyLoc (valInjective n) [HsPWildCard] falseRhs []
+                            ]
 
 declsOfConfig :: TyMap -> Config Int -> [HsDecl]    
 declsOfConfig m c
   = [valDecl, stateTypeOfConfig m c] ++
+    valFunctions ++
     pidTypeOfConfig c ++
     nonDetDecls ++
     mapDecls

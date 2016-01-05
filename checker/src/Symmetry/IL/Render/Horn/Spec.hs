@@ -185,6 +185,10 @@ measuresOfConfig :: Config Int -> String
 measuresOfConfig Config { cProcs = ps }
   = unlines [ printf "{-@ measure %s @-}" (unName $ pidInjectiveName p) | (p, _) <- ps]
 
+valMeasures :: String
+valMeasures
+  = unlines [ printf "{-@ measure %s @-}" (unName (valInjective n)) | (n, _) <- valConstructors ]
+
 builtinSpec :: [String]
 builtinSpec = nonDetSpec : embedMap 
 
@@ -216,6 +220,7 @@ stateRecordSpec :: TyMap -> Config Int -> String
 stateRecordSpec tm c
   = unlines [ printf "{-@ %s @-}" (prettyPrint st)
             , measuresOfConfig c
+            , valMeasures
             , recQuals st
             ]
     where

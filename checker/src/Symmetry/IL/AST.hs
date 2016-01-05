@@ -61,7 +61,7 @@ isBounded _ _           = False
 data Label = LL | RL | VL Var
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data ILType = TUnit | TInt | TPid | TProd ILType ILType | TSum ILType ILType                      
+data ILType = TUnit | TInt | TString | TPid | TProd ILType ILType | TSum ILType ILType                      
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data ILPat = PUnit
@@ -188,12 +188,12 @@ type Process a = (Pid, Stmt a)
 data Unfold = Conc Set Int deriving (Eq, Read, Show, Data, Typeable)
 
 data Config a = Config {
-    cTypes   :: MTypeEnv
-  , cGlobals :: [Var]
+    cTypes      :: MTypeEnv
+  , cGlobals    :: [(Var, ILType)]
   , cGlobalSets :: [Set]
-  , cSets    :: [SetBound]
-  , cUnfold  :: [Unfold]
-  , cProcs   :: [Process a]
+  , cSets       :: [SetBound]
+  , cUnfold     :: [Unfold]
+  , cProcs      :: [Process a]
   } deriving (Eq, Read, Show, Typeable)
 
 unboundVars :: forall a. Data a => Stmt a -> [Var]
@@ -403,6 +403,7 @@ instance Pretty ILPat where
 instance Pretty ILType where
   pretty TUnit     = text "()"
   pretty TInt      = text "int"
+  pretty TString   = text "string"
   pretty TPid      = text "pid"
   pretty (TSum p1 p2)  = parens (pretty p1 <+> text "+" <+> pretty p2)
   pretty (TProd p1 p2) = parens (pretty p1 <+> text "*" <+> pretty p2)
@@ -461,12 +462,12 @@ prettyMsg (t, c, v)
 
 instance Pretty (Config a) where
   pretty (Config {cProcs = ps, cSets = bs, cGlobals = gs, cGlobalSets = gsets})
-    = vcat (map goGlob gs) <$$> 
-      vcat (map goGlobS gsets) <$$> 
-      vcat (map goB bs) <$$>
-      vcat (map go ps)
+    = vsep (map goGlob gs ++
+            map goGlobS gsets ++
+            map goB bs ++
+            map go ps)
     where
-      goGlob v  = text "Global" <+> pretty v
+      goGlob (v, t) = text "Global" <+> pretty v <+> text "::" <+> pretty t
       goGlobS s = text "Global" <+> pretty s
       goB (Bounded s n) = text "|" <> pretty s <> text "|" <+> equals <+> int n
       go (pid, s) = text "Proc" <+> parens (pretty pid) <> colon <$$>

@@ -36,6 +36,7 @@ schedName   = name schedString
 prePidTyString = "PID_pre"
 pidTyString = "PID"
 intTyString = "Int"
+stringTyString = "String"
 valTyString = "Val"
 ptrKeyTyString = "PtrKey"
 msgKeyTyString = "MsgKey"
@@ -47,6 +48,7 @@ wrCounterString = "WrK"
 prePidTyName = name prePidTyString
 pidTyName = name pidTyString
 intTyName = name intTyString
+stringTyName = name stringTyString
 valTyName = name valTyString
 ptrKeyTyName = name ptrKeyTyString
 msgKeyTyName = name msgKeyTyString
@@ -54,6 +56,7 @@ mapTyName = name mapTyString
 
 unitValConsName = name "VUnit"
 intValConsName  = name "VInt"
+stringValConsName  = name "VStr"
 pidValConsName  = name "VPid"            
 leftValConsName  = name "VInL"
 rightValConsName  = name "VInR"
@@ -61,6 +64,7 @@ prodValConsName  = name "VPair"
 
 unitCons = HsCon (UnQual unitValConsName)                   
 intCons = HsCon (UnQual intValConsName)                   
+stringCons = HsCon (UnQual stringValConsName)                   
 pidCons = HsCon (UnQual pidValConsName)                   
 leftCons = HsCon (UnQual leftValConsName)
 rightCons = HsCon (UnQual rightValConsName)
@@ -69,13 +73,26 @@ ty n      = HsTyCon (UnQual n)
 bangTy t  = HsUnBangedTy t
 valType   = ty valTyName
 intType   = ty intTyName
+stringType= ty stringTyName
 pidType   = ty pidTyName
+boolType  = ty (name "Bool")
 prePidType   = ty prePidTyName
 mapType k v = HsTyApp (HsTyApp (ty mapTyName) k) v
 intMapType t = mapType intType t
 
 vCon :: HsName -> HsConDecl
 vCon i = HsConDecl emptyLoc i [bangTy valType]
+
+valConstructors :: [(HsName, [HsBangType])]
+valConstructors
+  = [ (unitValConsName, [])
+    , (intValConsName, [bangTy intType])
+    , (stringValConsName, [bangTy stringType])
+    , (pidValConsName, [bangTy pidType])
+    , (leftValConsName, [bangTy valType])
+    , (rightValConsName, [bangTy valType])
+    , (prodValConsName, [bangTy valType, bangTy valType])
+    ]
 
 name :: String -> HsName
 name = HsIdent              
@@ -160,6 +177,9 @@ pidNameOfPid p = name (pidTyString `prefix` pidString p)
 
 pidInjectiveName :: Pid -> HsName
 pidInjectiveName = name . prefix "is" . unName . pidNameOfPid
+
+valInjective :: HsName -> HsName
+valInjective = name . prefix "is" . unName
 
 idxNameOfPid (PAbs (V v) _)  = name v
 idxNameOfPid (PAbs (GV v) _) = name v
@@ -366,10 +386,11 @@ condUpdPC p grd _ pc' pc''
 expToVal :: Pid -> ILExpr -> HsExp
 expToVal p EUnit        = unitCons
 expToVal p EInt         = intCons
+expToVal p EString      = stringCons
 expToVal p (EVar (V v)) = readStateField p v
-expToVal p (EPid q)     = pidCons $>$ pidCstrOfPid q
-expToVal p (ELeft e)    = leftCons $>$ expToVal p e
-expToVal p (ERight e)   = rightCons $>$ expToVal p e
+expToVal p (EPid q)     = HsParen (pidCons $>$ pidCstrOfPid q)
+expToVal p (ELeft e)    = HsParen (leftCons $>$ expToVal p e)
+expToVal p (ERight e)   = HsParen (rightCons $>$ expToVal p e)
 
 pcState :: Pid -> HsExp
 pcState p = varn $ pcName p

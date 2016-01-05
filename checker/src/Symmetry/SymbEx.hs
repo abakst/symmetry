@@ -65,12 +65,33 @@ stateToConfigs state
           setBounds = [ IL.Bounded (roleToSet r) x | (M r, (AInt _ (Just x), _)) <- kvs ]
           sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
           procs = concProcs ++ absProcs
-          globals = nub
+          globals = mapMaybe lookupType
+                  . nub
                   . concatMap IL.unboundVars
                   $ map snd procs
           globalSets = nub
                      . concatMap IL.unboundSets
                      $ map snd procs
+          lookupType v = something (mkQ Nothing (goType v)) procs
+          goType :: IL.Var -> IL.Stmt () -> Maybe (IL.Var, IL.ILType)
+          goType v IL.SSend{IL.sndMsg = (t,e)} = do t <- calcType v e t
+                                                    return (v, t)
+          goType _ _ = Nothing
+
+calcType :: IL.Var -> IL.ILExpr -> IL.ILType -> Maybe IL.ILType
+calcType v (IL.EVar v') t
+  | v == v' = Just t
+calcType v (IL.ELeft e) (IL.TSum l _)
+  = calcType v e l
+calcType v (IL.ERight e) (IL.TSum _ r)
+  = calcType v e r
+calcType v (IL.EPair e1 e2) (IL.TProd l r) =
+  case t of
+    Nothing -> calcType v e2 r
+    _ -> t
+  where
+    t = calcType v e1 l
+calcType _ _ _ = Nothing
                            
 roleToPid :: RMulti -> IL.Pid
 roleToPid r = IL.PAbs (IL.GV ("i" ++ roleToString r)) (roleToSet r)
@@ -187,7 +208,7 @@ absToILType x = go (typeRep x)
         = IL.TPid -- probably not right
       | tyConName (typeRepTyCon a) == "[]" &&
         tyConName (typeRepTyCon $ head as) == "Char"
-        = error "TBD: IL String" 
+        = IL.TString
       | tyConName (typeRepTyCon a) == "[]"
         = error "TBD: IL List" 
       | tyConName (typeRepTyCon a) == "Either"

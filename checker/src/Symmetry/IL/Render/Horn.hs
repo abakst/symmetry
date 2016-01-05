@@ -1,5 +1,6 @@
 {-# Language TemplateHaskell #-}
 {-# Language ScopedTypeVariables #-}
+{-# Language ViewPatterns #-}
 module Symmetry.IL.Render.Horn (renderSimulator) where
 
 import           Language.Haskell.Syntax
@@ -262,7 +263,11 @@ renderSimulator c
                              , importSpecs = Nothing
                              }
 
-    types = nub $ listify (const True :: ILType -> Bool) (cProcs c')
+    types = nub $ everything (++) (mkQ [] go) (cProcs c')
+    go :: Stmt Int -> [ILType]
+    go s@SRecv{} = [fst (rcvMsg s)]
+    go s@SSend{} = [fst (sndMsg s)]
+    go _         = []
     tyMap = zip types [0..] 
 
     spec = [ initSpecOfConfig tyMap c' ] ++ builtinSpec
