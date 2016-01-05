@@ -1,8 +1,16 @@
 flags: {}
+
 packages:
 - '.'
-extra-deps: [
-    plugins-1.5.5.0,
-    located-base-0.1.0.0
-]
+- location:
+    git:    https://github.com/ucsd-progsys/liquid-fixpoint.git
+    commit: a6087fe27d76ae9c34fd05046b04022b6ff3e152
+
+extra-deps:
+- plugins-1.5.5.0
+- located-base-0.1.0.0
+- ascii-progress-0.3.2.0
+- intern-0.9.1.4
+- concurrent-output-1.7.3
+
 resolver: lts-3.8

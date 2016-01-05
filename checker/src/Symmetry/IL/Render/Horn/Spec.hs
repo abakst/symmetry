@@ -11,7 +11,7 @@ import           Data.List
 import           Data.Maybe
 import           Language.Haskell.Syntax
 import           Language.Fixpoint.Types  
-import           Language.Fixpoint.PrettyPrint  
+import           Language.Fixpoint.Types.PrettyPrint
 import           Language.Haskell.Pretty
 import           Text.Printf
 
