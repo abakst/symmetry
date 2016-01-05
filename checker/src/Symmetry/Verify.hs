@@ -20,7 +20,7 @@ import System.IO
 import System.Process hiding (runCommand)
 import Text.Printf
 import Options
-import Text.PrettyPrint.Leijen  (pretty, nest, text, (<>), line)
+import Text.PrettyPrint.Leijen  (pretty, nest, text, (<>), line, hPutDoc)
 import qualified Data.Map.Strict as M
 
 data MainOptions = MainOptions { optVerify  :: Bool
@@ -36,24 +36,13 @@ instance Options MainOptions where
                   <*> simpleOption "verbose" False "Verbose Output"
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
                   <*> simpleOption "dump-model" False "Dump Spin model"
-                  <*> simpleOption "pmlfile" ".symcheck" "Directory to store intermediate results"
+                  <*> simpleOption "outdir" ".symcheck" "Directory to store intermediate results"
 
-spinCmd :: FilePath -> CreateProcess
-spinCmd f = shell ("spin -m -a " ++ f)
-
-ccCmd :: CreateProcess
-ccCmd     = shell ("cc -O2 -DVECTORSZ=2048 -DSAFETY -DNOBOUNDCHECK -DNOCOMP -DSFH -DNOFAIR"
-                   ++ " -o pan pan.c")
-
-panCmd :: CreateProcess
-panCmd    = shell "./pan -X -n -m1000000"
-
-outName :: FilePath
-outName = "out.pml"
-
-outf, outTrail :: FilePath -> FilePath
-outf d = d </> "out.pml"
-outTrail d = outf d <.> "trail"
+runChecker :: Config a
+           -> FilePath
+           -> IO ()
+runChecker c fn
+  = writeFile fn (renderSimulator c)
 
 runCmd               :: Bool -> String -> FilePath -> CreateProcess -> IO ()
 runCmd verb pre wd c
@@ -89,21 +78,9 @@ run1Cfg :: MainOptions -> FilePath -> Config () -> IO Bool
 run1Cfg opt outd cfg
   = do when (optModel opt) $
          createDirectoryIfMissing True outd
-       when (optVerify opt) $ 
-         removeFile (outTrail outd) `catch` \(_ :: IOException) ->
-           return ()
-
-       -- when (optVerify opt) $ do 
-       --   runChecker cfg
-         -- runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName)
-         -- runCmd verb "COMPILING VERIFIER:" outd ccCmd
-         -- runCmd verb "CHECKING MODEL:" outd panCmd
-
-       if (optVerify opt) then
-         runChecker cfg
-         -- do failure <- fileExists (outTrail outd)
-         --    let unfolded = filterBoundedAbs . freshIds . instAbs $ unfold cfgOut
-            -- return $ not failure
+       if (optVerify opt) then do
+         runChecker cfg (outd </> "SymVerify.hs")
+         return True
        else
          return True
   where
@@ -166,7 +143,7 @@ flattenStmt s@(SBlock l _)       = s : (concatMap flattenStmt l)
 flattenStmt s@(SIter _ _ s' _)   = s : (flattenStmt s')
 flattenStmt s@(SLoop _ s' _)     = s : (flattenStmt s')
 flattenStmt s@(SChoose _ _ s' _) = s : (flattenStmt s')
-flattenStmt s@(SCase _ sl sr _)  = s : (concatMap flattenStmt [sl,sr])
+flattenStmt s@(SCase _ _ _ sl sr _)  = s : (concatMap flattenStmt [sl,sr])
 flattenStmt s@(SNonDet l _)      = s : (concatMap flattenStmt l)
 flattenStmt s                    = [s]
 
