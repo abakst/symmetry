@@ -105,8 +105,7 @@ ptrsOfProc m (p, _)
              , ([pidMsgBufName t p], bangTy bufTy)
              ]
       ptrTy = if isAbs p then mapType intType intType else intType
-      bufTy = if isAbs p then mapType intType buf else buf
-      buf   = mapType intType valType
+      bufTy = if isAbs p then vec2DType valType else vecType valType
       ts = snd <$> m
 
 pcOfProc :: Process Int -> ([HsName], HsBangType)
@@ -140,26 +139,26 @@ nonDetDecls = [ nonDetTypeDecl, nonDetDecl ]
     nonDetTypeDecl = HsTypeSig emptyLoc [nonDetName] (HsQualType [] (schedTy $->$ intType))
     nonDetDecl     = HsFunBind [HsMatch emptyLoc nonDetName [] (HsUnGuardedRhs (var "undefined")) []]
 
-mapDecls :: [HsDecl]
-mapDecls = [ mapTypeDecl, mapGetType, mapGetDecl, mapPutType, mapPutDecl{- , ptrKeyTyDecl, msgKeyTyDecl -} ]
-  where
-    k = name "k"
-    v = name "v"
-    kt = HsTyVar k
-    vt = HsTyVar v
-    mapt = HsTyApp (HsTyApp (HsTyCon (UnQual mapTyName)) kt) vt
-    mapTypeDecl = HsDataDecl emptyLoc [] mapTyName [k, v] [] []
-    mapGetDecl  = HsFunBind [HsMatch emptyLoc mapGetName [] (HsUnGuardedRhs (var "undefined")) []]
-    mapPutDecl  = HsFunBind [HsMatch emptyLoc mapPutName [] (HsUnGuardedRhs (var "undefined")) []]
-    mapGetType  = HsTypeSig emptyLoc [mapGetName] (HsQualType [] (mapt $->$ kt $->$ vt))
-    mapPutType  = HsTypeSig emptyLoc [mapPutName] (HsQualType [] (mapt $->$ kt $->$ vt $->$ mapt))
-    ptrKeyTyDecl= HsDataDecl emptyLoc [] ptrKeyTyName [] [HsConDecl emptyLoc ptrKeyTyName [ bangTy pidType
-                                                                                          , bangTy intType
-                                                                                          ]] [eqClass]
-    msgKeyTyDecl= HsDataDecl emptyLoc [] msgKeyTyName [] [HsConDecl emptyLoc msgKeyTyName [ bangTy pidType
-                                                                                          , bangTy intType
-                                                                                          , bangTy intType
-                                                                                          ]] [eqClass]
+-- mapDecls :: [HsDecl]
+-- mapDecls = [ mapTypeDecl, mapGetType, mapGetDecl, mapPutType, mapPutDecl{- , ptrKeyTyDecl, msgKeyTyDecl -} ]
+--   where
+--     k = name "k"
+--     v = name "v"
+--     kt = HsTyVar k
+--     vt = HsTyVar v
+--     mapt = HsTyApp (HsTyApp (HsTyCon (UnQual mapTyName)) kt) vt
+--     mapTypeDecl = HsDataDecl emptyLoc [] mapTyName [k, v] [] []
+--     mapGetDecl  = HsFunBind [HsMatch emptyLoc mapGetName [] (HsUnGuardedRhs (var "undefined")) []]
+--     mapPutDecl  = HsFunBind [HsMatch emptyLoc mapPutName [] (HsUnGuardedRhs (var "undefined")) []]
+--     mapGetType  = HsTypeSig emptyLoc [mapGetName] (HsQualType [] (mapt $->$ kt $->$ vt))
+--     mapPutType  = HsTypeSig emptyLoc [mapPutName] (HsQualType [] (mapt $->$ kt $->$ vt $->$ mapt))
+--     ptrKeyTyDecl= HsDataDecl emptyLoc [] ptrKeyTyName [] [HsConDecl emptyLoc ptrKeyTyName [ bangTy pidType
+--                                                                                           , bangTy intType
+--                                                                                           ]] [eqClass]
+--     msgKeyTyDecl= HsDataDecl emptyLoc [] msgKeyTyName [] [HsConDecl emptyLoc msgKeyTyName [ bangTy pidType
+--                                                                                           , bangTy intType
+--                                                                                           , bangTy intType
+--                                                                                           ]] [eqClass]
 
 valDecl :: HsDecl
 valDecl
@@ -184,5 +183,4 @@ declsOfConfig m c
   = [valDecl, stateTypeOfConfig m c] ++
     valFunctions ++
     pidTypeOfConfig c ++
-    nonDetDecls ++
-    mapDecls
+    nonDetDecls

@@ -41,6 +41,8 @@ valTyString = "Val"
 ptrKeyTyString = "PtrKey"
 msgKeyTyString = "MsgKey"
 mapTyString = "Map_t"
+vecTyString = "Vec"
+vec2DTyString = "Vec2D"
 pcCounterMapString = "PCK"
 rdCounterString = "RdK"
 wrCounterString = "WrK"
@@ -53,6 +55,8 @@ valTyName = name valTyString
 ptrKeyTyName = name ptrKeyTyString
 msgKeyTyName = name msgKeyTyString
 mapTyName = name mapTyString
+vecTyName = name vecTyString
+vec2DTyName = name vec2DTyString
 
 unitValConsName = name "VUnit"
 intValConsName  = name "VInt"
@@ -78,6 +82,8 @@ pidType   = ty pidTyName
 boolType  = ty (name "Bool")
 prePidType   = ty prePidTyName
 mapType k v = HsTyApp (HsTyApp (ty mapTyName) k) v
+vecType v   = HsTyApp (ty vecTyName) v
+vec2DType v   = HsTyApp (ty vec2DTyName) v
 intMapType t = mapType intType t
 
 vCon :: HsName -> HsConDecl
@@ -450,22 +456,36 @@ readMyPtrw p@(PAbs (V v) _) tid  = error "readMyPtrW -- Shouldn't happen?" -- re
 
 readMsgBuf :: Pid -> Integer -> HsExp
 readMsgBuf me@(PConc _) t
-  = readMap (msgBufState t me) (readPtrr t me)
+  = readVec (readPtrr t me) (msgBufState t me)
 readMsgBuf me@(PAbs (GV v) _) t
-  = readMap (readMap (msgBufState t me) (var v)) (readPtrr t me)
+  = readVec2D (readPtrr t me) (var v) (msgBufState t me) 
 readMsgBuf me@(PAbs (V v) _) t
   = error "readMsgBuf Shouldn't happen?" -- readMap (msgBufState t me) (HsParen (tuple_con 1 $>$ var v $>$ readPtrr t me))
 
+writeVec :: HsExp -> HsExp -> HsExp -> HsExp
+writeVec i e vec
+  = HsParen (var "setVec" $>$ i $>$ e $>$ vec)
+
+readVec :: HsExp -> HsExp -> HsExp 
+readVec i vec
+  = HsParen (var "getVec" $>$ i $>$ vec)
+
+writeVec2D :: HsExp -> HsExp -> HsExp -> HsExp -> HsExp
+writeVec2D i j e vec
+  = HsParen (var "setVec2D" $>$ i $>$ j $>$ e $>$ vec)
+
+readVec2D :: HsExp -> HsExp -> HsExp -> HsExp 
+readVec2D i j vec
+  = HsParen (var "getVec2D" $>$ i $>$ j $>$ vec)
+
 writeMsgBuf :: Pid -> Pid -> Integer -> ILExpr -> HsFieldUpdate         
 writeMsgBuf p q@(PAbs v _) t e
-  = HsFieldUpdate (UnQual (pidMsgBufName t q))
-      (writeMap (msgBufState t q) (pidVar v)
-                (writeMap (readMap (msgBufState t q) (pidVar v))
-                          (readPtrw p t q)
-                          (HsParen (expToVal p e))))
+  = HsFieldUpdate (UnQual (pidMsgBufName t q)) $
+      writeVec2D (pidVar v) (readPtrw p t q) (HsParen (expToVal p e))
+                 (msgBufState t q) 
 writeMsgBuf p q t e
-  = HsFieldUpdate (UnQual (pidMsgBufName t q))
-      (writeMap (msgBufState t q) (mkMsgKey p q (readPtrw p t q)) (HsParen (expToVal p e)))
+  = HsFieldUpdate (UnQual (pidMsgBufName t q)) $
+      writeVec (readPtrw p t q) (HsParen (expToVal p e)) (msgBufState t q)
 
 -- A pid might be indexed by a local variable, so we need 'p'
 -- in order to look that variable up
