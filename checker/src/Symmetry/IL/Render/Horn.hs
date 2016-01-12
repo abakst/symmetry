@@ -249,19 +249,20 @@ renderSimulator c
     lhFile = [ prettyPrint modVerify
              , ""
              ] ++ spec
-    modVerify = HsModule emptyLoc (Module "SymVerify") (Just []) [lhimport] decls
+    modVerify = HsModule emptyLoc (Module "SymVerify") (Just []) imports decls
     decls     = initStateOfConfig c' ++
                 initSchedOfConfig c' ++
                 checkStateOfConfig c' ++
                 runStateOfConfig tyMap c' :
                 declsOfConfig tyMap c'
     c'        = c { cProcs = (freshStmtIds <$>) <$> cProcs c }
-    lhimport  = HsImportDecl { importLoc = emptyLoc
-                             , importModule = Module "Language.Haskell.Liquid.Prelude"
-                             , importQualified = False
-                             , importAs = Nothing
-                             , importSpecs = Nothing
-                             }
+    imports   = mkImport <$> ["SymVector", "SymMap", "Language.Haskell.Liquid.Prelude"]
+    mkImport m = HsImportDecl { importLoc = emptyLoc
+                              , importQualified = False
+                              , importAs = Nothing
+                              , importModule = Module m
+                              , importSpecs = Nothing
+                              }
 
     types = nub $ everything (++) (mkQ [] go) (cProcs c')
     go :: Stmt Int -> [ILType]

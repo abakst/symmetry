@@ -11,7 +11,6 @@ import           Data.List
 import           Data.Maybe
 import           Language.Haskell.Syntax
 import           Language.Fixpoint.Types  
-import           Language.Fixpoint.Types.PrettyPrint
 import           Language.Haskell.Pretty
 import           Text.Printf
 
@@ -166,21 +165,6 @@ nonDetSpec :: String
 nonDetSpec
   = printf "{-@ %s :: %s -> {v:Int | true} @-}" nonDetString (prettyPrint schedTy)
 
-mapGetSpec :: String
-mapGetSpec
-  = printf "{-@ %s :: m:Map_t k v -> k:k -> {v:v | v = Map_select m k} @-}" mapGetString
-
-mapPutSpec :: String
-mapPutSpec
-  = printf "{-@ %s :: m:Map_t k v -> k:k -> v:v -> {vv:Map_t k v | vv = Map_store m k v } @-}" mapPutString
-
-embedMap :: [String]
-embedMap = [ "{-@ embed Map_t as Map_t @-}"
-           , "{-@ measure Map_select :: Map_t k v -> k -> v @-}"
-           , "{-@ measure Map_store :: Map_t k v -> k -> v -> Map_t k v @-}"
-           , mapGetSpec, mapPutSpec
-           ]
-
 measuresOfConfig :: Config Int -> String
 measuresOfConfig Config { cProcs = ps }
   = unlines [ printf "{-@ measure %s @-}" (unName $ pidInjectiveName p) | (p, _) <- ps]
@@ -190,7 +174,7 @@ valMeasures
   = unlines [ printf "{-@ measure %s @-}" (unName (valInjective n)) | (n, _) <- valConstructors ]
 
 builtinSpec :: [String]
-builtinSpec = nonDetSpec : embedMap 
+builtinSpec = [nonDetSpec]
 
 pidSpecString  Config { cProcs = ps }
   = case absPs of

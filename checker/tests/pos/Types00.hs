@@ -2,7 +2,7 @@
 {-# Language TypeOperators    #-}
 {-# Language ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
-module Types00 where
+module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return) 
 import Symmetry.Language

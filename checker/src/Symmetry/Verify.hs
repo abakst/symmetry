@@ -10,6 +10,7 @@ import Symmetry.IL.AST
 -- import Symmetry.IL.TrailParser
 
 import System.Console.ANSI
+import Paths_checker
 import Control.Exception
 import Control.Monad
 import Control.Applicative
@@ -72,12 +73,20 @@ runCmd verb pre wd c
                          _           -> do
                            putStrLn =<< hGetContents h
                            exitWith (ExitFailure 126)
+copyMapModule d
+  = do f <- getDataFileName ("include" </> "SymMap.hs")
+       copyFile f (d </> "SymMap.hs")
 
+copyVectorModule d
+  = do f <- getDataFileName ("include" </> "SymVector.hs")
+       copyFile f (d </> "SymVector.hs")
 
 run1Cfg :: MainOptions -> FilePath -> Config () -> IO Bool
 run1Cfg opt outd cfg
-  = do when (optModel opt) $
+  = do when (optModel opt) $ do
          createDirectoryIfMissing True outd
+         copyMapModule    outd
+         copyVectorModule outd
        if (optVerify opt) then do
          runChecker cfg (outd </> "SymVerify.hs")
          return True
