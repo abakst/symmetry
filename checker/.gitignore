@@ -6,3 +6,4 @@ TAGS
 *.hi
 *.o
 *.#*
+.liquid

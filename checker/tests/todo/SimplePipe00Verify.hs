@@ -9,12 +9,14 @@ initialSched = undefined
  
 check :: ()
 check = runState initialState (initialSched initialState)
+
 runState
   state@State{state_role_1 = state_role_1,
               state_vP_role_1_k = state_vP_role_1_k, state_x_5 = state_x_5,
               state_x_8 = state_x_8, state_vP_role_1_PCK = state_vP_role_1_PCK,
               state_vP_role_1_RdK = state_vP_role_1_RdK,
               state_vP_role_1_WrK = state_vP_role_1_WrK,
+              state_vP_role_1_Next = state_vP_role_1_Next,
               state_PtrR_vP_0_0 = state_PtrR_vP_0_0,
               state_PtrW_vP_0_0 = state_PtrW_vP_0_0,
               state_vP_0_Buf_0 = state_vP_0_Buf_0,
@@ -24,14 +26,13 @@ runState
               state_vP_0_PC = state_vP_0_PC,
               state_vP_role_1_PC = state_vP_role_1_PC, state_x_7 = state_x_7}
   ((:) (PID_vP_0) sched)
+  -- pick worker id to send message
   | ((==) state_vP_0_PC (0)) =
     runState
-      state{state_vP_0_PC = 1,
-            state_x_8 =
-              let x_8' = (nonDet sched) in
-                (liquidAssume ((&&) (((<=) 0 x_8')) (((<) x_8' state_role_1)))
-                   x_8')}
+      state{ state_vP_0_PC = 1
+           , state_x_8     = 0 }
       sched
+  -- send message to worker
   | ((==) state_vP_0_PC (1)) =
     runState
       state{state_PtrW_vP_role_1_0 =
@@ -46,12 +47,14 @@ runState
                     (state_x_7))),
             state_vP_0_PC = (-1)}
       sched
+
 runState
   state@State{state_role_1 = state_role_1,
               state_vP_role_1_k = state_vP_role_1_k, state_x_5 = state_x_5,
               state_x_8 = state_x_8, state_vP_role_1_PCK = state_vP_role_1_PCK,
               state_vP_role_1_RdK = state_vP_role_1_RdK,
               state_vP_role_1_WrK = state_vP_role_1_WrK,
+              state_vP_role_1_Next = state_vP_role_1_Next,
               state_PtrR_vP_0_0 = state_PtrR_vP_0_0,
               state_PtrW_vP_0_0 = state_PtrW_vP_0_0,
               state_vP_0_Buf_0 = state_vP_0_Buf_0,
@@ -61,6 +64,7 @@ runState
               state_vP_0_PC = state_vP_0_PC,
               state_vP_role_1_PC = state_vP_role_1_PC, state_x_7 = state_x_7}
   ((:) (PID_vP_role_1 irole_1) sched)
+  -- irole = k && PC[irole] = 0 && PtrR[irole] < PtrW[irole]
   | ((&&) ((==) irole_1 state_vP_role_1_k)
        ((&&) ((==) (get state_vP_role_1_PC irole_1) (0))
           (((<) (get state_PtrR_vP_role_1_0 irole_1)
@@ -78,6 +82,7 @@ runState
                  (get (get state_vP_role_1_Buf_0 irole_1)
                     (get state_PtrR_vP_role_1_0 irole_1)))}
       sched
+  -- irole != k && PC[irole] = 0 && PtrR[irole] < PtrW[irole]
   | ((&&) (not ((==) irole_1 state_vP_role_1_k))
        ((&&) ((==) (get state_vP_role_1_PC irole_1) (0))
           (((<) (get state_PtrR_vP_role_1_0 irole_1)
@@ -100,12 +105,14 @@ runState
                  (get (get state_vP_role_1_Buf_0 irole_1)
                     (get state_PtrR_vP_role_1_0 irole_1)))}
       sched
+
 runState
   state@State{state_role_1 = state_role_1,
               state_vP_role_1_k = state_vP_role_1_k, state_x_5 = state_x_5,
               state_x_8 = state_x_8, state_vP_role_1_PCK = state_vP_role_1_PCK,
               state_vP_role_1_RdK = state_vP_role_1_RdK,
               state_vP_role_1_WrK = state_vP_role_1_WrK,
+              state_vP_role_1_Next = state_vP_role_1_Next,
               state_PtrR_vP_0_0 = state_PtrR_vP_0_0,
               state_PtrW_vP_0_0 = state_PtrW_vP_0_0,
               state_vP_0_Buf_0 = state_vP_0_Buf_0,
@@ -115,6 +122,7 @@ runState
               state_vP_0_PC = state_vP_0_PC,
               state_vP_role_1_PC = state_vP_role_1_PC, state_x_7 = state_x_7}
   (PID_vP_0 : PID_vP_role_1 irole_1 : _)
+  -- irole = k
   | ((==) irole_1 state_vP_role_1_k) =
     liquidAssert
       (not
@@ -142,17 +150,35 @@ data Val = VUnit{}
          | VInR{vVInR0 :: Val}
          | VPair{vVPair0 :: Val, vVPair1 :: Val}
  
-data State = State{state_role_1 :: Int, state_vP_role_1_k :: Int,
-                   state_x_5 :: Map_t Int Val, state_x_8 :: Int,
+data State = State{state_PtrR_vP_0_0 :: Int,
+                   state_PtrR_vP_role_1_0 :: Map_t Int Int,
+
+                   state_PtrW_vP_0_0 :: Int,
+                   state_PtrW_vP_role_1_0 :: Map_t Int Int,
+
+                   state_role_1 :: Int,
+
+                   state_vP_0_Buf_0 :: Map_t Int Val,
+                   state_vP_role_1_Buf_0 :: Map_t Int (Map_t Int Val),
+
+                   state_vP_0_PC :: Int,
+                   state_vP_role_1_PC :: Map_t Int Int,
+
                    state_vP_role_1_PCK :: Map_t Int Int,
                    state_vP_role_1_RdK :: Map_t Int Int,
-                   state_vP_role_1_WrK :: Map_t Int Int, state_PtrR_vP_0_0 :: Int,
-                   state_PtrW_vP_0_0 :: Int, state_vP_0_Buf_0 :: Map_t Int Val,
-                   state_PtrR_vP_role_1_0 :: Map_t Int Int,
-                   state_PtrW_vP_role_1_0 :: Map_t Int Int,
-                   state_vP_role_1_Buf_0 :: Map_t Int (Map_t Int Val),
-                   state_vP_0_PC :: Int, state_vP_role_1_PC :: Map_t Int Int,
-                   state_x_7 :: Val}
+                   state_vP_role_1_WrK :: Map_t Int Int,
+                   state_vP_role_1_k :: Int,
+
+                   state_vP_role_1_Next :: Map_t Int Int,
+
+                   state_x_5 :: Map_t Int Val,
+
+                   -- the value that master sends to worker-0
+                   state_x_7 :: Val,
+
+                   -- the id of the pc_role_1 process that master sends message to
+                   state_x_8 :: Int
+                  }
  
 is_VUnit, is_VInt, is_VStr, is_VPid, is_VInL, is_VInR, is_VPair ::
             Val -> Bool
@@ -192,20 +218,57 @@ get = undefined
 put :: Map_t k v -> k -> v -> Map_t k v
 put = undefined
 
-{-@ assume initialState :: {v:State | (state_vP_0_PC v == 0 && state_PtrR_vP_0_0 v == 0 && 0 <= state_PtrR_vP_0_0 v && state_PtrW_vP_0_0 v == 0 && 0 <= state_PtrW_vP_0_0 v && state_PtrR_vP_0_0 v <= state_PtrW_vP_0_0 v) && (state_role_1 v - 1 == Map_select (state_vP_role_1_PCK v) 0 && 0 == Map_select (state_vP_role_1_PC v) (state_vP_role_1_k v) && (0 <= state_vP_role_1_k v && state_vP_role_1_k v < state_role_1 v) && Map_select (state_vP_role_1_PCK v) (-1 : int) + Map_select (state_vP_role_1_PCK v) 0 == state_role_1 v - 1 && 0 == Map_select (state_vP_role_1_PCK v) (-1 : int))} @-}
-{-@ assume initialSched :: initialState:State -> [PID_pre {v:Int | Map_select (state_vP_role_1_PC initialState) v == 0 && (0 <= v && v < state_role_1 initialState) && (Map_select (state_PtrR_vP_role_1_0 initialState) v <= 0 && 0 <= Map_select (state_PtrW_vP_role_1_0 initialState) v) && Map_select (state_PtrW_vP_role_1_0 initialState) v == 0 && 0 <= Map_select (state_PtrW_vP_role_1_0 initialState) v}] @-}
-{-@  
-data State = State{state_role_1 :: Int, state_vP_role_1_k :: Int,
-                   state_x_5 :: Map_t Int Val, state_x_8 :: Int,
-                   state_vP_role_1_PCK :: Map_t Int Int,
-                   state_vP_role_1_RdK :: Map_t Int Int,
-                   state_vP_role_1_WrK :: Map_t Int Int, state_PtrR_vP_0_0 :: Int,
-                   state_PtrW_vP_0_0 :: Int, state_vP_0_Buf_0 :: Map_t Int Val,
-                   state_PtrR_vP_role_1_0 :: Map_t Int Int,
-                   state_PtrW_vP_role_1_0 :: Map_t Int Int,
-                   state_vP_role_1_Buf_0 :: Map_t Int (Map_t Int Val),
-                   state_vP_0_PC :: Int, state_vP_role_1_PC :: Map_t Int Int,
-                   state_x_7 :: Val} @-}
+{-@ assume initialState :: {v:State |
+  (state_vP_0_PC v == 0 &&
+   state_PtrR_vP_0_0 v == 0 &&
+   0 <= state_PtrR_vP_0_0 v &&
+   state_PtrW_vP_0_0 v == 0 &&
+   0 <= state_PtrW_vP_0_0 v &&
+   state_PtrR_vP_0_0 v <= state_PtrW_vP_0_0 v) &&
+  (state_role_1 v - 1 == Map_select (state_vP_role_1_PCK v) 0 &&
+   0 == Map_select (state_vP_role_1_PC v) (state_vP_role_1_k v) &&
+   (0 <= state_vP_role_1_k v && state_vP_role_1_k v < state_role_1 v) &&
+   Map_select (state_vP_role_1_PCK v) (-1 : int) + Map_select (state_vP_role_1_PCK v) 0 == state_role_1 v - 1 &&
+   0 == Map_select (state_vP_role_1_PCK v) (-1 : int))
+  } @-}
+
+{-@ assume initialSched :: initialState:State ->
+  [PID_pre {v:Int |
+    Map_select (state_vP_role_1_PC initialState) v == 0 &&
+    (0 <= v && v < state_role_1 initialState) &&
+    ( Map_select (state_PtrR_vP_role_1_0 initialState) v <= 0 &&
+      0 <= Map_select (state_PtrW_vP_role_1_0 initialState) v    ) &&
+    Map_select (state_PtrW_vP_role_1_0 initialState) v == 0 &&
+    0 <= Map_select (state_PtrW_vP_role_1_0 initialState) v}] @-}
+
+{-@ data State = State{state_PtrR_vP_0_0 :: Int,
+                       state_PtrR_vP_role_1_0 :: Map_t Int Int,
+
+                       state_PtrW_vP_0_0 :: Int,
+                       state_PtrW_vP_role_1_0 :: Map_t Int Int,
+
+                       state_role_1 :: Int,
+
+                       state_vP_0_Buf_0 :: Map_t Int Val,
+                       state_vP_role_1_Buf_0 :: Map_t Int (Map_t Int Val),
+
+                       state_vP_0_PC :: Int,
+                       state_vP_role_1_PC :: Map_t Int Int,
+
+                       state_vP_role_1_PCK :: Map_t Int Int,
+                       state_vP_role_1_RdK :: Map_t Int Int,
+                       state_vP_role_1_WrK :: Map_t Int Int,
+                       state_vP_role_1_k :: Int,
+
+                       state_vP_role_1_Next :: Map_t Int Int,
+
+                       state_x_5 :: Map_t Int Val,
+
+                       state_x_7 :: Val,
+
+                       state_x_8 :: Int
+                      } @-}
+
 {-@ measure is_PID_vP_0 @-}
 {-@ measure is_PID_vP_role_1 @-}
 
@@ -229,8 +292,13 @@ data State = State{state_role_1 :: Int, state_vP_role_1_k :: Int,
 {-@ qualif Eq_state_vP_role_1_PCK(v:State, x:State): state_vP_role_1_PCK v = state_vP_role_1_PCK x @-}
 {-@ qualif Deref_state_vP_role_1_RdK(v:Map_t Int Int, x:State): v = state_vP_role_1_RdK x @-}
 {-@ qualif Eq_state_vP_role_1_RdK(v:State, x:State): state_vP_role_1_RdK v = state_vP_role_1_RdK x @-}
+
 {-@ qualif Deref_state_vP_role_1_WrK(v:Map_t Int Int, x:State): v = state_vP_role_1_WrK x @-}
 {-@ qualif Eq_state_vP_role_1_WrK(v:State, x:State): state_vP_role_1_WrK v = state_vP_role_1_WrK x @-}
+
+{-@ qualif Deref_state_vP_role_1_Next(v:Map_t Int Int, x:State): v = state_vP_role_1_Next x @-}
+{-@ qualif Eq_state_vP_role_1_Next(v:State, x:State): state_vP_role_1_Next v = state_vP_role_1_Next x @-}
+
 {-@ qualif Deref_state_PtrR_vP_0_0(v:Int, x:State): v = state_PtrR_vP_0_0 x @-}
 {-@ qualif Eq_state_PtrR_vP_0_0(v:State, x:State): state_PtrR_vP_0_0 v = state_PtrR_vP_0_0 x @-}
 {-@ qualif Deref_state_PtrW_vP_0_0(v:Int, x:State): v = state_PtrW_vP_0_0 x @-}

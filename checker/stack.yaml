@@ -4,7 +4,7 @@ packages:
 - '.'
 - location:
     git:    https://github.com/ucsd-progsys/liquid-fixpoint.git
-    commit: a6087fe27d76ae9c34fd05046b04022b6ff3e152
+    commit: 56937709d694de4bdb5f442ed8a88fde5048997f
 
 extra-deps:
 - plugins-1.5.5.0
