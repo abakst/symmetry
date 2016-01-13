@@ -722,8 +722,9 @@ symDoN n f
             AProc _ s _ <- runSE (g (AInt Nothing Nothing))
             return $ AProc Nothing (iter v x nv s) (error "TBD: symDoN")
     where
-      iter v _ (Just n) s = IL.SIter (varToIL v) (IL.SInts n) s ()
-      iter v (Just x) _ s = IL.SIter (varToIL v) (varToILSet x) s ()
+      incrVar v = (`seqStmt` IL.SIncr (varToIL v) ())
+      iter v _ (Just n) s = IL.SIter (varToIL v) (IL.SInts n) (incrVar v s) ()
+      iter v (Just x) _ s = IL.SIter (varToIL v) (varToILSet x) (incrVar v s) ()
       iter (V x) _ _ s    =
                   let v = IL.LV $ "L" ++ show x
                       sv = IL.SVar v  ()
@@ -757,8 +758,9 @@ symDoMany p f
                 AProc _ s _  <- runSE (g (APidElem (Just x) (Just v) (Pid Nothing)))
                 return $ AProc Nothing (iterVar v x s) (error "TBD: symDoMany")
     where
-      iter v r s    = IL.SIter (varToIL v) (roleToSet r) s ()
-      iterVar v x s = IL.SIter (varToIL v) (varToILSetVar x) s ()
+      incrVar v = (`seqStmt` IL.SIncr (varToIL v) ())
+      iter v r s    = IL.SIter (varToIL v) (roleToSet r) (incrVar v s) ()
+      iterVar v x s = IL.SIter (varToIL v) (varToILSetVar x) (incrVar v s) ()
 
 roleToSet :: RMulti -> IL.Set
 roleToSet r = IL.S $ roleToString r
