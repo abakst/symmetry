@@ -108,14 +108,18 @@ stateUpdateOfStmt _ _ _ p SLoop{loopBody = s, annot = a}
 stateUpdateOfStmt _ _ cfg p SVar{annot = a}
   = nextPC [] p a $ M.lookup a cfg
 
+stateUpdateOfStmt _ _ cfg p SIncr{incrVar = (V v), annot = a}
+  = [([], [incr])] `sequenceUpdates`
+    (nextPC [] p a $ M.lookup a cfg)
+  where
+    incr = updField p v (inc (readStateField p v))
+
 stateUpdateOfStmt _ _ cfg p SIter{iterSet = s, iterVar = (V v), annot = a}
-  = sequenceUpdates [([], [incr])] (updatePC [lt ve se] p a i) ++
-    updatePC [lte se ve] p a j
+  = updatePC [lt ve se] p a i ++ updatePC [lte se ve] p a j
     where
       (i, j) = case M.lookup a cfg of
                  Just [i,j] -> (j, i)
                  Just [i]   -> (i, -1)
-      incr = updField p v (inc (readStateField p v))
       ve = readStateField p v
       se = case s of
              S s'    -> readStateField p s'

@@ -175,6 +175,11 @@ data Stmt a = SSkip { annot :: a }
             | SNonDet { nonDetBody :: [Stmt a]
                       , annot      :: a
                       }
+
+            | SIncr { incrVar :: Var
+                    , annot :: a
+
+                    }
             | SDie { annot :: a }
             {- These do not appear in the source: -}
             | SNull { annot :: a }
@@ -284,6 +289,8 @@ instance Traversable Stmt where
       mkCase a l r = SCase v pl pr l r a
   traverse f (SNonDet ss a)
     = flip SNonDet <$> f a <*> traverse (traverse f) ss
+  traverse f (SIncr v a)
+    = SIncr v <$> f a
   traverse _ _
     = error "traverse undefined for non-source stmts"
 
@@ -411,6 +418,9 @@ instance Pretty ILType where
 instance Pretty (Stmt a) where
   pretty (SSkip _)
     = text "<skip>"
+
+  pretty (SIncr v _)
+    = pretty v <> text "++"
 
   pretty (SSend p (t,e) _)
     = text "send" <+> pretty p <+> parens (pretty e <+> text "::" <+> pretty t)
