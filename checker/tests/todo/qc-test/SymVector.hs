@@ -1,6 +1,10 @@
 module SymVector where
 
 data Vec a = V (Int -> a)
+
+instance Show (Vec a) where
+  show _ = "some vector"
+
 {-@
 data Vec a <dom :: Int -> Prop, rng :: Int -> a -> Prop>
      = V {a :: i:Int<dom> -> a <rng i>}

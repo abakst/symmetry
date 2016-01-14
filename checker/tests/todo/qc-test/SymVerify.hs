@@ -1,8 +1,8 @@
-module SymVerify () where
+module SymVerify where
 import SymVector
 import SymMap
 import Language.Haskell.Liquid.Prelude
- 
+
 initialState :: State
 initialState = undefined
  
@@ -11,6 +11,7 @@ initialSched = undefined
  
 check :: ()
 check = runState initialState (initialSched initialState)
+
 runState
   state@State{state_x_3 = state_x_3,
               state_PtrR_vP_0_0 = state_PtrR_vP_0_0,
@@ -68,7 +69,9 @@ runState
                  ((((&&) ((==) state_vP_1_PC (0))
                       (((<=) state_PtrW_vP_1_0 state_PtrR_vP_1_0))))))))))
       ()
- 
+
+runState _ (_:_) = ()
+
 data Val = VUnit{}
          | VInt{vVInt0 :: Int}
          | VStr{vVStr0 :: String}
@@ -76,13 +79,15 @@ data Val = VUnit{}
          | VInL{vVInL0 :: Val}
          | VInR{vVInR0 :: Val}
          | VPair{vVPair0 :: Val, vVPair1 :: Val}
- 
+         deriving (Show)
+
 data State = State{state_x_3 :: Val, state_PtrR_vP_0_0 :: Int,
                    state_PtrW_vP_0_0 :: Int, state_vP_0_Buf_0 :: Vec Val,
                    state_PtrR_vP_1_0 :: Int, state_PtrW_vP_1_0 :: Int,
                    state_vP_1_Buf_0 :: Vec Val, state_vP_0_PC :: Int,
                    state_vP_1_PC :: Int}
- 
+             deriving (Show)
+
 is_VUnit, is_VInt, is_VStr, is_VPid, is_VInL, is_VInR, is_VPair ::
             Val -> Bool
 is_VUnit VUnit{} = True
@@ -102,8 +107,8 @@ is_VPair _ = False
  
 data PID_pre = PID_vP_0
              | PID_vP_1
-             deriving Eq
- 
+             deriving (Eq,Show)
+
 type PID = PID_pre
 is_PID_vP_0 (PID_vP_0) = True
 is_PID_vP_0 _ = False

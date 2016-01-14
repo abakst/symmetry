@@ -1,0 +1,3 @@
+#!/bin/sh
+
+stack runghc -- -i.:/home/gokhan/libs/liquidhaskell/include qc.hs
