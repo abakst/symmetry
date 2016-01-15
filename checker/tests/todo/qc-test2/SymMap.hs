@@ -15,8 +15,9 @@ instance (Show a, Show b) => Show (Map_t a b) where
 {-@ measure Map_store :: Map_t k v -> k -> v -> Map_t k v @-}
  
 {-@ get :: m:Map_t k v -> k:k -> {v:v | v = Map_select m k} @-}
-get :: (Ord k) => Map_t k v -> k -> v
-get (M m) k = fromMaybe (error "nope") (Data.Map.Strict.lookup k m)
+get :: (Ord k, Show k, Show v) => Map_t k v -> k -> v
+get (M m) k = fromMaybe (error ((show k) ++ " doesn't belong to " ++ (show m)))
+                        (Data.Map.Strict.lookup k m)
 
 {-@ put :: m:Map_t k v -> k:k -> v:v -> {vv:Map_t k v | vv = Map_store m k v } @-}
 put :: (Ord k) => Map_t k v -> k -> v -> Map_t k v

@@ -15,7 +15,7 @@ pingServer  = do (tmp :: repr ()) <- recv
                  ret tt
 
 master :: (DSL repr) => repr (Process repr ())
-master  = do r   <- newRMulti
+master  = do r    <- newRMulti
              pids <- spawnMany r (int 2) pingServer
              doMany pids (lam $ \pid -> send pid tt)
              ret tt

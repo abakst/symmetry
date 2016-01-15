@@ -40,8 +40,8 @@ role_1_gen = suchThat arbitrary (\n -> 0 <= n && n < role_1)
 instance (Arbitrary State) where
   arbitrary = State <$> return role_1 -- role_1            :: Int,
                     <*> role_1_gen    -- vP_role_1_k       :: Int,
-                    <*> arbitrary     -- x_4               :: Map_t Int Val,
-                    <*> arbitrary     -- x_5               :: Int,
+                    <*> x_4_gen       -- x_4               :: Map_t Int Val,
+                    <*> role_1_gen    -- x_5               :: Int,
                     <*> zero_n_map    -- vP_role_1_PCK     :: Map_t Int Int,
                     <*> zero_n_map    -- vP_role_1_RdK     :: Map_t Int Int,
                     <*> zero_n_map    -- vP_role_1_WrK     :: Map_t Int Int,
@@ -55,6 +55,11 @@ instance (Arbitrary State) where
                     <*> zero_map      -- vP_role_1_PC      :: Map_t Int Int
               where zero_map   = return $ foldr (\pid m -> put m pid 0) empty [0..role_1-1]
                     zero_n_map = return $ put empty 0 role_1
+                    -- creates a map from [(0,val_0), .., (n-1,val_{n-1})]
+                    x_4_gen    = do vals <- vectorOf role_1 arbitrary
+                                    let f t m = put m (fst t) (snd t)
+                                        l     = zip [0..role_1-1] vals
+                                    return $ foldr f empty l
 
 --instance (Arbitrary a) => (Arbitrary (PID_pre a)) where
 instance Arbitrary (PID_pre Int) where
