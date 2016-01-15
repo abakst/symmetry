@@ -23,12 +23,13 @@ runState
               state_vP_1_PC = state_vP_1_PC}
   ((:) (PID_vP_0) sched)
   | ((==) state_vP_0_PC (0)) =
-    runState
-      state{state_PtrW_vP_1_0 = ((+) state_PtrW_vP_1_0 1),
+      runState state{
+      --state_PtrW_vP_1_0 = ((+) state_PtrW_vP_1_0 1),
             state_vP_1_Buf_0 =
               (setVec state_PtrW_vP_1_0 (VUnit) state_vP_1_Buf_0),
             state_vP_0_PC = (-1)}
       sched
+
 runState
   state@State{state_x_3 = state_x_3,
               state_PtrR_vP_0_0 = state_PtrR_vP_0_0,
@@ -58,19 +59,19 @@ runState
               state_vP_1_PC = state_vP_1_PC}
   (PID_vP_0 : PID_vP_1 : _)
   | True =
-    liquidAssert
-      (not
-         (((&&)
-             (((&&) (((||) ((==) state_vP_0_PC (-1)) (False)))
-                 (((||) ((==) state_vP_1_PC (-1))
-                     ((((&&) ((==) state_vP_1_PC (0))
-                          (((<=) state_PtrW_vP_1_0 state_PtrR_vP_1_0)))))))))
-             (((||) (False)
-                 ((((&&) ((==) state_vP_1_PC (0))
-                      (((<=) state_PtrW_vP_1_0 state_PtrR_vP_1_0))))))))))
-      ()
+    if (not
+           (((&&)
+               (((&&) (((||) ((==) state_vP_0_PC (-1)) (False)))
+                   (((||) ((==) state_vP_1_PC (-1))
+                       ((((&&) ((==) state_vP_1_PC (0))
+                            (((<=) state_PtrW_vP_1_0 state_PtrR_vP_1_0)))))))))
+               (((||) (False)
+                   ((((&&) ((==) state_vP_1_PC (0))
+                        (((<=) state_PtrW_vP_1_0 state_PtrR_vP_1_0))))))))))
+      then ()
+      else error "oops"
 
-runState _ (_:_) = ()
+runState _ _ = ()
 
 data Val = VUnit{}
          | VInt{vVInt0 :: Int}
