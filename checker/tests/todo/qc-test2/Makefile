@@ -1,10 +1,12 @@
+LH_INC = $(HOME)/libs/liquidhaskell/include
+
 all:
 
 run:
-	stack ghci --ghc-options -i.:/home/gokhan/libs/liquidhaskell/include
+	stack ghci --ghc-options -i.:$(LH_INC)
 
 test:
-	stack runghc -- -i.:/home/gokhan/libs/liquidhaskell/include qc.hs
+	stack runghc -- -i.:$(LH_INC) qc.hs
 
 liquid-test:
 	liquid SymVerify.hs
