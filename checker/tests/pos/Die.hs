@@ -18,6 +18,6 @@ goo = do x <- recv
 mainProc :: forall r. (DSL r) => r (Process r ())           
 mainProc = do r <- newRSing
               p <- spawn r goo
-              send p (inl (int 0) :: r (Int :+: Int))
+              send p (inl (plus (int 0) (int 4)) :: r (Int :+: Int))
 
 main = checkerMain (exec mainProc)

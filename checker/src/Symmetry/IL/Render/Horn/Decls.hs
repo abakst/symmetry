@@ -10,6 +10,7 @@ import           Language.Haskell.Syntax
 import           Language.Haskell.Pretty
 
 import           Symmetry.IL.AST as AST
+import           Symmetry.IL.Render.Horn.Config
 import           Symmetry.IL.Render.Horn.Types
 
 basicDataDecl n tvs cs clss 
@@ -72,8 +73,8 @@ countersOfProc (p@(PAbs _ _), s)
 countersOfProc _
   = []
 
-pidInjectiveFns :: Config a -> [HsDecl]
-pidInjectiveFns Config { cProcs = ps }                                 
+pidInjectiveFns :: ConfigInfo a -> [HsDecl]
+pidInjectiveFns CInfo { config = Config { cProcs = ps }}
   = [ HsFunBind $ fnMatch p | (p, _) <- ps ]
     where
       fnName    = name . prefix "is" . unName . pidNameOfPid
@@ -83,8 +84,8 @@ pidInjectiveFns Config { cProcs = ps }
                   , HsMatch emptyLoc (fnName p) [HsPWildCard] falseRHS  []
                   ]
       
-pidTypeOfConfig :: Config a -> [HsDecl]
-pidTypeOfConfig c@Config { cProcs = ps }
+pidTypeOfConfig :: ConfigInfo a -> [HsDecl]
+pidTypeOfConfig c@CInfo{ config = Config { cProcs = ps }}
   = [ basicDataDecl prePidTyName ts fs [eqClass]
     , HsTypeDecl emptyLoc pidTyName [] pidTyApp] ++
     pidInjectiveFns c
@@ -95,8 +96,8 @@ pidTypeOfConfig c@Config { cProcs = ps }
     fs = [tagCon (pidNameOfPid p)                  | p <- concPs] ++
          [valCon (pidNameOfPid p) [bangTy (ty t)] | (p,t) <- zip absPs ts ]
 
-ptrsOfProc :: TyMap -> Process Int -> [([HsName], HsBangType)]
-ptrsOfProc m (p, _)
+ptrsOfProc :: ConfigInfo Int -> Process Int -> [([HsName], HsBangType)]
+ptrsOfProc ci (p, _)
   = concatMap go ts
     where
       go :: Integer -> [([HsName], HsBangType)]
@@ -106,7 +107,7 @@ ptrsOfProc m (p, _)
              ]
       ptrTy = if isAbs p then mapType intType intType else intType
       bufTy = if isAbs p then vec2DType valType else vecType valType
-      ts = snd <$> m
+      ts = snd <$> (tyMap ci)
 
 pcOfProc :: Process Int -> ([HsName], HsBangType)
 pcOfProc (p, _)
@@ -114,20 +115,22 @@ pcOfProc (p, _)
   where
     pcType = if isAbs p then mapType intType intType else intType
 
-stateFieldsOfConfig :: TyMap -> Config Int -> [([HsName], HsBangType)]
-stateFieldsOfConfig m Config { cProcs = ps, cGlobals = gs }
+stateFieldsOfConfig :: ConfigInfo Int -> [([HsName], HsBangType)]
+stateFieldsOfConfig ci 
   = concatMap stateFieldsOfProc ps ++
     concatMap intFieldsOfProc   ps ++ 
     concatMap countersOfProc    ps ++
-    concatMap (ptrsOfProc m)    ps ++
+    concatMap (ptrsOfProc ci)   ps ++
     fmap      pcOfProc          ps ++
-    [ ([name (prefix stateString v)], bangTy valType) | (V v, _) <- gs ]           
-              
-stateTypeOfConfig :: TyMap
-                  -> Config Int
+    [ ([name (prefix stateString v)], bangTy valType) | (V v, _) <- gs ]
+  where
+    ps = cProcs   (config ci)
+    gs = cGlobals (config ci)
+
+stateTypeOfConfig :: ConfigInfo Int
                   -> HsDecl
-stateTypeOfConfig m c
-  = recordDataDecl stateTyName stateTyName (stateFieldsOfConfig m c) []
+stateTypeOfConfig ci
+  = recordDataDecl stateTyName stateTyName (stateFieldsOfConfig ci) []
 
 pcTypesOfConfig :: Config Int -> [HsDecl]
 pcTypesOfConfig Config { cProcs = ps }
@@ -178,9 +181,9 @@ valFunctions
                             , HsMatch emptyLoc (valInjective n) [HsPWildCard] falseRhs []
                             ]
 
-declsOfConfig :: TyMap -> Config Int -> [HsDecl]    
-declsOfConfig m c
-  = [valDecl, stateTypeOfConfig m c] ++
+declsOfConfig :: ConfigInfo Int -> [HsDecl]    
+declsOfConfig ci
+  = [valDecl, stateTypeOfConfig ci] ++
     valFunctions ++
-    pidTypeOfConfig c ++
+    pidTypeOfConfig ci ++
     nonDetDecls

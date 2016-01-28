@@ -22,15 +22,12 @@ library
   exposed-modules: Symmetry.Language.AST
                    Symmetry.Language.Syntax
                    Symmetry.Language
---                   Symmetry.IL.Render.SPIN
                    Symmetry.IL.Render.Horn
+                   Symmetry.IL.Render.Horn.Config
                    Symmetry.IL.Render.Horn.Spec
                    Symmetry.IL.Render.Horn.Decls
                    Symmetry.IL.Render.Horn.Types
                    Symmetry.IL.Render.Horn.Deadlock
-                   -- Symmetry.IL.Unfold
-                   -- Symmetry.IL.Subst
-                   -- Symmetry.IL.Inst
                    Symmetry.IL.AST
                    Symmetry.SymbEx
                    Symmetry.Verify
@@ -39,7 +36,7 @@ library
                    -- Symmetry.IL.TrailParser
   ghc-options: -fwarn-unused-binds
   build-depends:       base >=4.7
-                     , liquid-fixpoint == 0.6
+                     , liquid-fixpoint >= 0.6
                      , containers >= 0.5.5.1
                      , directory >= 1.2.2.0
                      , filepath >= 1.3.0.2
