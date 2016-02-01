@@ -4,7 +4,10 @@ module Symmetry.Verify where
 
 import Symmetry.SymbEx
 import Symmetry.IL.Render.Horn
+import Symmetry.IL.Render.Horn.Config
 import Symmetry.IL.AST
+import Symmetry.IL.Model (generateModel)
+import Symmetry.IL.Render.HaskellModel (printHaskell)
 -- import Symmetry.IL.Unfold
 -- import Symmetry.IL.Inst
 -- import Symmetry.IL.TrailParser
@@ -88,7 +91,9 @@ run1Cfg opt outd cfg
          copyMapModule    outd
          copyVectorModule outd
        if (optVerify opt) then do
-         runChecker cfg (outd </> "SymVerify.hs")
+         let (cinfo, m) = generateModel cfg                   
+         putStrLn (printHaskell cinfo m)
+         -- runChecker cfg (outd </> "SymVerify.hs")
          return True
        else
          return True

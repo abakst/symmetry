@@ -1,3 +1,4 @@
+{-# Language RecordWildCards #-}
 module Symmetry.IL.Render.Horn.Config where
 
 import Data.List as List
@@ -12,11 +13,11 @@ type TyMap = [(ILType, Integer)]
 
 data ConfigState = CState { intVars     :: [(Pid, String)]
                           , valVars     :: [(Pid, String)]
-                          , rdCounters  :: [(Pid, String)]
-                          , wrCounters  :: [(Pid, String)]
-                          , pcCounters  :: [(Pid, String)]
-                          , pidBounds   :: [(Pid, String, Maybe Int)]
-                          , msgBufs     :: [(Pid, String)]
+                          -- , rdCounters  :: [(Pid, String)]
+                          -- , wrCounters  :: [(Pid, String)]
+                          -- , pcCounters  :: [(Pid, String)]
+                          , pidBounds   :: [(Pid, Maybe Int)]
+                          -- , msgBufs     :: [(Pid, String)]
                           } 
 
 data ConfigInfo a = CInfo { config     :: Config a
@@ -29,12 +30,13 @@ data ConfigInfo a = CInfo { config     :: Config a
 mkCState :: Config Int -> ConfigState 
 mkCState c = CState { valVars    = vs
                     , intVars    = is
-                    , rdCounters = rdKs
+                    , pidBounds  = []
                     }
   where
     vs   = [ (p, v) | (p,s)  <- cProcs c, V v <- recvVars s ++ patVars s ]
     is   = [ (p, i) | (p, s) <- cProcs c, V i <- everything (++) (mkQ [] intVar) s ]
-    rdKs = [ (p, pidLocCounterString p) | p <- absPids ] 
+    pcKs = [ (p, pidLocCounterString p) | p <- absPids ] 
+
          
     absPids = List.filter isAbs pids
     pids    = fst <$> cProcs c
@@ -43,6 +45,11 @@ mkCState c = CState { valVars    = vs
     intVar (SLoop { loopVar = (LV i) }) = [V i]
     intVar (SChoose { chooseVar = v }) = [v]
     intVar _                       = []
+
+vars :: ConfigInfo a -> [String]                                     
+vars CInfo { stateVars = CState {..} }
+  = snd <$> intVars ++ valVars
+  
 
 cfgNext :: ConfigInfo Int -> Pid -> Int -> Maybe [Stmt Int]                                     
 cfgNext ci p i
@@ -66,5 +73,3 @@ mkCInfo c = CInfo { config    = c
 
 lookupTy :: ConfigInfo a -> ILType -> Integer
 lookupTy ci t = fromJust . List.lookup t $ tyMap ci
-
-                

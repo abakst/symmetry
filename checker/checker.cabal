@@ -22,13 +22,15 @@ library
   exposed-modules: Symmetry.Language.AST
                    Symmetry.Language.Syntax
                    Symmetry.Language
+                   Symmetry.IL.AST
+                   Symmetry.IL.Model
+                   Symmetry.IL.Render.HaskellModel
                    Symmetry.IL.Render.Horn
                    Symmetry.IL.Render.Horn.Config
                    Symmetry.IL.Render.Horn.Spec
                    Symmetry.IL.Render.Horn.Decls
                    Symmetry.IL.Render.Horn.Types
                    Symmetry.IL.Render.Horn.Deadlock
-                   Symmetry.IL.AST
                    Symmetry.SymbEx
                    Symmetry.Verify
                    Paths_checker
@@ -43,6 +45,7 @@ library
                      , ansi-terminal
                      , located-base
                      , haskell-src
+                     , haskell-src-exts
                      , hashable
                      , mtl
                      , options
