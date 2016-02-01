@@ -19,6 +19,32 @@ rightCons  = "VInR"
 leftCons   = "VInL"
 pairCons   = "VPair"
 
+valCons :: [String]
+valCons = [ unitCons
+          , nullCons
+          , intCons
+          , stringCons
+          , pidCons
+          , rightCons
+          , leftCons
+          , pairCons
+          ]
+
+-- Constant Names
+state, initState, initSched, nondet :: String
+state = "state"
+initState = "state0"
+initSched = "sched0"
+nondet    = "nondet"
+
+mapGetFn, mapPutFn, vecGetFn, vecPutFn :: String
+mapGetFn = "get"
+mapPutFn = "put"
+vecGetFn = "getVec"
+vec2DGetFn = "getVec2D"
+vecPutFn = "setVec"
+vec2DPutFn = "setVec2D"
+
 -- Generating Names                    
 prefix :: String -> String -> String
 prefix x (y:ys) = x ++ (toUpper y : ys)
@@ -28,6 +54,9 @@ pid (PConc i)      = prefix "pid" . prefix "r" $ show i
 pid (PAbs _ (S s)) = prefix "pid" s
 pid _ = error "pid: non conc or abs"
 
+pidUnfold :: Pid -> String
+pidUnfold p@(PAbs _ _) = prefix (pid p) "k"
+
 pidIdx :: Pid -> String
 pidIdx (PAbs (V v) _)  = v
 pidIdx (PAbs (GV v) _) = v
@@ -36,9 +65,10 @@ pidIdx _               = error "pidIdx of non-abs"
 pc :: Pid -> String
 pc p = prefix (pid p) "pc"
 
-stateRecordCons = "State"
+pidPcCounter :: Pid -> String
+pidPcCounter p = prefix (pid p) "pcK"
+
 pidPre          = "Pid_pre"
-pidType         = "Pid"
 
 pidTyName ci p t s
   = prefix (pid p) . prefix s $ show tid
@@ -53,18 +83,6 @@ ptrR ci p t = pidTyName ci p t "ptrR"
 
 ptrW :: ConfigInfo Int -> Pid -> ILType -> String           
 ptrW ci p t = pidTyName ci p t "ptrW"
-
-
-mapGetFn, mapPutFn, vecGetFn, vecPutFn :: String
-mapGetFn = "get"
-mapPutFn = "put"
-vecGetFn = "getVec"
-vec2DGetFn = "getVec2D"
-vecPutFn = "setVec"
-vec2DPutFn = "setVec2D"
-
-state :: String
-state = "state"
 
 data Rule e = Rule Pid [(String, e)] e e --[(String, e)], [((Pid, ILType), e)])
 

@@ -18,6 +18,7 @@ cabal-version:       >=1.10
 
 data-files:          include/SymMap.hs
                    , include/SymVector.hs
+                   , include/SymBoilerPlate.hs
 library
   exposed-modules: Symmetry.Language.AST
                    Symmetry.Language.Syntax

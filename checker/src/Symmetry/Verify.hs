@@ -84,12 +84,24 @@ copyVectorModule d
   = do f <- getDataFileName ("include" </> "SymVector.hs")
        copyFile f (d </> "SymVector.hs")
 
+copyBoilerModule d
+  = do f <- getDataFileName ("include" </> "SymBoilerPlate.hs")
+       copyFile f (d </> "SymBoilerPlate.hs")
+
+includes
+  = [ "SymMap.hs", "SymBoilerPlate.hs", "SymVector.hs" ]
+
+copyIncludes d
+  = mapM_ go includes
+  where
+    go f = do h <- getDataFileName ("include" </> f)
+              copyFile h (d </> f)
+
 run1Cfg :: MainOptions -> FilePath -> Config () -> IO Bool
 run1Cfg opt outd cfg
   = do when (optModel opt) $ do
          createDirectoryIfMissing True outd
-         copyMapModule    outd
-         copyVectorModule outd
+         copyIncludes outd
        if (optVerify opt) then do
          let (cinfo, m) = generateModel cfg                   
          putStrLn (printHaskell cinfo m)

@@ -1,3 +1,4 @@
+{-# Language ParallelListComp #-}
 {-# LANGUAGE ViewPatterns #-}
 module Symmetry.IL.Render.Horn.Spec where
 
@@ -12,18 +13,24 @@ import qualified Data.IntSet as S
 import qualified Data.Map.Strict as Map
 import           Data.List
 import           Data.Maybe
-import           Language.Haskell.Syntax
+import           Language.Haskell.Exts.Pretty
+import           Language.Haskell.Exts.Syntax hiding (Stmt)
+import           Language.Haskell.Exts.SrcLoc
+import           Language.Haskell.Exts.Build
 import           Language.Fixpoint.Types as F
-import           Language.Haskell.Pretty
 import           Text.Printf
 
 import Symmetry.IL.AST as AST
 import Symmetry.IL.Render.Horn.Config
 -- import Symmetry.IL.Render.Horn.Decls
 import Symmetry.IL.Model
+import Symmetry.IL.Render.HaskellDefs
 
-instance Symbolic HsName where
-  symbol (HsIdent x) = symbol x
+instance Symbolic Name where
+  symbol (Ident x) = symbol x
+
+pp :: Pretty a => a -> String
+pp = prettyPrint                     
 
 eRange :: F.Expr -> F.Expr -> F.Expr -> F.Expr
 eRange v elow ehigh
@@ -55,28 +62,28 @@ eZero = F.expr (0 :: Int)
 eEqZero :: F.Expr -> F.Expr                       
 eEqZero e = eEq e eZero
 
-app :: Symbolic a => a -> [F.Expr] -> F.Expr            
-app f = EApp (dummyLoc $ symbol f)
+eApp :: Symbolic a => a -> [F.Expr] -> F.Expr            
+eApp f = EApp (dummyLoc $ symbol f)
 
 pidToExpr :: Pid -> F.Expr        
 pidToExpr p@(PConc _) = eVar $ pid p        
-pidToExpr p@(PAbs (V v) (S s)) = app (pid p) [eVar $ pidIdx p]
+pidToExpr p@(PAbs (V v) (S s)) = eApp (pid p) [eVar $ pidIdx p]
 
 eReadState :: (Symbolic a, Symbolic b) => a -> b -> F.Expr                        
 eReadState s f 
-  = app (symbol f) [eVar s]
+  = eApp (symbol f) [eVar s]
 
 eReadMap e k
-  = app "Map_select" {- mapGetSpecString -} [e, k]
+  = eApp "Map_select" {- mapGetSpecString -} [e, k]
 
-eRdPtr, eWrPtr :: Symbolic a => a -> Integer -> Pid -> F.Expr
-eRdPtr s t p    
-  = eReadState s (pidRdPtrName t p)
-eWrPtr s t p    
-  = eReadState s (pidWrPtrName t p)
+eRdPtr, eWrPtr :: Symbolic a => ConfigInfo Int -> Pid -> ILType -> a -> F.Expr
+eRdPtr ci p t s
+  = eReadState s (ptrR ci p t)
+eWrPtr ci p t s
+  = eReadState s (ptrW ci p t)
 
-initOfPid :: TyMap -> Process Int -> F.Expr
-initOfPid m (p@(PAbs _ (S s)), stmt)
+initOfPid :: ConfigInfo Int -> Process Int -> F.Expr
+initOfPid ci (p@(PAbs _ (S s)), stmt)
   = pAnd preds 
   where
     preds    = [ counterInit
@@ -86,48 +93,50 @@ initOfPid m (p@(PAbs _ (S s)), stmt)
                , eEq counterSum setSize
                ] ++ counterInits
     st       = "v"
-    eK       = pidUnfoldName p
+    eK       = pidUnfold p
     counterInit  = eEq setSize (readCtr 0)
     unfoldInit   = eEq eZero (eReadMap (eReadState st (pc p)) (eReadState st eK))
     setSize      = eDec (eReadState st (prefix state s))
     counterSum   = foldl' (\e i -> ePlus e (readCtr i)) (readCtr (-1)) stmts
     counterInits = (\i -> eEq eZero (readCtr i)) <$> filter (/= 0) ((-1) : stmts)
     counterBounds= (\i -> eLe eZero (readCtr i)) <$> filter (/= 0) stmts
+
     readCtr :: Int -> F.Expr
-    readCtr i  = eReadMap (eReadState st (pidLocCounterName p)) (fixE i)
+    readCtr i  = eReadMap (eReadState st (pidPcCounter p)) (fixE i)
+
     fixE i     = if i < 0 then ECst (F.expr i) FInt else F.expr i
     stmts :: [Int]
     stmts = everything (++) (mkQ [] go) stmt
     go s = [annot s]
 
-initOfPid m (p@(PConc _), stmt)
+initOfPid ci (p@(PConc _), stmt)
   = pAnd (pcEqZero :
           concat [[ rdEqZero t, rdGeZero t
                   , wrEqZero t, wrGeZero t
-                  , rdLeWr t               ] | t <- snd <$> m ])
+                  , rdLeWr t               ] | t <- fst <$> tyMap ci ])
     where
       s           = "v"
       pcEqZero    = eEq (eReadState s (pc p)) (F.expr initStmt)
-      rdEqZero t  = eEqZero (eRdPtr s t p)
-      rdGeZero t  = eLe eZero (eRdPtr s t p)
-      wrEqZero t  = eEqZero (eWrPtr s t p)
-      wrGeZero t  = eLe eZero (eWrPtr s t p)
-      rdLeWr t    = eLe (eRdPtr s t p) (eWrPtr s t p)
+      rdEqZero t  = eEqZero (eRdPtr ci p t s)
+      rdGeZero t  = eLe eZero (eRdPtr ci p t s)
+      wrEqZero t  = eEqZero (eWrPtr ci p t s)
+      wrGeZero t  = eLe eZero (eWrPtr ci p t s)
+      rdLeWr t    = eLe (eRdPtr ci p t s) (eWrPtr ci p t s)
       initStmt    = firstNonBlock stmt
       firstNonBlock SBlock { blkBody = bs } = annot (head bs)
       firstNonBlock s                       = annot s
 
-schedExprOfPid :: TyMap -> Pid -> Symbol -> F.Expr
-schedExprOfPid m p@(PAbs v (S s)) state
+schedExprOfPid :: ConfigInfo Int -> Pid -> Symbol -> F.Expr
+schedExprOfPid ci p@(PAbs v (S s)) state
   = subst1 (pAnd ([pcEqZero, idxBounds] ++
-                  concat [[rdEqZero t, wrEqZero t, wrGtZero t] | t <- snd <$> m]))
+                  concat [[rdEqZero t, wrEqZero t, wrGtZero t] | t <- fst <$> tyMap ci]))
            (symbol (pidIdx p), eVar "v")
     where
-      idxBounds  = eRange (eVar "v") (F.expr (0 :: Int)) (eReadState state (prefix state s))
+      idxBounds  = eRange (eVar "v") (F.expr (0 :: Int)) (eReadState state s)
       pcEqZero   = eEqZero (eReadMap (eReadState state (pc p)) (eILVar v))
-      rdEqZero t = eRangeI eZero (eReadMap (eRdPtr state t p) (eILVar v)) (eReadMap (eWrPtr state t p) (eILVar v))
-      wrEqZero t = eEqZero (eReadMap (eWrPtr state t p) (eILVar v))
-      wrGtZero t = eLe eZero (eReadMap (eWrPtr state t p) (eILVar v))
+      rdEqZero t = eRangeI eZero (eReadMap (eRdPtr ci p t state) (eILVar v)) (eReadMap (eWrPtr ci p t state) (eILVar v))
+      wrEqZero t = eEqZero (eReadMap (eWrPtr ci p t state) (eILVar v))
+      wrGtZero t = eLe eZero (eReadMap (eWrPtr ci p t state) (eILVar v))
 
 schedExprsOfConfig :: ConfigInfo Int -> Symbol -> [F.Expr]
 schedExprsOfConfig ci s
@@ -135,7 +144,7 @@ schedExprsOfConfig ci s
   where
     m    = tyMap ci
     ps   = cProcs (config ci)
-    go p = schedExprOfPid m p s
+    go p = schedExprOfPid ci p s
            
 predToString :: F.Expr -> String
 predToString = show . pprint
@@ -154,30 +163,30 @@ printSpec x t p = printf specFmt x t (predToString p)
 
 initStateReft :: F.Expr -> String                  
 initStateReft p
-  = printSpec initialStateString stateRecordCons p
+  = printSpec initState stateRecordCons p
 
 initSchedReft :: (Symbol -> [F.Expr]) -> String
 initSchedReft p
   = printf "{-@ assume %s :: %s:State -> [%s %s] @-}"
-      initialSchedString
-      initialStateString
+      initSched
+      initState
       pidPre
       (unwords args)
     where
       args = printf "{v:Int | %s}" . predToString
-             <$> p (symbol initialStateString)
+             <$> p (symbol initState)
 
 nonDetSpec :: String    
 nonDetSpec
-  = printf "{-@ %s :: %s -> {v:Int | true} @-}" nonDetString (prettyPrint schedTy)
+  = printf "{-@ %s :: %s -> {v:Int | true} @-}" nondet (pp schedType)
 
 measuresOfConfig :: Config Int -> String
 measuresOfConfig Config { cProcs = ps }
-  = unlines [ printf "{-@ measure %s @-}" (unName $ pidInjectiveName p) | (p, _) <- ps]
+  = unlines [ printf "{-@ measure %s @-}" (pidInj p) | (p, _) <- ps]
 
 valMeasures :: String
 valMeasures
-  = unlines [ printf "{-@ measure %s @-}" (unName (valInjective n)) | (n, _) <- valConstructors ]
+  = unlines [ printf "{-@ measure %s @-}" (valInj v) | v <- valCons ]
 
 builtinSpec :: [String]
 builtinSpec = [nonDetSpec]
@@ -192,67 +201,157 @@ builtinSpec = [nonDetSpec]
 --       go p@(PConc _)  = (pid p)
 --       goAbs p@(PAbs _ _) = printf "%s { pidIdx :: Int }" (unName (pidNameOfPid p))
 
-recQuals (HsDataDecl _ _ _ _ [c] _)
-  = unlines $ recQualsCon c
-  where
-    printTy (HsUnBangedTy (HsTyTuple _)) = "a"
-    printTy t             = prettyPrint t
-    recQualsCon (HsRecDecl _ _ fs)
-      = concatMap recQualField fs
-    recQualField ([f], t)
-      = [ printf "{-@ qualif Deref_%s(v:%s, x:%s): v = %s x @-}"
-            (unName f) (printTy t) stateTyString (unName f)
-        , printf "{-@ qualif Eq_%s(v:%s, x:%s): %s v = %s x @-}"
-            (unName f) stateTyString stateTyString (unName f) (unName f)
-        ]
+-- recQuals (HsDataDecl _ _ _ _ [c] _)
+--   = unlines $ recQualsCon c
+--   where
+--     printTy (HsUnBangedTy (HsTyTuple _)) = "a"
+--     printTy t             = pp t
+--     recQualsCon (HsRecDecl _ _ fs)
+--       = concatMap recQualField fs
+--     recQualField ([f], t)
+--       = [ printf "{-@ qualif Deref_%s(v:%s, x:%s): v = %s x @-}"
+--             (unName f) (printTy t) stateTyString (unName f)
+--         , printf "{-@ qualif Eq_%s(v:%s, x:%s): %s v = %s x @-}"
+--             (unName f) stateTyString stateTyString (unName f) (unName f)
+--         ]
 
-stateRecordDefSpec :: Config Int -> HsDecl -> String
-stateRecordDefSpec Config { cProcs = cs } (HsDataDecl _ _ _ _ [c] _)
-  = printf "data State <%s> = State { %s }"
-           (intercalate ", " ((dom <$> ps) ++ (rng <$> ps)))
-           (intercalate ", " (declFields c)) -- fields
-  where
-    dom p = printf "dom%s :: Int -> Prop" (toLower <$> pidString p)
-    rng p = printf "rng%s :: Int -> Val -> Prop" (toLower <$> pidString p)
-    ps = fst <$> cs
-    declFields (HsRecDecl _ _ fs) = declField <$> fs
-    declField ([f], t)
-      -- | t == vecType valType   = printf "%s <%s, %s> :: %s" (prettyPrint f) (dom p) (rng p)
-      -- | t == vec2DType valType = undefined
-      | otherwise = printf "%s :: %s" (prettyPrint f) (prettyPrint t)
+-- stateRecordDefSpec :: Config Int -> HsDecl -> String
+-- stateRecordDefSpec Config { cProcs = cs } (HsDataDecl _ _ _ _ [c] _)
+--   = printf "data State <%s> = State { %s }"
+--            (intercalate ", " ((dom <$> ps) ++ (rng <$> ps)))
+--            (intercalate ", " (declFields c)) -- fields
+--   where
+--     dom p = printf "dom%s :: Int -> Prop" (toLower <$> pidString p)
+--     rng p = printf "rng%s :: Int -> Val -> Prop" (toLower <$> pidString p)
+--     ps = fst <$> cs
+--     declFields (HsRecDecl _ _ fs) = declField <$> fs
+--     declField ([f], t)
+--       -- | t == vecType valType   = printf "%s <%s, %s> :: %s" (pp f) (dom p) (rng p)
+--       -- | t == vec2DType valType = undefined
+--       | otherwise = printf "%s :: %s" (pp f) (pp t)
 
-stateRecordSpec :: ConfigInfo Int -> String
-stateRecordSpec ci
-  = unlines [ printf "{-@ %s @-}" (stateRecordDefSpec (config ci) st)
-            , measuresOfConfig (config ci)
-            , valMeasures
-            , recQuals st
+---------------------
+-- Type Declarations
+---------------------
+intType  = TyCon (UnQual (name "Int"))
+mapTyCon = TyCon (UnQual (name "Map_t"))
+
+mapType k v = TyApp (TyApp mapTyCon k) v
+
+stateRecord :: [([Name], Type)] -> QualConDecl
+stateRecord fs
+  = QualConDecl noLoc [] [] (RecDecl (name stateRecordCons) fs)
+  
+stateDecl :: ConfigInfo Int
+          -> ([Decl], String)
+stateDecl ci
+  = ([stateDecl], specStrings)
+  where
+    stateDecl    = DataDecl noLoc DataType [] (name stateRecordCons) [] [stateRecord fs] []
+    specStrings  = unlines [ dataReft
+                           , ""
+                           , recQuals
+                           , ""
+                           ]
+
+    dataReft     = printf "{-@ %s @-}" (pp stateDecl)
+    fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs
+    pcFs     = [ mkPC p (pc p) | p <- pids ci ]
+    ptrFs    = [ mkInt p (ptrR ci p t) | p <- pids ci, t <- fst <$> tyMap ci] ++
+               [ mkInt p (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci]
+    valVarFs = [ mkVal p v | (p, v) <- valVars (stateVars ci) ]
+    intVarFs = [ mkInt p v | (p, v) <- intVars (stateVars ci) ]
+
+    recQuals = unlines [ mkDeref f t ++ "\n" ++ mkEq f | ([f], t) <- fs ]
+
+    mkDeref f t = printf "{-@ qualif Deref_%s(v:%s, w:%s): v = %s w @-}"
+                          (pp f) (pp t) stateRecordCons (pp f) 
+    mkEq f = printf "{-@ qualif Eq_%s(v:%s, w:%s ): %s v = %s w @-}"
+                     (pp f) stateRecordCons stateRecordCons (pp f) (pp f)
+    mkPC  = liftMap intType
+    mkVal = liftMap (valHType ci)
+    mkInt = liftMap intType
+    liftMap t p v = ([name v], if isAbs p then mapType intType t else t)
+
+valHType :: ConfigInfo Int -> Type
+valHType ci = TyApp (TyCon (UnQual (name valType)))
+                    (pidPreApp ci)
+
+pidPreApp ci
+  = foldl' TyApp (TyCon . UnQual $ name pidPre) pidPreArgs
+  where
+    pidPreArgs :: [Type]
+    pidPreArgs = const intType <$> filter isAbs (pids ci)
+
+pidDecl :: ConfigInfo Int
+        -> [Decl]
+pidDecl ci
+  = [ DataDecl noLoc DataType [] (name pidPre) tvbinds cons []
+    , TypeDecl noLoc (name pidType) [] (pidPreApp ci)
+    ] ++
+    (pidFn <$> pids ci)
+  where
+    mkPidCons  pt     = QualConDecl noLoc [] [] (mkPidCons' pt)
+    mkPidCons' (p, t) = if isAbs p then
+                          ConDecl (name (pidConstructor p)) [TyVar t]
+                        else
+                          ConDecl (name (pidConstructor p)) []
+                          
+
+    cons        = mkPidCons <$> ts
+    tvbinds     = [ UnkindedVar t | (p, t) <- ts, isAbs p  ]
+    ts          = [ (p, mkTy t) | p <- pids ci | t <- [0..] ]
+    mkTy        = name . ("p" ++) . show
+
+pidFn :: Pid -> Decl
+pidFn p
+  = FunBind [ Match noLoc (name $ pidInj p) [pidPattern p] Nothing truerhs Nothing
+            , Match noLoc (name $ pidInj p) [PWildCard] Nothing falserhs Nothing
             ]
-    where
-      st = stateTypeOfConfig ci
+  where
+    truerhs = UnGuardedRhs (var (sym "True"))
+    falserhs = UnGuardedRhs (var (sym "False"))
 
-valTypeSpec :: String
-valTypeSpec = printf "{-@ %s @-}" (prettyPrint valDecl)
+-- stateRecordSpec :: ConfigInfo Int -> String
+-- stateRecordSpec ci
+--   = unlines [ printf "{-@ %s @-}" st
+--             , measuresOfConfig (config ci)
+--             , valMeasures
+--             , recQuals st
+--             ]
+--     where
+--       st = stateDecl ci
+
+-- valTypeSpec :: String
+-- valTypeSpec = printf "{-@ %s @-}" (pp valDecl)
 
 initSpecOfConfig :: ConfigInfo Int -> String               
 initSpecOfConfig ci
-  = unlines [ initStateReft concF.Expr
+  = unlines [ initStateReft concExpr
             , initSchedReft schedExprs
-            , stateRecordSpec ci
-            , valTypeSpec
+            , stateSpec
+            , unlines (pp <$> stateDecls)
+            , ""
+            , unlines (pp <$> pidDecls)
+            , ""
+            , measuresOfConfig (config ci)
+--            , stateRecordSpec ci
+--            , valTypeSpec
             ]
      -- ++ qualsOfConfig ci
     
     where
-      concExpr   = pAnd  ((initOfPid (tyMap ci) <$> cProcs (config ci)) ++
+      concExpr   = pAnd  ((initOfPid ci <$> cProcs (config ci)) ++
                           [ eEqZero (eReadState (symbol "v") (vSym v))
                           | V v <- iters ])
-      vSym       = symbol . prefix stateString
+      vSym       = symbol . prefix state
       iters      = everything (++) (mkQ [] goVars) (cProcs (config ci))
       goVars :: Stmt Int -> [Var]
       goVars SIter {iterVar = v} = [v]
       goVars _                   = []
       schedExprs = schedExprsOfConfig ci
+      (stateDecls, stateSpec) = stateDecl ci
+      pidDecls = pidDecl ci
 
 recvTy :: [Stmt Int] -> [ILType]
 recvTy = everything (++) (mkQ [] go)
@@ -265,6 +364,7 @@ recvTy = everything (++) (mkQ [] go)
 {-
 pc = 0 => f x = y
 -}
+{-
 data Context = Iter Var Set
              | Loop Var
                deriving (Eq, Ord, Show)
@@ -360,3 +460,4 @@ incWrTy (AST.EVar _) t ms
 childStmts :: ConfigInfo Int -> Pid -> Stmt Int -> [Stmt Int]
 childStmts ci p (annot -> -1) = []
 childStmts ci p s             = maybe [SSkip (-1)] id $ cfgNext ci p (annot s)
+-}

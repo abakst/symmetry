@@ -9,16 +9,20 @@ import           Language.Haskell.Exts.SrcLoc
 import           Language.Haskell.Exts.Syntax hiding (Rule)
 import           Language.Haskell.Exts.Build
 import           Language.Haskell.Exts.Pretty
+import           Symmetry.IL.Render.Horn.Spec (initSpecOfConfig)
 
 import           Symmetry.IL.AST
 import           Symmetry.IL.Model
+import           Symmetry.IL.Render.HaskellDefs
 import           Symmetry.IL.Render.Horn.Config  
   
 data HaskellModel = ExpM Exp
                   | PatM Pat
                   | StateUpM [(String, Exp)] [((Pid, ILType), Exp)]
 
+---------------------
 -- Convenience Functions                    
+---------------------
 vExp :: String -> Exp
 vExp = var . name
 
@@ -27,62 +31,6 @@ opEq   = op (sym "==")
 opAnd  = op (sym "&&")
 opPlus = op (sym "+")
 opLt   = op (sym "<")
-
----------------------
--- Type Declarations
----------------------
-intType  = TyCon (UnQual (name "Int"))
-valType  = TyCon (UnQual (name "Val"))
-mapTyCon = TyCon (UnQual (name "Map_t"))
-
-mapType k v = TyApp (TyApp mapTyCon k) v
-
-stateRecord :: [([Name], Type)] -> QualConDecl
-stateRecord fs
-  = QualConDecl noLoc [] [] (RecDecl (name stateRecordCons) fs)
-
-  
-stateDecl :: ConfigInfo Int
-          -> [Decl]
-stateDecl ci
-  = [DataDecl noLoc DataType [] (name stateRecordCons) [] [stateRecord fs] []]
-  where
-    fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs
-    pcFs     = [ mkInt p (pc p) | p <- pids ci ]
-    ptrFs    = [ mkInt p (ptrR ci p t) | p <- pids ci, t <- fst <$> tyMap ci] ++
-               [ mkInt p (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci]
-    valVarFs = [ mkVal p v | (p, v) <- valVars (stateVars ci) ]
-    intVarFs = [ mkInt p v | (p, v) <- intVars (stateVars ci) ]
-
-    mkVal p v = if isAbs p then
-                  ([name v], mapType intType valType)
-                else
-                  ([name v], valType)
-
-    mkInt p v = if isAbs p then
-                  ([name v], mapType intType intType)
-                else
-                  ([name v], intType)
-
-pidDecl :: ConfigInfo Int
-        -> [Decl]
-pidDecl ci
-  = [ DataDecl noLoc DataType [] (name pidPre) tvbinds cons []
-    , TypeDecl noLoc (name pidType) [] pidPreApp
-    ]
-  where
-    pidPreApp = foldl' TyApp (TyCon . UnQual $ name pidPre) (const intType <$> ts)
-    mkPidCons  pt     = QualConDecl noLoc [] [] (mkPidCons' pt)
-    mkPidCons' (p, t) = if isAbs p then
-                          ConDecl (name (pidConstructor p)) [TyVar t]
-                        else
-                          ConDecl (name (pidConstructor p)) []
-                          
-
-    cons        = mkPidCons <$> ts
-    tvbinds     = [ UnkindedVar t | (p, t) <- ts, isAbs p  ]
-    ts          = [ (p, mkTy t) | p <- pids ci | t <- [0..] ]
-    mkTy        = name . ("p" ++) . show
 
 ---------------------
 -- Program Expressions
@@ -172,17 +120,6 @@ hExpr :: Pid -> ILExpr -> HaskellModel
 hExpr p EUnit    = ExpM $ con unitCons    
 hExpr p (EPid q@(PConc _)) = ExpM $ App (con pidCons) (vExp $ pidConstructor q)
 
--- Buffers
-pidConstructor :: Pid -> String
-pidConstructor = (toUpper <$>) . pid
-
-pidPattern :: Pid -> Pat
-pidPattern p@(PConc _)
-  = PApp (UnQual (name (pidConstructor p))) []
-pidPattern p@(PAbs (GV v) _)
-  = PParen (PApp (UnQual (name (pidConstructor p))) [pvar (name v)])
-pidPattern _ = error "pidPattern: non conc or abs"
-
 hReadPtrR ci p t
   = hReadState ci p (ptrR ci p t)
 
@@ -260,7 +197,7 @@ printRules ci rs = prettyPrint $ FunBind matches
   where
     matches = mkMatch <$> perPid
     mkMatch rules
-      = Match noLoc (name "runState") (pat (rulesPid rules)) Nothing (mkGuardedRhss rules) Nothing 
+      = Match noLoc (name runState) (pat (rulesPid rules)) Nothing (mkGuardedRhss rules) Nothing 
     mkGuardedRhss rules
       = GuardedRhss [ mkRhs p ms grd fups bufups | Rule p ms (ExpM grd) (StateUpM fups bufups) <- rules ]
     mkRhs p [] grd fups bufups
@@ -274,7 +211,7 @@ printRules ci rs = prettyPrint $ FunBind matches
     mkFieldUp p f e
       = FieldUpdate (UnQual (name f)) e
     mkCall p fups bufups
-      = metaFunction "runState"
+      = metaFunction runState
           (mkRecUp p fups : mkBufUps bufups ++ [vExp "sched"]) 
     mkBufUps bufups
       = [ findUp p t bufups | p <- pids ci, t <- fst <$> tyMap ci]
@@ -290,8 +227,51 @@ printRules ci rs = prettyPrint $ FunBind matches
 
     findUp p t bufups = maybe (vExp $ buf ci p t) (putVec (vExp $ buf ci p t) (vExp $ ptrW ci p t)) $
                         lookup (p, t) bufups
+
+undef = "undefined"                               
+undefinedExp = vExp undef
+
+initialState :: ConfigInfo Int -> [Decl]
+initialState _
+  = [ TypeSig noLoc [name initState] (TyCon (UnQual (name stateRecordCons)))
+    , nameBind noLoc (name initState) undefinedExp
+    ]
+
+initialSched :: ConfigInfo Int -> [Decl]
+initialSched _
+  = [ TypeSig noLoc [name initSched] fnType
+    , simpleFun noLoc (name initSched) (name state) undefinedExp
+    ]
+  where
+    fnType = TyFun (TyCon (UnQual (name stateRecordCons)))
+                   schedType
+
+initialCall :: ConfigInfo Int -> Decl
+initialCall ci =
+  nameBind noLoc (name "check") call
+    where
+      call = metaFunction runState (vExp initState : bufs ++ [initSchedCall])
+      bufs = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
+      emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
+      initSchedCall = metaFunction initSched [vExp initState]
           
 printHaskell :: ConfigInfo Int -> [Rule HaskellModel] -> String
-printHaskell ci rs = unlines (printRules ci rs : (prettyPrint <$> decls))
+printHaskell ci rs = unlines [ header
+                             , ""
+                             , body
+                             ]
   where
-     decls = stateDecl ci ++ pidDecl ci
+    header = unlines [ "{-# Language RecordWildCards #-}"
+                     , "module SymVerify () where"
+                     , "import SymVector"
+                     , "import SymMap"
+                     , "import SymBoilerPlate"
+                     , "import Language.Haskell.Liquid.Prelude"
+                     ]
+    body = unlines [ unlines (prettyPrint <$> initialState ci)
+                   , unlines (prettyPrint <$> initialSched ci)
+                   , prettyPrint (initialCall ci)
+                   , printRules ci rs
+                   , ""
+                   , initSpecOfConfig ci
+                   ]
