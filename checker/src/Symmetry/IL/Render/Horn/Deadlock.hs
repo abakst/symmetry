@@ -3,11 +3,10 @@ module Symmetry.IL.Render.Horn.Deadlock where
 import           Data.List
 import           Data.Maybe
 import           Data.Generics
-import           Language.Haskell.Syntax
 
 import           Symmetry.IL.AST as AST
+import           Symmetry.IL.Model
 import           Symmetry.IL.Render.Horn.Config
-import           Symmetry.IL.Render.Horn.Types
 
 {- 
 A configuration is deadlocked if 
@@ -31,28 +30,26 @@ blockedLocs :: Config Int -> [(Pid, [(ILType, Int)])]
 blockedLocs Config{ cProcs = ps }
   = blockedLocsOfProc <$> ps
 
-procAtRecv :: ConfigInfo Int -> Pid -> [(ILType, Int)] -> HsExp
-procAtRecv _ p tis
-  = ors [ pcEq p (toInteger i) | (_, i) <- tis ]
+procAtRecv :: ILModel e => ConfigInfo Int -> Pid -> [(ILType, Int)] -> e
+procAtRecv ci p tis
+  = ors [ readPC ci p `eq` int i | (_, i) <- tis ]
 
-procDone :: Pid -> HsExp
-procDone p
-  = pcEq p (-1)
+procDone :: ILModel e => ConfigInfo Int -> Pid -> e
+procDone ci p
+  = readPC ci p `eq` int (-1)
 
-procBlocked :: ConfigInfo Int -> Pid -> [(ILType, Int)] -> HsExp    
+procBlocked :: ILModel e => ConfigInfo Int -> Pid -> [(ILType, Int)] -> e
 procBlocked ci p@(PAbs _ _) tis
-  = ors [ ands [ pcEq p (toInteger i), blocked t ] | (t, i) <- tis ]
+  = ors [ ands [ readPC ci p `eq` int i, blocked t ] | (t, i) <- tis ]
   where
-    blocked t = let tid = lookupTy ci t in
-                lte (readMyPtrw p tid) (readMyPtrr p tid)
+    blocked t = lte (readPtrW ci p p t) (readPtrR ci p t)
 
 procBlocked ci p tis
-  = ors [ ands [pcEq p (toInteger i),  blocked t] | (t, i) <- tis ]
+  = ors [ ands [readPC ci p `eq` (int i),  blocked t] | (t, i) <- tis ]
   where
-    blocked t = let tid = lookupTy ci t in
-                lte (readMyPtrw p tid) (readMyPtrr p tid)
+    blocked t = lte (readPtrW ci p p t) (readPtrR ci p t)
 
-deadlockFree :: ConfigInfo Int -> HsExp
+deadlockFree :: ILModel e => ConfigInfo Int -> e
 deadlockFree ci@CInfo { config = Config { cProcs = ps } }
   = lneg $ ands [ assumption
                 , ors (badConfig <$> locs)
@@ -62,10 +59,10 @@ deadlockFree ci@CInfo { config = Config { cProcs = ps } }
     assumption      = ands [ blockedOrDone q | q <- fst <$> ps ]
     locs            = blockedLocs (config ci)
     lkup p          = fromJust $ lookup p locs
-    blockedOrDone p@(PConc _)  = ors [ procDone p, procBlocked ci p (lkup p) ]
-    blockedOrDone p@(PAbs _ _) = ands [ ors [ procDone p, procBlocked ci p (lkup p) ]
+    blockedOrDone p@(PConc _)  = ors [ procDone ci p, procBlocked ci p (lkup p) ]
+    blockedOrDone p@(PAbs _ _) = ands [ ors [ procDone ci p, procBlocked ci p (lkup p) ]
                                       , eq (counters p (lkup p))
-                                           (dec (varn $ roleSizeName p))
+                                           (decr (readRoleBound ci p))
                                       ]
     counters p  = (foldl' add (readPCK p (-1)) . (readPCK p . snd <$>))
-    readPCK p i = readMap (pidPCCounterState p) (int i)
+    readPCK p i = readPCCounter ci p (int i)

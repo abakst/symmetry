@@ -2,7 +2,7 @@
 {-# Language FunctionalDependencies #-}
 module Symmetry.IL.Model where
 
-import Prelude hiding (and)
+import Prelude hiding (and, or)
 import Data.Generics
 import Data.Char
 import Symmetry.IL.AST
@@ -87,21 +87,24 @@ ptrW ci p t = pidTyName ci p t "ptrW"
 data Rule e = Rule Pid [(String, e)] e e --[(String, e)], [((Pid, ILType), e)])
 
 class ILModel e where
-  -- names
-  -- pc        :: ConfigInfo Int -> Pid -> e
-  -- ptrR      :: ConfigInfo Int -> Pid -> ILType -> e
-  -- ptrW      :: ConfigInfo Int -> Pid -> ILType -> e
-  -- expressions
   expr      :: ILExpr -> e
+  true     :: e
+  false    :: e
+  add       :: e -> e -> e
   incr      :: e -> e
+  decr      :: e -> e
   eq        :: e -> e -> e
   and       :: e -> e -> e
+  or        :: e -> e -> e
+  lneg      :: e -> e
   lt        :: e -> e -> e
   lte       :: e -> e -> e
   int       :: Int -> e
   readPC    :: ConfigInfo Int -> Pid -> e
+  readPCCounter :: ConfigInfo Int -> Pid -> e -> e
   readPtrR  :: ConfigInfo Int -> Pid -> ILType -> e
   readPtrW  :: ConfigInfo Int -> Pid -> Pid -> ILType -> e
+  readRoleBound :: ConfigInfo Int -> Pid -> e
   readState :: ConfigInfo Int -> Pid -> String -> e
 
   -- updates
@@ -118,6 +121,19 @@ class ILModel e where
   rule     :: ConfigInfo Int -> Pid -> e -> e -> Rule e
 
   printModel :: ConfigInfo Int -> [Rule e] -> String
+                
+-------------------------
+-- "Macros"
+-------------------------
+ands :: ILModel e => [e] -> e
+ands []     = true
+ands [x]    = x
+ands (x:xs) = foldr and x xs
+
+ors :: ILModel e => [e] -> e
+ors []     = false
+ors [x]    = x
+ors (x:xs) = foldr or x xs
 
 pcGuard :: ILModel e => ConfigInfo Int -> Pid -> Stmt Int -> e
 pcGuard ci p s = readPC ci p `eq` int (annot s)

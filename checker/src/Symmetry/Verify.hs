@@ -104,8 +104,8 @@ run1Cfg opt outd cfg
          copyIncludes outd
        if (optVerify opt) then do
          let (cinfo, m) = generateModel cfg                   
-         putStrLn (printHaskell cinfo m)
-         -- runChecker cfg (outd </> "SymVerify.hs")
+             f          = printHaskell cinfo m
+         writeFile (outd </> "SymVerify.hs") f
          return True
        else
          return True

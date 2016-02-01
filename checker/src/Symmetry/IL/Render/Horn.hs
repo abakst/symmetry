@@ -205,24 +205,24 @@ runStateOfProc ci stateMatch (p, s)
 
 runStateOfConfig :: ConfigInfo Int -> HsDecl
 runStateOfConfig ci 
-  = HsFunBind (transRel ++ [HsMatch emptyLoc runStateName args callAssert []])
-  where
-    ps       = cProcs (config ci)
-    grds     = [ grd p | (p@(PAbs _ _), _) <- ps ]
-    grd p    = varn (idxNameOfPid p) `eq` (varn (pidUnfoldName p))
-    transRel = runStateOfProc ci statePattern <$> ps
-    args        = [statePattern, pidsPat]
-    callAssert  = HsGuardedRhss [guardedCall grds (assert safetyE)]
-    safetyE  = HsParen (deadlockFree ci)
-    pidsPat :: HsPat
-    pidsPat   = L.foldr go HsPWildCard (pids ci)
-    go p rest = HsPInfixApp (pidPatOfPid p)
-                            (Special HsCons)
-                            rest
-    fields = stateFieldsOfConfig ci
-    statePattern = HsPAsPat stateName $
-                            HsPRec (UnQual stateTyName)
-                                   [HsPFieldPat (UnQual n) (HsPVar n) | ([n], _) <- fields]
+  = undefined -- HsFunBind (transRel ++ [HsMatch emptyLoc runStateName args callAssert []])
+  -- where
+  --   ps       = cProcs (config ci)
+  --   grds     = [ grd p | (p@(PAbs _ _), _) <- ps ]
+  --   grd p    = varn (idxNameOfPid p) `eq` (varn (pidUnfoldName p))
+  --   transRel = runStateOfProc ci statePattern <$> ps
+  --   args        = [statePattern, pidsPat]
+  --   callAssert  = HsGuardedRhss [guardedCall grds (assert safetyE)]
+  --   safetyE  = HsParen (deadlockFree ci)
+  --   pidsPat :: HsPat
+  --   pidsPat   = L.foldr go HsPWildCard (pids ci)
+  --   go p rest = HsPInfixApp (pidPatOfPid p)
+  --                           (Special HsCons)
+  --                           rest
+  --   fields = stateFieldsOfConfig ci
+  --   statePattern = HsPAsPat stateName $
+  --                           HsPRec (UnQual stateTyName)
+  --                                  [HsPFieldPat (UnQual n) (HsPVar n) | ([n], _) <- fields]
 
 checkStateOfConfig :: ConfigInfo Int -> [ HsDecl ]             
 checkStateOfConfig c

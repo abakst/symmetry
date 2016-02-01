@@ -33,7 +33,14 @@ pidInj p = prefix "is" (pid p)
 valInj :: String -> String
 valInj v = prefix "is" v            
 
--- Buffers
+---------------------
+-- Pids
+---------------------
+pcCounter :: Pid -> String
+pcCounter p = prefix (pc p) "k"
+
+pidBound p = prefix (pid p) "n"
+              
 pidConstructor :: Pid -> String
 pidConstructor = (toUpper <$>) . pid
 

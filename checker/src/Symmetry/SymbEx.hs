@@ -766,7 +766,7 @@ roleToSet :: RMulti -> IL.Set
 roleToSet r = IL.S $ roleToString r
 
 roleToString :: RMulti -> String
-roleToString (RM n) = "role_" ++ show n                   
+roleToString (RM n) = "r" ++ show n                   
 -------------------------------------------------
 symExec :: SymbEx (Process SymbEx a)
         -> SymbEx a

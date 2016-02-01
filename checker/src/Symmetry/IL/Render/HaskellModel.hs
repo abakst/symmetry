@@ -15,6 +15,7 @@ import           Symmetry.IL.AST
 import           Symmetry.IL.Model
 import           Symmetry.IL.Render.HaskellDefs
 import           Symmetry.IL.Render.Horn.Config  
+import           Symmetry.IL.Render.Horn.Deadlock
   
 data HaskellModel = ExpM Exp
                   | PatM Pat
@@ -26,11 +27,17 @@ data HaskellModel = ExpM Exp
 vExp :: String -> Exp
 vExp = var . name
 
-opEq, opAnd, opPlus, opLt :: QOp
+opEq, opAnd, opOr, opPlus, opMinus, opLt, opLte :: QOp
 opEq   = op (sym "==")
 opAnd  = op (sym "&&")
+opOr   = op (sym "||")
 opPlus = op (sym "+")
+opMinus= op (sym "-")
 opLt   = op (sym "<")
+opLte  = op (sym "<=")
+
+neg :: Exp
+neg = vExp "not"
 
 ---------------------
 -- Program Expressions
@@ -72,9 +79,25 @@ hLt :: HaskellModel -> HaskellModel -> HaskellModel
 hLt (ExpM e1) (ExpM e2)
   = ExpM $ paren (infixApp e1 opLt e2)
 
+hLte :: HaskellModel -> HaskellModel -> HaskellModel
+hLte (ExpM e1) (ExpM e2)
+  = ExpM $ paren (infixApp e1 opLte e2)
+
 hAnd :: HaskellModel -> HaskellModel -> HaskellModel
 hAnd (ExpM e1) (ExpM e2)
   = ExpM $ paren (infixApp e1 opAnd e2)
+
+hOr :: HaskellModel -> HaskellModel -> HaskellModel
+hOr (ExpM e1) (ExpM e2)
+  = ExpM $ paren (infixApp e1 opOr e2)
+
+hLNeg :: HaskellModel -> HaskellModel
+hLNeg (ExpM b)
+  = ExpM $ paren (app neg b)
+
+hTrue, hFalse :: HaskellModel    
+hTrue  = ExpM (vExp "True")
+hFalse = ExpM (vExp "False")
 
 hInt :: Int -> HaskellModel
 hInt x
@@ -97,9 +120,32 @@ hReadPC :: ConfigInfo Int
 hReadPC ci p
   = hReadState ci p (pc p)
 
+hReadPCCounter :: ConfigInfo Int
+               -> Pid
+               -> HaskellModel
+               -> HaskellModel
+hReadPCCounter ci p (ExpM i)
+  = ExpM $ getMap s i
+  where
+    ExpM s = hReadState ci p (pcCounter p) 
+
+hReadRoleBound :: ConfigInfo Int
+               -> Pid
+               -> HaskellModel
+hReadRoleBound ci p
+ = hReadState ci p (pidBound p)
+
 hIncr :: HaskellModel -> HaskellModel
 hIncr (ExpM e)
-  = ExpM $ (infixApp e opPlus (intE 1))
+  = ExpM $ infixApp e opPlus (intE 1)
+
+hDecr :: HaskellModel -> HaskellModel
+hDecr (ExpM e)
+  = ExpM $ infixApp e opMinus (intE 1)
+
+hAdd :: HaskellModel -> HaskellModel -> HaskellModel
+hAdd (ExpM e1) (ExpM e2)
+  = ExpM $ infixApp e1 opPlus e2
 
 hSetFields :: ConfigInfo Int
            -> Pid
@@ -173,14 +219,23 @@ hJoinUpdates _ _ (StateUpM us bufs) (StateUpM us' bufs')
     
 instance ILModel HaskellModel where 
   int        = hInt
+  add        = hAdd
   incr       = hIncr
+  decr       = hDecr
   lt         = hLt
+  lte        = hLte
   eq         = hEq
   and        = hAnd
+  or         = hOr
+  lneg       = hLNeg
+  true       = hTrue
+  false      = hFalse
   readState  = hReadState
   readPtrR   = hReadPtrR
   readPtrW   = hReadPtrW
   readPC     = hReadPC
+  readPCCounter = hReadPCCounter
+  readRoleBound = hReadRoleBound
 
   joinUpdate = hJoinUpdates
   setPC      = hSetPC
@@ -193,6 +248,7 @@ instance ILModel HaskellModel where
   rule       = hRule
   matchVal   = hMatchVal
   printModel = printHaskell
+
 printRules ci rs = prettyPrint $ FunBind matches
   where
     matches = mkMatch <$> perPid
@@ -268,10 +324,14 @@ printHaskell ci rs = unlines [ header
                      , "import SymBoilerPlate"
                      , "import Language.Haskell.Liquid.Prelude"
                      ]
+
+    ExpM dl   = deadlockFree ci
     body = unlines [ unlines (prettyPrint <$> initialState ci)
                    , unlines (prettyPrint <$> initialSched ci)
                    , prettyPrint (initialCall ci)
                    , printRules ci rs
+                   , ""
+                   , prettyPrint dl
                    , ""
                    , initSpecOfConfig ci
                    ]
