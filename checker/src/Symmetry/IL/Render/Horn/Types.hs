@@ -1,5 +1,6 @@
 module Symmetry.IL.Render.Horn.Types where
 
+import           Data.Char
 import           Data.Map
 import           Data.Maybe
 import           Data.List as List
@@ -8,11 +9,6 @@ import           Control.Monad.Reader
 import           Language.Haskell.Syntax
 import           Language.Haskell.Pretty
 import           Symmetry.IL.AST         as AST
-
-type TyMap = [(ILType, Integer)]                 
-
-lookupTy :: ILType -> TyMap -> Integer
-lookupTy t = fromJust . List.lookup t
 
 safeFromList :: (Ord k)
             => [(k,v)]
@@ -109,7 +105,7 @@ unName (HsIdent n) = n
 eqClass = UnQual (name "Eq")
 
 pidString :: Pid -> String
-pidString (PConc i)      = prefix "vP" $ show i
+pidString (PConc i)      = prefix "vP" . prefix "role" $ show i
 pidString (PAbs _ (S s)) = prefix "vP" s
 
 pidWrPtrString :: Integer -> Pid -> String                               
@@ -129,8 +125,8 @@ pidMsgBufName t p = name $ pidMsgBufString t p
 pidPtrString :: String -> Integer -> Pid -> String
 pidPtrString s t p
   = prefix stateString .
-    prefix s .
-    prefix (pidString p) $ show t
+    prefix (pidString p) .
+    prefix s $ show t
 
 pidLocCounterString :: Pid -> String
 pidLocCounterString p
@@ -164,7 +160,8 @@ pidWrPtrName t p = name $ pidWrPtrString t p
 
 locName p i = name ("L_" ++ pidString p ++ "_" ++ show i)
 
-prefix x y = x ++ "_" ++ y              
+-- prefix x y = x ++ "_" ++ y              
+prefix x (y:ys) = x ++ (toUpper y : ys)
 
 stateString   = "state"             
 stateTyString = "State"

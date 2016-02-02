@@ -6,6 +6,7 @@ import           Data.Generics
 import           Language.Haskell.Syntax
 
 import           Symmetry.IL.AST as AST
+import           Symmetry.IL.Render.Horn.Config
 import           Symmetry.IL.Render.Horn.Types
 
 {- 
@@ -30,7 +31,7 @@ blockedLocs :: Config Int -> [(Pid, [(ILType, Int)])]
 blockedLocs Config{ cProcs = ps }
   = blockedLocsOfProc <$> ps
 
-procAtRecv :: TyMap -> Pid -> [(ILType, Int)] -> HsExp
+procAtRecv :: ConfigInfo Int -> Pid -> [(ILType, Int)] -> HsExp
 procAtRecv _ p tis
   = ors [ pcEq p (toInteger i) | (_, i) <- tis ]
 
@@ -38,31 +39,31 @@ procDone :: Pid -> HsExp
 procDone p
   = pcEq p (-1)
 
-procBlocked :: TyMap -> Pid -> [(ILType, Int)] -> HsExp    
-procBlocked m p@(PAbs _ _) tis
+procBlocked :: ConfigInfo Int -> Pid -> [(ILType, Int)] -> HsExp    
+procBlocked ci p@(PAbs _ _) tis
   = ors [ ands [ pcEq p (toInteger i), blocked t ] | (t, i) <- tis ]
   where
-    blocked t = let tid = lookupTy t m in
+    blocked t = let tid = lookupTy ci t in
                 lte (readMyPtrw p tid) (readMyPtrr p tid)
 
-procBlocked m p tis
+procBlocked ci p tis
   = ors [ ands [pcEq p (toInteger i),  blocked t] | (t, i) <- tis ]
   where
-    blocked t = let tid = lookupTy t m in
+    blocked t = let tid = lookupTy ci t in
                 lte (readMyPtrw p tid) (readMyPtrr p tid)
 
-deadlockFree :: Config Int -> TyMap -> HsExp
-deadlockFree c@Config { cProcs = ps } m
+deadlockFree :: ConfigInfo Int -> HsExp
+deadlockFree ci@CInfo { config = Config { cProcs = ps } }
   = lneg $ ands [ assumption
                 , ors (badConfig <$> locs)
                 ]
   where
-    badConfig (p, tis) = procBlocked m p tis
+    badConfig (p, tis) = procBlocked ci p tis
     assumption      = ands [ blockedOrDone q | q <- fst <$> ps ]
-    locs            = blockedLocs c
+    locs            = blockedLocs (config ci)
     lkup p          = fromJust $ lookup p locs
-    blockedOrDone p@(PConc _)  = ors [ procDone p, procBlocked m p (lkup p) ]
-    blockedOrDone p@(PAbs _ _) = ands [ ors [ procDone p, procBlocked m p (lkup p) ]
+    blockedOrDone p@(PConc _)  = ors [ procDone p, procBlocked ci p (lkup p) ]
+    blockedOrDone p@(PAbs _ _) = ands [ ors [ procDone p, procBlocked ci p (lkup p) ]
                                       , eq (counters p (lkup p))
                                            (dec (varn $ roleSizeName p))
                                       ]

@@ -317,30 +317,52 @@ lastStmts (SLoop _ s _)     = lastStmts s
 lastStmts (SCase _ _ _ sl sr _) = lastStmts sl ++ lastStmts sr
 lastStmts s@(SDie a)        = [s]
 
-nextStmts :: Stmt Int -> I.IntMap [Int]
-nextStmts (SNonDet ss i)
-  = foldl' (\m -> joinMaps m . nextStmts)
-           (I.fromList [(i, map annot ss)])
-           ss
-nextStmts (SBlock ss i)
-  = I.unionsWith (++) (seqstmts : ssnext)
-    where
-      ssnext   = map nextStmts ss
-      seqstmts = I.fromList . fst $ foldl' go ([], [i]) ss
-      go (m, is) s = ([(a, [annot s]) | a <- is] ++ m, map annot (lastStmts s))
+buildCfg :: Stmt Int -> I.IntMap [Int]                              
+buildCfg s = I.map (fmap annot) $ buildStmtCfg s
+           
+buildStmtCfg :: Stmt Int -> I.IntMap [Stmt Int]                              
+buildStmtCfg = nextStmts 0
 
-nextStmts (SIter _ _ s i)
-  = I.fromList ((i, [annot s]):[(annot j, [i]) | j <- lastStmts s])  `joinMaps` nextStmts s
-nextStmts (SLoop v s i)
-  = I.fromList ((i, [annot s]):[(j, [i]) | j <- js ]) `joinMaps` nextStmts s
+singleton :: Int -> Stmt Int -> I.IntMap [Stmt Int]
+singleton i j
+  | i == annot j = I.empty
+  | otherwise    = I.fromList [(i, [j])]
+
+nextStmts :: Int -> Stmt Int -> I.IntMap [Stmt Int]
+nextStmts toMe s@(SNonDet ss i)
+  = foldl' (\m -> joinMaps m . nextStmts i)
+           (I.fromList [(toMe, [s])])
+           ss
+
+-- Blocks shouldn't be nested
+nextStmts toMe s@SBlock { blkBody = ss }
+  = singleton toMe s `joinMaps` snd nexts
+  where
+    nexts = foldl' go ([annot s], I.empty) ss
+    -- go (ins, m) s = (annots s, foldl' go m `joinMaps` nextStmts ins s)
+    go (ins, m) s = (annots s, foldl' joinMaps m (doMaps s <$> ins))
+    doMaps s i    = nextStmts i s
+    annots (SNonDet ts _) = annot <$> ts
+    annots s              = [annot s]
+                      
+nextStmts toMe s@(SIter _ _ t i)
+  = singleton toMe s `joinMaps`
+    I.fromList [(annot j, [s]) | j <- lastStmts t]  `joinMaps`
+    nextStmts i t
+
+nextStmts toMe me@(SLoop v s i)
+  = singleton toMe me `joinMaps`
+    I.fromList [(j, [me]) | j <- js ] `joinMaps`
+    nextStmts i s
   where
     js = [ j | SVar v' j <- listify (const True) s, v' == v]
-nextStmts (SChoose _ _ s i)
-  = addNext i [annot s] $ nextStmts s
-nextStmts (SCase _ _ _ sl sr i)
-  = I.fromList [(i, [annot sl, annot sr])] `joinMaps` nextStmts sl `joinMaps` nextStmts sr
-nextStmts _
-  = I.empty
+
+nextStmts toMe me@(SChoose _ _ s i)
+  = addNext toMe [me] $ nextStmts i s
+nextStmts toMe me@(SCase _ _ _ sl sr i)
+  = singleton toMe me `joinMaps` nextStmts i sl `joinMaps` nextStmts i sr
+nextStmts toMe s
+  = singleton toMe s
 
 -- | Operations
 freshId :: Stmt a -> State Int (Stmt Int)
@@ -429,7 +451,7 @@ instance Pretty (Stmt a) where
     = text "recv" <+> parens (pretty x <+> text "::" <+> pretty t)
 
   pretty (SIter x xs s _)
-    = text "for" <+> parens (pretty x <+> colon <+> pretty xs) <+> lbrace $$
+    = text "for" <+> parens (int 0 <+> text "≤" <+> pretty x <+> langle <+> pretty xs) <+> lbrace $$
       (indent 2 $ pretty s) $$
       rbrace
 
