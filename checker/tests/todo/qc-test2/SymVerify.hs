@@ -26,6 +26,8 @@ runState
               state_vP_0_PC = state_vP_0_PC,
               state_vP_role_1_PC = state_vP_role_1_PC}
   ((:) (PID_vP_0) sched)
+  -- state_x_5 is used to iterate over [0..state_role_1] and send
+  -- the message to each recipent
   | ((&&) (((<) state_x_5 state_role_1)) ((==) state_vP_0_PC (0))) =
     runState state{state_vP_0_PC = 1} sched
   | ((&&) (((<=) state_role_1 state_x_5)) ((==) state_vP_0_PC (0))) =

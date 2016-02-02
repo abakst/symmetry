@@ -24,7 +24,8 @@ runState
   ((:) (PID_vP_0) sched)
   | ((==) state_vP_0_PC (0)) =
       runState state{
-      --state_PtrW_vP_1_0 = ((+) state_PtrW_vP_1_0 1),
+      --uncomment the next line for error
+            state_PtrW_vP_1_0 = ((+) state_PtrW_vP_1_0 1),
             state_vP_1_Buf_0 =
               (setVec state_PtrW_vP_1_0 (VUnit) state_vP_1_Buf_0),
             state_vP_0_PC = (-1)}
