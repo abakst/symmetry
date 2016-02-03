@@ -7,17 +7,11 @@ import Data.IntMap.Strict as M
 import Data.Generics
 
 import Symmetry.IL.AST  
-import Symmetry.IL.Render.Horn.Types
 
 type TyMap = [(ILType, Integer)]                 
 
 data ConfigState = CState { intVars     :: [(Pid, String)]
                           , valVars     :: [(Pid, String)]
-                          -- , rdCounters  :: [(Pid, String)]
-                          -- , wrCounters  :: [(Pid, String)]
-                          -- , pcCounters  :: [(Pid, String)]
-                          , pidBounds   :: [(Pid, Maybe Int)]
-                          -- , msgBufs     :: [(Pid, String)]
                           } 
 
 data ConfigInfo a = CInfo { config     :: Config a
@@ -30,16 +24,11 @@ data ConfigInfo a = CInfo { config     :: Config a
 mkCState :: Config Int -> ConfigState 
 mkCState c = CState { valVars    = vs
                     , intVars    = is
-                    , pidBounds  = []
                     }
   where
     vs   = [ (p, v) | (p,s)  <- cProcs c, V v <- recvVars s ++ patVars s ]
     is   = [ (p, i) | (p, s) <- cProcs c, V i <- everything (++) (mkQ [] intVar) s ]
-    pcKs = [ (p, pidLocCounterString p) | p <- absPids ] 
 
-         
-    absPids = List.filter isAbs pids
-    pids    = fst <$> cProcs c
     intVar :: Stmt Int -> [Var]
     intVar (SIter { iterVar = i }) = [i]
     intVar (SLoop { loopVar = (LV i) }) = [V i]

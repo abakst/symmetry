@@ -12,13 +12,15 @@ import Symmetry.Language
 import Symmetry.Verify
 
 pingServer :: (DSL repr) => repr (Process repr ())
-pingServer = do (_ :: repr ()) <- recv
+pingServer = do (_ :: repr ()) <- recv -- 'recv a tt'
                 return tt
 
 master :: (DSL repr) => repr (RMulti -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do ps <- spawnMany r n pingServer
-      doMany ps (lam $ \p -> send p tt)
+      -- send 'tt' to each 'p' in 'ps'
+      doMany ps (lam $ \{- i -}p -> {- invariant: 0 < i <= n -} send p {- p = ps[i] -} tt {- -} ) -- implicit iteration variable
+--    assert ("i" == n)
       return tt
 
 mainProc :: (DSL repr) => repr (Int -> ())

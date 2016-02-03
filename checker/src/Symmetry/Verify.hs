@@ -3,11 +3,10 @@
 module Symmetry.Verify where
 
 import Symmetry.SymbEx
-import Symmetry.IL.Render.Horn
-import Symmetry.IL.Render.Horn.Config
 import Symmetry.IL.AST
 import Symmetry.IL.Model (generateModel)
-import Symmetry.IL.Render.HaskellModel (printHaskell)
+--import Symmetry.IL.Model.ConfigInfo
+import Symmetry.IL.Model.HaskellModel (printHaskell)
 -- import Symmetry.IL.Unfold
 -- import Symmetry.IL.Inst
 -- import Symmetry.IL.TrailParser
@@ -41,12 +40,6 @@ instance Options MainOptions where
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
                   <*> simpleOption "dump-model" False "Dump Spin model"
                   <*> simpleOption "outdir" ".symcheck" "Directory to store intermediate results"
-
-runChecker :: Config a
-           -> FilePath
-           -> IO ()
-runChecker c fn
-  = writeFile fn (renderSimulator c)
 
 runCmd               :: Bool -> String -> FilePath -> CreateProcess -> IO ()
 runCmd verb pre wd c
