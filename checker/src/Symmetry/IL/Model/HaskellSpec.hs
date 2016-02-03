@@ -1,13 +1,9 @@
 {-# Language ParallelListComp #-}
 {-# LANGUAGE ViewPatterns #-}
-module Symmetry.IL.Render.Horn.Spec where
+module Symmetry.IL.Model.HaskellSpec where
 
 import           Data.Char
 import           Data.Generics
--- import           Data.Graph.Inductive.Graph hiding (prettyPrint)
--- import           Data.Graph.Inductive.Query.Dominators
--- import           Data.Graph.Inductive.PatriciaTree
--- import           Data.Graph.Inductive.NodeMap
 import qualified Data.IntMap.Strict as M
 import qualified Data.IntSet as S
 import qualified Data.Map.Strict as Map
@@ -21,10 +17,9 @@ import           Language.Fixpoint.Types as F
 import           Text.Printf
 
 import Symmetry.IL.AST as AST
-import Symmetry.IL.Render.Horn.Config
--- import Symmetry.IL.Render.Horn.Decls
+import Symmetry.IL.ConfigInfo
 import Symmetry.IL.Model
-import Symmetry.IL.Render.HaskellDefs
+import Symmetry.IL.Model.HaskellDefs
 
 instance Symbolic Name where
   symbol (Ident x) = symbol x
@@ -89,14 +84,14 @@ initOfPid ci (p@(PAbs _ (S s)), stmt)
     preds    = [ counterInit
                , unfoldInit
                , eRange (eReadState st eK)
-                 eZero (eReadState st (prefix state s))
+                 eZero (eReadState st (pidBound p))
                , eEq counterSum setSize
                ] ++ counterInits
     st       = "v"
     eK       = pidUnfold p
     counterInit  = eEq setSize (readCtr 0)
     unfoldInit   = eEq eZero (eReadMap (eReadState st (pc p)) (eReadState st eK))
-    setSize      = eDec (eReadState st (prefix state s))
+    setSize      = eDec (eReadState st (pidBound p))
     counterSum   = foldl' (\e i -> ePlus e (readCtr i)) (readCtr (-1)) stmts
     counterInits = (\i -> eEq eZero (readCtr i)) <$> filter (/= 0) ((-1) : stmts)
     counterBounds= (\i -> eLe eZero (readCtr i)) <$> filter (/= 0) stmts
@@ -245,23 +240,27 @@ stateRecord fs
 stateDecl :: ConfigInfo Int
           -> ([Decl], String)
 stateDecl ci
-  = ([stateDecl], specStrings)
+  = ([dataDecl], specStrings)
   where
-    stateDecl    = DataDecl noLoc DataType [] (name stateRecordCons) [] [stateRecord fs] []
+    dataDecl     = DataDecl noLoc DataType [] (name stateRecordCons) [] [stateRecord fs] []
     specStrings  = unlines [ dataReft
                            , ""
                            , recQuals
                            , ""
                            ]
 
-    dataReft     = printf "{-@ %s @-}" (pp stateDecl)
-    fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs
+    dataReft     = printf "{-@ %s @-}" (pp dataDecl)
+    fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs
+    absFs    = concat [ [mkBound p, mkCounter p, mkUnfold p] | p <- pids ci, isAbs p ]
     pcFs     = [ mkPC p (pc p) | p <- pids ci ]
     ptrFs    = [ mkInt p (ptrR ci p t) | p <- pids ci, t <- fst <$> tyMap ci] ++
                [ mkInt p (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci]
     valVarFs = [ mkVal p v | (p, v) <- valVars (stateVars ci) ]
     intVarFs = [ mkInt p v | (p, v) <- intVars (stateVars ci) ]
 
+    mkUnfold p  = ([name $ pidUnfold p], intType)
+    mkBound p   = ([name $ pidBound p], intType)
+    mkCounter p = ([name $ pcCounter p], mapType intType intType)
     recQuals = unlines [ mkDeref f t ++ "\n" ++ mkEq f | ([f], t) <- fs ]
 
     mkDeref f t = printf "{-@ qualif Deref_%s(v:%s, w:%s): v = %s w @-}"
@@ -342,9 +341,8 @@ initSpecOfConfig ci
     
     where
       concExpr   = pAnd  ((initOfPid ci <$> cProcs (config ci)) ++
-                          [ eEqZero (eReadState (symbol "v") (vSym v))
+                          [ eEqZero (eReadState (symbol "v") (symbol v))
                           | V v <- iters ])
-      vSym       = symbol . prefix state
       iters      = everything (++) (mkQ [] goVars) (cProcs (config ci))
       goVars :: Stmt Int -> [Var]
       goVars SIter {iterVar = v} = [v]

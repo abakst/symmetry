@@ -1,5 +1,5 @@
 {-# Language ParallelListComp #-}
-module Symmetry.IL.Render.HaskellModel where
+module Symmetry.IL.Model.HaskellModel where
 
 import           Data.Char
 import           Data.List
@@ -9,13 +9,13 @@ import           Language.Haskell.Exts.SrcLoc
 import           Language.Haskell.Exts.Syntax hiding (Rule)
 import           Language.Haskell.Exts.Build
 import           Language.Haskell.Exts.Pretty
-import           Symmetry.IL.Render.Horn.Spec (initSpecOfConfig)
+import           Symmetry.IL.Model.HaskellSpec (initSpecOfConfig)
 
 import           Symmetry.IL.AST
 import           Symmetry.IL.Model
-import           Symmetry.IL.Render.HaskellDefs
-import           Symmetry.IL.Render.Horn.Config  
-import           Symmetry.IL.Render.Horn.Deadlock
+import           Symmetry.IL.ConfigInfo
+import           Symmetry.IL.Model.HaskellDefs
+import           Symmetry.IL.Model.HaskellDeadlock
   
 data HaskellModel = ExpM Exp
                   | PatM Pat
@@ -127,13 +127,13 @@ hReadPCCounter :: ConfigInfo Int
 hReadPCCounter ci p (ExpM i)
   = ExpM $ getMap s i
   where
-    ExpM s = hReadState ci p (pcCounter p) 
+    s = vExp $ pcCounter p
 
 hReadRoleBound :: ConfigInfo Int
                -> Pid
                -> HaskellModel
 hReadRoleBound ci p
- = hReadState ci p (pidBound p)
+ = ExpM . vExp $ pidBound p
 
 hIncr :: HaskellModel -> HaskellModel
 hIncr (ExpM e)
@@ -156,8 +156,8 @@ hSetFields ci (PConc _) ups
 hSetFields ci p ups
   = StateUpM [ (f, putMap (vExp f) (vExp $ pidIdx p) e) | (f, ExpM e) <- ups ] []
 
-hSetPC ci p (ExpM e)
-  = StateUpM [ (pc p, e) ] []
+hSetPC ci p e
+  = hSetFields ci p [(pc p, e)]
 
 con :: String -> Exp             
 con = Con . UnQual . name
@@ -175,12 +175,12 @@ hIncrPtrR ci p t
     ptrRExp = hReadPtrR ci p t
 
 hIncrPtrW ci p q t
-  = hSetFields ci p [(ptrW ci q t, hIncr ptrWExp)]
+  = hSetFields ci q [(ptrW ci q t, hIncr ptrWExp)]
   where
     ptrWExp = hReadPtrW ci p q t
 
 hReadPtrW ci p q t
-  = hReadState ci p (ptrW ci q t)
+  = hReadState ci q (ptrW ci q t)
 
 hPutMessage ci p q (e,t)
   = StateUpM [] [((q, t), e')]
@@ -249,11 +249,11 @@ instance ILModel HaskellModel where
   matchVal   = hMatchVal
   printModel = printHaskell
 
-printRules ci rs = prettyPrint $ FunBind matches
+printRules ci rs dl = prettyPrint $ FunBind matches
   where
-    matches = mkMatch <$> perPid
+    matches = (mkMatch <$> perPid) ++ [ mkDlMatch ]
     mkMatch rules
-      = Match noLoc (name runState) (pat (rulesPid rules)) Nothing (mkGuardedRhss rules) Nothing 
+      = Match noLoc (name runState) (pat [rulesPid rules]) Nothing (mkGuardedRhss rules) Nothing 
     mkGuardedRhss rules
       = GuardedRhss [ mkRhs p ms grd fups bufups | Rule p ms (ExpM grd) (StateUpM fups bufups) <- rules ]
     mkRhs p [] grd fups bufups
@@ -277,9 +277,16 @@ printRules ci rs = prettyPrint $ FunBind matches
     eqPid  = (==) `on` pidRule
     perPid = groupBy eqPid $ sortBy (compare `on` pidRule) rs
 
-    pat p = [ PAsPat (name state) (PRec (UnQual (name stateRecordCons)) [PFieldWildcard]) ] ++
-            [ pvar (name (buf ci p t)) | p <- pids ci, t <- fst <$> tyMap ci ] ++
-            [ PInfixApp (pidPattern p) list_cons_name (pvar (name "sched")) ]
+    pat ps = [ PAsPat (name state) (PRec (UnQual (name stateRecordCons)) [PFieldWildcard]) ] ++
+             [ pvar (name (buf ci q t)) | q <- pids ci, t <- fst <$> tyMap ci ] ++
+             [ mkSchedPat ps ]
+
+    mkSchedPat ps = foldr (\q rest -> PInfixApp (pidPattern q) list_cons_name rest) schedPVar ps
+    schedPVar  = pvar (name "sched")
+
+    mkDlMatch  = Match noLoc (name runState) dlpat Nothing dlRhs Nothing
+    dlRhs      = UnGuardedRhs (metaFunction "liquidAssert" [dl, unit_con])
+    dlpat      = pat (pids ci)
 
     findUp p t bufups = maybe (vExp $ buf ci p t) (putVec (vExp $ buf ci p t) (vExp $ ptrW ci p t)) $
                         lookup (p, t) bufups
@@ -329,9 +336,7 @@ printHaskell ci rs = unlines [ header
     body = unlines [ unlines (prettyPrint <$> initialState ci)
                    , unlines (prettyPrint <$> initialSched ci)
                    , prettyPrint (initialCall ci)
-                   , printRules ci rs
-                   , ""
-                   , prettyPrint dl
+                   , printRules ci rs dl
                    , ""
                    , initSpecOfConfig ci
                    ]

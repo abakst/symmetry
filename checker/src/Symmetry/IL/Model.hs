@@ -6,7 +6,7 @@ import Prelude hiding (and, or)
 import Data.Generics
 import Data.Char
 import Symmetry.IL.AST
-import Symmetry.IL.Render.Horn.Config
+import Symmetry.IL.ConfigInfo
 
 -- Values    
 unitCons, nullCons, intCons, stringCons, pidCons, leftCons, rightCons, pairCons :: String
@@ -87,7 +87,6 @@ ptrW ci p t = pidTyName ci p t "ptrW"
 data Rule e = Rule Pid [(String, e)] e e --[(String, e)], [((Pid, ILType), e)])
 
 class ILModel e where
-  expr      :: ILExpr -> e
   true     :: e
   false    :: e
   add       :: e -> e -> e
@@ -152,6 +151,10 @@ nextPC ci p s = nextPC' ci p $ cfgNext ci p (annot s)
 seqUpdates ci p = foldl1 (joinUpdate ci p)
 
 ruleOfStmt :: ILModel e => ConfigInfo Int -> Pid -> Stmt Int -> [Rule e]
+
+-------------------------
+-- p!e::t
+-------------------------
 ruleOfStmt ci p s@SSend { sndPid = EPid q, sndMsg = (t, e) }
   = [rule ci p grd (seqUpdates ci p upds)]
   where
@@ -167,6 +170,9 @@ ruleOfStmt ci p s@SSend { sndPid = EVar (V x) }
       sub q = s { sndPid = EPid q }
     
               
+-------------------------
+-- ?(v :: t)
+-------------------------
 ruleOfStmt ci p s@SRecv{ rcvMsg = (t, v) }
   = [ rule ci p grd (seqUpdates ci p upds) ]
   where
@@ -176,7 +182,37 @@ ruleOfStmt ci p s@SRecv{ rcvMsg = (t, v) }
            , getMessage ci p (v,t)
            , nextPC ci p s
            ]
-
+-------------------------
+-- for (i < n) ...
+-------------------------
+ruleOfStmt ci p s@SIncr { incrVar = (V v), annot = a }
+  = [ rule ci p b (seqUpdates ci p upds) ]
+  where
+    b    = pcGuard ci p s
+    upds = [ setState ci p [(v, incr (readState ci p v))]
+           , nextPC ci p s
+           ]
+    
+ruleOfStmt ci p s@SIter { iterVar = (V v), iterSet = set, annot = a }
+  = [ rule ci p b    (seqUpdates ci p loopUpds)
+    , rule ci p notb (seqUpdates ci p exitUpds)
+    ]
+  where
+    b        = pcGuard ci p s `and` lt ve se
+    notb     = pcGuard ci p s `and` lte se ve
+    loopUpds = [ setPC ci p (int i) ]
+    exitUpds = [ setPC ci p (int j) ]
+    ve       = readState ci p v
+    se       = case set of
+                 S s'    -> readState ci p s'
+                 SInts n -> int n
+    (i, j)   = case (annot <$>) <$> cfgNext ci p a of
+                 Just [i, j] -> (j, i)
+                 Just [i]    -> (i, -1)
+    
+-------------------------
+-- catch all
+-------------------------
 ruleOfStmt ci p s
   = [ rule ci p (pcGuard ci p s) (nextPC ci p s) ]
 

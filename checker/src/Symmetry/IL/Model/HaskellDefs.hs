@@ -1,5 +1,5 @@
 {-# Language ParallelListComp #-}
-module Symmetry.IL.Render.HaskellDefs where
+module Symmetry.IL.Model.HaskellDefs where
 
 import           Data.Char
 import           Symmetry.IL.AST
@@ -39,7 +39,7 @@ valInj v = prefix "is" v
 pcCounter :: Pid -> String
 pcCounter p = prefix (pc p) "k"
 
-pidBound p = prefix (pid p) "n"
+pidBound (PAbs _ (S s)) = s
               
 pidConstructor :: Pid -> String
 pidConstructor = (toUpper <$>) . pid

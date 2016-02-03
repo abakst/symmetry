@@ -1,5 +1,5 @@
 {-# Language RecordWildCards #-}
-module Symmetry.IL.Render.Horn.Config where
+module Symmetry.IL.ConfigInfo where
 
 import Data.List as List
 import Data.Maybe

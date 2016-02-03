@@ -1,4 +1,4 @@
-module Symmetry.IL.Render.Horn.Deadlock where
+module Symmetry.IL.Model.HaskellDeadlock where
 
 import           Data.List
 import           Data.Maybe
@@ -6,7 +6,7 @@ import           Data.Generics
 
 import           Symmetry.IL.AST as AST
 import           Symmetry.IL.Model
-import           Symmetry.IL.Render.Horn.Config
+import           Symmetry.IL.ConfigInfo
 
 {- 
 A configuration is deadlocked if 

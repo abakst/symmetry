@@ -24,14 +24,12 @@ library
                    Symmetry.Language.Syntax
                    Symmetry.Language
                    Symmetry.IL.AST
+                   Symmetry.IL.ConfigInfo
                    Symmetry.IL.Model
-                   Symmetry.IL.Render.HaskellModel
-                   Symmetry.IL.Render.Horn
-                   Symmetry.IL.Render.Horn.Config
-                   Symmetry.IL.Render.Horn.Spec
-                   Symmetry.IL.Render.Horn.Decls
-                   Symmetry.IL.Render.Horn.Types
-                   Symmetry.IL.Render.Horn.Deadlock
+                   Symmetry.IL.Model.HaskellModel
+                   Symmetry.IL.Model.HaskellDefs
+                   Symmetry.IL.Model.HaskellSpec
+                   Symmetry.IL.Model.HaskellDeadlock
                    Symmetry.SymbEx
                    Symmetry.Verify
                    Paths_checker
