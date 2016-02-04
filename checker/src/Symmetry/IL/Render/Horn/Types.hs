@@ -102,7 +102,8 @@ name = HsIdent
 unName :: HsName -> String
 unName (HsIdent n) = n       
 
-eqClass = UnQual (name "Eq")
+eqClass   = UnQual (name "Eq")
+showClass = UnQual (name "Show")
 
 pidString :: Pid -> String
 pidString (PConc i)      = prefix "vP" . prefix "role" $ show i

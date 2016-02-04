@@ -235,7 +235,11 @@ stateRecordSpec ci
       st = stateTypeOfConfig ci
 
 valTypeSpec :: String
-valTypeSpec = printf "{-@ %s @-}" (prettyPrint valDecl)
+
+removeDerivings (HsDataDecl srcloc ctx name names decls quals)
+  = HsDataDecl srcloc ctx name names decls []
+
+valTypeSpec = printf "{-@ %s @-}" (prettyPrint $ removeDerivings valDecl)
 
 initSpecOfConfig :: ConfigInfo Int -> String               
 initSpecOfConfig ci

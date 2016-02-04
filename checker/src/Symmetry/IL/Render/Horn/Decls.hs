@@ -86,7 +86,7 @@ pidInjectiveFns CInfo { config = Config { cProcs = ps }}
       
 pidTypeOfConfig :: ConfigInfo a -> [HsDecl]
 pidTypeOfConfig c@CInfo{ config = Config { cProcs = ps }}
-  = [ basicDataDecl prePidTyName ts fs [eqClass]
+  = [ basicDataDecl prePidTyName ts fs [eqClass, showClass]
     , HsTypeDecl emptyLoc pidTyName [] pidTyApp] ++
     pidInjectiveFns c
   where
@@ -130,7 +130,7 @@ stateFieldsOfConfig ci
 stateTypeOfConfig :: ConfigInfo Int
                   -> HsDecl
 stateTypeOfConfig ci
-  = recordDataDecl stateTyName stateTyName (stateFieldsOfConfig ci) []
+  = recordDataDecl stateTyName stateTyName (stateFieldsOfConfig ci) [showClass]
 
 pcTypesOfConfig :: Config Int -> [HsDecl]
 pcTypesOfConfig Config { cProcs = ps }
@@ -165,7 +165,7 @@ nonDetDecls = [ nonDetTypeDecl, nonDetDecl ]
 
 valDecl :: HsDecl
 valDecl
-  = HsDataDecl emptyLoc [] valTyName [] (uncurry recCon <$> valConstructors) []
+  = HsDataDecl emptyLoc [] valTyName [] (uncurry recCon <$> valConstructors) [showClass]
   where
     recCon n ts  = HsRecDecl emptyLoc n [ ([accessor n i], t) | (t, i) <- zip ts [0..]]
     accessor n i = name ("v" ++ unName n ++ show i)
@@ -187,3 +187,14 @@ declsOfConfig ci
     valFunctions ++
     pidTypeOfConfig ci ++
     nonDetDecls
+
+-- QuickCheck generator instances
+
+vecQCInst =  HsInstDecl emptyLoc [] showClass typeParam decls
+               where typeParam = [HsTyApp (HsTyVar $ vecTyName) (HsTyVar $ name "a")]
+                     showImp   = HsMatch emptyLoc
+                                         (name "show")
+                                         [HsPWildCard]
+                                         (HsUnGuardedRhs (HsLit $ HsString "some vector"))
+                                         []
+                     decls     = [HsFunBind [showImp]]

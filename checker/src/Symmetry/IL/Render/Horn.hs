@@ -205,7 +205,8 @@ runStateOfProc ci stateMatch (p, s)
 
 runStateOfConfig :: ConfigInfo Int -> HsDecl
 runStateOfConfig ci 
-  = HsFunBind (transRel ++ [HsMatch emptyLoc runStateName args callAssert []])
+  = HsFunBind (transRel ++ [HsMatch emptyLoc runStateName args callAssert []]
+                        ++ [makeItTotal])
   where
     ps       = cProcs (config ci)
     grds     = [ grd p | (p@(PAbs _ _), _) <- ps ]
@@ -223,6 +224,11 @@ runStateOfConfig ci
     statePattern = HsPAsPat stateName $
                             HsPRec (UnQual stateTyName)
                                    [HsPFieldPat (UnQual n) (HsPVar n) | ([n], _) <- fields]
+    makeItTotal = HsMatch emptyLoc
+                          runStateName
+                          [HsPWildCard, HsPWildCard]
+                          (HsUnGuardedRhs (var "undefined"))
+                          []
 
 checkStateOfConfig :: ConfigInfo Int -> [ HsDecl ]             
 checkStateOfConfig c
