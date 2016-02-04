@@ -6,7 +6,7 @@ import           Data.List
 import           Data.Maybe
 import           Data.Function
 import           Language.Haskell.Exts.SrcLoc
-import           Language.Haskell.Exts.Syntax hiding (Rule)
+import           Language.Haskell.Exts.Syntax hiding (Rule, EVar)
 import           Language.Haskell.Exts.Build
 import           Language.Haskell.Exts.Pretty
 import           Symmetry.IL.Model.HaskellSpec (initSpecOfConfig)
@@ -17,9 +17,14 @@ import           Symmetry.IL.ConfigInfo
 import           Symmetry.IL.Model.HaskellDefs
 import           Symmetry.IL.Model.HaskellDeadlock
   
-data HaskellModel = ExpM Exp
-                  | PatM Pat
+---------------------------------
+-- Wrapper type for Haskell code
+---------------------------------
+data HaskellModel = ExpM { unExp :: Exp }
+                  | PatM { unPat :: Pat }
                   | StateUpM [(String, Exp)] [((Pid, ILType), Exp)]
+                  | GuardedUpM Exp [(ILExpr, HaskellModel)]
+                    deriving Show
 
 ---------------------
 -- Convenience Functions                    
@@ -165,6 +170,10 @@ con = Con . UnQual . name
 hExpr :: Pid -> ILExpr -> HaskellModel
 hExpr p EUnit    = ExpM $ con unitCons    
 hExpr p (EPid q@(PConc _)) = ExpM $ App (con pidCons) (vExp $ pidConstructor q)
+hExpr _ (EVar (V v))
+  = ExpM $ vExp v
+hExpr p (ELeft e)  = ExpM $ App (con leftCons) (let ExpM e' = hExpr p e in e')
+hExpr p (ERight e) = ExpM $ App (con rightCons) (let ExpM e' = hExpr p e in e')
 
 hReadPtrR ci p t
   = hReadState ci p (ptrR ci p t)
@@ -199,12 +208,26 @@ hGetMessage ci p@(PAbs (GV i) _) (V v, t)
 
 hMatchVal :: ConfigInfo Int
           -> Pid
-          -> String
-          -> ILExpr
-          -> Rule HaskellModel
-          -> Rule HaskellModel
-hMatchVal ci p f (EPid q) (Rule p' ms grd ups)
-  = Rule p' ((f, PatM $ pidPattern q) : ms) grd ups
+          -> HaskellModel
+          -> [(ILExpr, HaskellModel)]
+          -> HaskellModel
+hMatchVal ci p (ExpM f) cases
+  | null cases = error "empty cases!"
+  | otherwise  = GuardedUpM f cases
+-- hMatchVal ci p f (EPid q) (Rule p' ms grd ups)
+--   = Rule p' ((f, PatM $ pidPattern q) : ms) grd ups
+
+-- hMatchVal ci p f (ELeft (EVar (V v))) (Rule p' ms grd ups)
+--   = Rule p' ((f, PatM $ (PApp (UnQual (name leftCons)) [pvar (name v)])) : ms) grd ups
+
+-- hMatchVal ci p f (ERight (EVar (V v))) (Rule p' ms grd ups)
+--   = Rule p' ((f, PatM $ (PApp (UnQual (name rightCons)) [pvar (name v)])) : ms) grd ups
+
+hNonDet :: ConfigInfo Int
+        -> Pid
+        -> HaskellModel
+hNonDet _ _
+  = ExpM $ metaFunction nondet [vExp sched]
 
 hRule :: ConfigInfo Int
       -> Pid
@@ -212,16 +235,17 @@ hRule :: ConfigInfo Int
       -> HaskellModel
       -> Rule HaskellModel
 hRule _ p g us
-  = Rule p [] g us
+  = Rule p g us
 
 hJoinUpdates _ _ (StateUpM us bufs) (StateUpM us' bufs')
   = StateUpM (us ++ us') (bufs ++ bufs')
-    
+
 instance ILModel HaskellModel where 
   int        = hInt
   add        = hAdd
   incr       = hIncr
   decr       = hDecr
+  expr       = hExpr
   lt         = hLt
   lte        = hLte
   eq         = hEq
@@ -236,6 +260,7 @@ instance ILModel HaskellModel where
   readPC     = hReadPC
   readPCCounter = hReadPCCounter
   readRoleBound = hReadRoleBound
+  nonDet = hNonDet
 
   joinUpdate = hJoinUpdates
   setPC      = hSetPC
@@ -249,31 +274,43 @@ instance ILModel HaskellModel where
   matchVal   = hMatchVal
   printModel = printHaskell
 
+
+ilExpPat (EPid q)
+  = PApp (UnQual (name pidCons)) [pidPattern q]
+ilExpPat (ELeft (EVar (V v)))
+  = PApp (UnQual (name leftCons)) [pvar (name v)]
+ilExpPat (ERight (EVar (V v)))
+  = PApp (UnQual (name rightCons)) [pvar (name v)]
+
 printRules ci rs dl = prettyPrint $ FunBind matches
   where
     matches = (mkMatch <$> perPid) ++ [ mkDlMatch ]
     mkMatch rules
       = Match noLoc (name runState) (pat [rulesPid rules]) Nothing (mkGuardedRhss rules) Nothing 
     mkGuardedRhss rules
-      = GuardedRhss [ mkRhs p ms grd fups bufups | Rule p ms (ExpM grd) (StateUpM fups bufups) <- rules ]
-    mkRhs p [] grd fups bufups
+      = GuardedRhss [ mkRhs p grd up | Rule p (ExpM grd) up <- rules ]
+    mkRhs p grd (GuardedUpM f cases)
+      = GuardedRhs noLoc [Qualifier grd] (Case f (mkAlt p <$> cases))
+    mkRhs p grd (StateUpM fups bufups)
       = GuardedRhs noLoc [Qualifier grd] (mkCall p fups bufups)
-    mkRhs p ms grd fups bufups
-      = GuardedRhs noLoc [Qualifier grd] (mkCase ms (mkCall p fups bufups))
-    mkCase [(f, PatM p)] e
-      = Case (vExp f) [Alt noLoc p (UnGuardedRhs e) Nothing]
+    -- mkRhs p ms grd fups bufups
+    --   = GuardedRhs noLoc [Qualifier grd] (mkCall p fups bufups)
+    mkAlt p (ile, StateUpM fups bufups)
+      = Alt noLoc (ilExpPat ile) (UnGuardedRhs (mkCall p fups bufups)) Nothing
+    -- mkCase [(f, PatM p)] e
+    --   = Case (vExp f) [Alt noLoc p (UnGuardedRhs e) Nothing]
     mkRecUp p fups
       = RecUpdate (vExp state) [mkFieldUp p f e | (f,e) <- fups]
     mkFieldUp p f e
       = FieldUpdate (UnQual (name f)) e
     mkCall p fups bufups
       = metaFunction runState
-          (mkRecUp p fups : mkBufUps bufups ++ [vExp "sched"]) 
+          (mkRecUp p fups : mkBufUps bufups ++ [vExp sched]) 
     mkBufUps bufups
       = [ findUp p t bufups | p <- pids ci, t <- fst <$> tyMap ci]
 
-    rulesPid rules = let Rule p _ _ _ = head rules in p
-    pidRule (Rule p _ _ _) = p
+    rulesPid rules = let Rule p _ _ = head rules in p
+    pidRule (Rule p _ _) = p
     eqPid  = (==) `on` pidRule
     perPid = groupBy eqPid $ sortBy (compare `on` pidRule) rs
 
@@ -282,7 +319,7 @@ printRules ci rs dl = prettyPrint $ FunBind matches
              [ mkSchedPat ps ]
 
     mkSchedPat ps = foldr (\q rest -> PInfixApp (pidPattern q) list_cons_name rest) schedPVar ps
-    schedPVar  = pvar (name "sched")
+    schedPVar  = pvar (name sched)
 
     mkDlMatch  = Match noLoc (name runState) dlpat Nothing dlRhs Nothing
     dlRhs      = UnGuardedRhs (metaFunction "liquidAssert" [dl, unit_con])

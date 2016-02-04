@@ -31,11 +31,12 @@ valCons = [ unitCons
           ]
 
 -- Constant Names
-state, initState, initSched, nondet :: String
+sched, state, initState, initSched, nondet :: String
 state = "state"
+sched = "sched"
 initState = "state0"
 initSched = "sched0"
-nondet    = "nondet"
+nondet    = "nonDet"
 
 mapGetFn, mapPutFn, vecGetFn, vecPutFn :: String
 mapGetFn = "get"
@@ -84,11 +85,13 @@ ptrR ci p t = pidTyName ci p t "ptrR"
 ptrW :: ConfigInfo Int -> Pid -> ILType -> String           
 ptrW ci p t = pidTyName ci p t "ptrW"
 
-data Rule e = Rule Pid [(String, e)] e e --[(String, e)], [((Pid, ILType), e)])
+data Rule e = Rule Pid e e --[(String, e)], [((Pid, ILType), e)])
+              deriving Show
 
 class ILModel e where
   true     :: e
   false    :: e
+  expr     :: Pid -> ILExpr -> e
   add       :: e -> e -> e
   incr      :: e -> e
   decr      :: e -> e
@@ -105,6 +108,8 @@ class ILModel e where
   readPtrW  :: ConfigInfo Int -> Pid -> Pid -> ILType -> e
   readRoleBound :: ConfigInfo Int -> Pid -> e
   readState :: ConfigInfo Int -> Pid -> String -> e
+  nonDet    :: ConfigInfo Int -> Pid -> e
+  matchVal  :: ConfigInfo Int -> Pid -> e -> [(ILExpr, e)] -> e
 
   -- updates
   joinUpdate :: ConfigInfo Int -> Pid -> e -> e -> e
@@ -116,7 +121,6 @@ class ILModel e where
   getMessage :: ConfigInfo Int -> Pid -> (Var, ILType) -> e
 
   -- rule
-  matchVal :: ConfigInfo Int -> Pid -> String -> ILExpr -> Rule e -> Rule e
   rule     :: ConfigInfo Int -> Pid -> e -> e -> Rule e
 
   printModel :: ConfigInfo Int -> [Rule e] -> String
@@ -148,10 +152,10 @@ nextPC ci p s = nextPC' ci p $ cfgNext ci p (annot s)
 -------------------------
 -- Statement "semantics"    
 -------------------------
+seqUpdates :: ILModel e => ConfigInfo Int -> Pid -> [e] -> e
 seqUpdates ci p = foldl1 (joinUpdate ci p)
 
 ruleOfStmt :: ILModel e => ConfigInfo Int -> Pid -> Stmt Int -> [Rule e]
-
 -------------------------
 -- p!e::t
 -------------------------
@@ -164,11 +168,16 @@ ruleOfStmt ci p s@SSend { sndPid = EPid q, sndMsg = (t, e) }
            , nextPC ci p s
            ]
     
-ruleOfStmt ci p s@SSend { sndPid = EVar (V x) }
-  = concat [ matchVal ci p x (EPid q) <$> ruleOfStmt ci p (sub q) | q <- pids ci ]
+ruleOfStmt ci p s@SSend { sndPid = x@EVar {} , sndMsg = (t, e) }
+  = [ rule ci p grd (matchVal ci p (expr p x) [(EPid q, ups q) | q <- pids ci]) ]
+  -- = concat [ matchVal ci p x (EPid q) <$> ruleOfStmt ci p (sub q) | q <- pids ci ]
     where
-      sub q = s { sndPid = EPid q }
-    
+      grd = pcGuard ci p s
+      ups q = seqUpdates ci p [ incrPtrW ci p q t
+                              , putMessage ci p q (e, t)
+                              , nextPC ci p s
+                              ]
+      -- sub q = s { sndPid = EPid q }
               
 -------------------------
 -- ?(v :: t)
@@ -182,6 +191,34 @@ ruleOfStmt ci p s@SRecv{ rcvMsg = (t, v) }
            , getMessage ci p (v,t)
            , nextPC ci p s
            ]
+    
+-------------------------
+-- case x of ...    
+-------------------------
+ruleOfStmt ci p s@SCase{caseLPat = V l, caseRPat = V r}
+  = [ rule ci p grd (matchVal ci p (expr p $ EVar (caseVar s)) cases)]
+  where
+    grd = pcGuard ci p s
+    mkLocal v = EVar (V ("local_" ++ v))
+    cases = [ (ELeft (mkLocal l), lUpdates)
+            , (ERight (mkLocal r), rUpdates)
+            ]
+    lUpdates = seqUpdates ci p [ setState ci p [(l, expr p $ mkLocal l)]
+                               , setPC ci p (int $ annot (caseLeft s))
+                               ]
+    rUpdates = seqUpdates ci p [ setState ci p [(r, expr p $ mkLocal r)]
+                               , setPC ci p (int $ annot (caseRight s))
+                               ]
+-------------------------
+-- nondet choice
+-------------------------
+ruleOfStmt ci p s@SNonDet{}
+  = [ rule ci p (grd s') (us s') | s' <- nonDetBody s ]
+  where
+    grd s' = pcGuard ci p s `and`
+            (nonDet ci p `eq` (int (annot s')))
+    us s'  = setPC ci p (int (annot s'))
+
 -------------------------
 -- for (i < n) ...
 -------------------------
@@ -209,7 +246,6 @@ ruleOfStmt ci p s@SIter { iterVar = (V v), iterSet = set, annot = a }
     (i, j)   = case (annot <$>) <$> cfgNext ci p a of
                  Just [i, j] -> (j, i)
                  Just [i]    -> (i, -1)
-    
 -------------------------
 -- catch all
 -------------------------

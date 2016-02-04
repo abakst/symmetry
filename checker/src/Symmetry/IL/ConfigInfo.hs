@@ -12,6 +12,7 @@ type TyMap = [(ILType, Integer)]
 
 data ConfigState = CState { intVars     :: [(Pid, String)]
                           , valVars     :: [(Pid, String)]
+                          , globVals    :: [String]
                           } 
 
 data ConfigInfo a = CInfo { config     :: Config a
@@ -22,16 +23,18 @@ data ConfigInfo a = CInfo { config     :: Config a
                           }
 
 mkCState :: Config Int -> ConfigState 
-mkCState c = CState { valVars    = vs
-                    , intVars    = is
+mkCState c = CState { valVars  = vs
+                    , intVars  = is
+                    , globVals = gs
                     }
   where
     vs   = [ (p, v) | (p,s)  <- cProcs c, V v <- recvVars s ++ patVars s ]
     is   = [ (p, i) | (p, s) <- cProcs c, V i <- everything (++) (mkQ [] intVar) s ]
+    gs   = [ v | (V v, _) <- cGlobals c ]
 
     intVar :: Stmt Int -> [Var]
     intVar (SIter { iterVar = i }) = [i]
-    intVar (SLoop { loopVar = (LV i) }) = [V i]
+    -- intVar (SLoop { loopVar = (LV i) }) = [V i]
     intVar (SChoose { chooseVar = v }) = [v]
     intVar _                       = []
 

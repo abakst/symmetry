@@ -250,13 +250,14 @@ stateDecl ci
                            ]
 
     dataReft     = printf "{-@ %s @-}" (pp dataDecl)
-    fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs
+    fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
     absFs    = concat [ [mkBound p, mkCounter p, mkUnfold p] | p <- pids ci, isAbs p ]
     pcFs     = [ mkPC p (pc p) | p <- pids ci ]
     ptrFs    = [ mkInt p (ptrR ci p t) | p <- pids ci, t <- fst <$> tyMap ci] ++
                [ mkInt p (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci]
     valVarFs = [ mkVal p v | (p, v) <- valVars (stateVars ci) ]
     intVarFs = [ mkInt p v | (p, v) <- intVars (stateVars ci) ]
+    globFs   = [ ([name v], valHType ci) | v <- globVals (stateVars ci) ]
 
     mkUnfold p  = ([name $ pidUnfold p], intType)
     mkBound p   = ([name $ pidBound p], intType)
