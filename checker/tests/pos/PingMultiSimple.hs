@@ -18,10 +18,20 @@ pingServer = do (_ :: repr ()) <- recv -- 'recv a tt'
 master :: (DSL repr) => repr (RMulti -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do ps <- spawnMany r n pingServer
-      -- send 'tt' to each 'p' in 'ps'
-      doMany ps (lam $ \{- i -}p -> {- invariant: 0 < i <= n -} send p {- p = ps[i] -} tt {- -} ) -- implicit iteration variable
---    assert ("i" == n)
+      doMany ps (body n)
+      sent <- msgsSent
+      app assert (sent `eq` n)
       return tt
+  where
+    body n = lam $ \p -> do sent <- msgsSent
+                            app assert (sent `lt` n)
+                            send p tt
+
+msgsSent :: DSL repr => repr (Process repr Int)
+msgsSent = undefined                                 
+
+assert :: DSL repr => repr (Boolean -> Process repr ())            
+assert = undefined
 
 mainProc :: (DSL repr) => repr (Int -> ())
 mainProc = lam $ \n -> exec $ do r <- newRMulti
