@@ -220,16 +220,6 @@ qcMainFuncDecl =  HsFunBind [ HsMatch emptyLoc
                           exp     = HsApp (varn "quickCheck") (HsParen f)
                           rhs     = HsDo [HsQualifier exp]
 
--- instance Arbitrary Val where
---   arbitrary = oneof [ return VUnit
---                     , VInt  <$> arbitrary
---                     , VStr  <$> arbitrary
---                     , VPid  <$> arbitrary
---                     , VInL  <$> arbitrary
---                     , VInR  <$> arbitrary
---                     , VPair <$> arbitrary <*> arbitrary ]
-
--- main =  do quickCheck (\s plist -> runState s (getList plist) == ())
 arbitraryValDecl :: HsDecl
 arbitraryValDecl =  HsInstDecl emptyLoc [] arbitraryClass typeParam decls
                       where typeParam = [HsTyVar $ valTyName]
@@ -254,3 +244,45 @@ arbitraryValDecl =  HsInstDecl emptyLoc [] arbitraryClass typeParam decls
                                                                        (HsList vals)))
                                                 []
                             decls     = [HsFunBind [showImp]]
+
+-- data PidList = PidList {getList :: [PID_pre]}
+--                deriving (Show)
+
+myPidListDecl :: HsDecl
+myPidListDecl =  HsDataDecl emptyLoc [] n [] [con] [showClass]
+                   where n        = name pidListString
+                         get      = name pidListGetString
+                         list_t t = HsTyApp (HsTyCon (Special HsListCon)) (HsTyVar $ name t)
+                         t        = list_t prePidTyString
+                         con      = HsRecDecl emptyLoc n [([get], HsUnBangedTy t)]
+minPidListLen = 2
+
+minPidListDecl :: HsDecl
+minPidListDecl =  HsFunBind [ m ]
+                    where rhs = HsLit $ HsInt $ minPidListLen
+                          m   = HsMatch emptyLoc (name minPidListLenString)
+                                                 [] (HsUnGuardedRhs rhs) []
+
+-- instance Arbitrary PidList where
+--     arbitrary = PidList <$> suchThat arbitrary (\l -> length l > minPidListLen )
+
+arbitraryPidListDecl :: HsDecl
+arbitraryPidListDecl =  HsInstDecl emptyLoc [] arbitraryClass typeParam decls
+                          where typeParam = [HsTyVar $ name pidListString]
+                                varn n    = UnQual $ name n
+                                var n     = HsVar  $ UnQual $ name n
+                                pvar n    = HsPVar $ name n
+                                fmap' f x = HsInfixApp f (HsQVarOp $ UnQual $ HsSymbol "<$>") x
+                                lam       = HsLambda emptyLoc
+                                                     [pvar "s"]
+                                                     (HsInfixApp (HsApp (var "length") (var "l"))
+                                                                 (HsQConOp $ UnQual $ HsSymbol ">")
+                                                                 (var minPidListLenString))
+                                suchExp   = HsApp (HsApp (var "suchThat") (var "arbitrary")) lam
+                                rhs       = fmap' (HsCon $ varn pidListString) suchExp
+                                arb       = HsMatch emptyLoc
+                                                    (name "arbitrary")
+                                                    []
+                                                    (HsUnGuardedRhs rhs)
+                                                    []
+                                decls     = [HsFunBind [arb]]

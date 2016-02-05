@@ -29,6 +29,9 @@ valCon i ts = HsConDecl emptyLoc i ts
 schedString = "sched"              
 schedName   = name schedString
 
+minPidListLenString = "minPidListLen"
+pidListString = "PidList"
+pidListGetString = "getList"
 prePidTyString = "PID_pre"
 pidTyString = "PID"
 intTyString = "Int"
