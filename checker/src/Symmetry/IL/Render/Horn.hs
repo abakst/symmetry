@@ -1,7 +1,7 @@
 {-# Language TemplateHaskell #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language ViewPatterns #-}
-module Symmetry.IL.Render.Horn (renderSimulator) where
+module Symmetry.IL.Render.Horn (renderSimulator, renderQCFile) where
 
 import           Language.Haskell.Syntax
 import           Language.Haskell.Pretty
@@ -265,7 +265,7 @@ renderSimulator c
     lhFile = [ prettyPrint modVerify
              , ""
              ] ++ spec
-    modVerify = HsModule emptyLoc (Module "SymVerify") (Just []) imports decls
+    modVerify = HsModule emptyLoc (Module "SymVerify") Nothing imports decls
     decls     = initStateOfConfig cinfo ++
                 initSchedOfConfig cinfo ++
                 checkStateOfConfig cinfo ++
@@ -281,3 +281,33 @@ renderSimulator c
     cinfo   = mkCInfo c { cProcs = (freshStmtIds <$>) <$> cProcs c }
 
     spec = [ initSpecOfConfig cinfo ] ++ builtinSpec
+
+renderQCFile :: Config a -> String
+renderQCFile c
+  = unlines lhFile
+  where
+    lhFile = [ prettyPrint modVerify
+             , ""
+             ] ++ spec
+    modVerify = HsModule emptyLoc (Module "QC") (Just exports) imports decls
+    exports   = []
+    decls     = []
+    imports   = mkImport <$> [ "SymVector"
+                             , "SymMap"
+                             , "SymVerify"
+                             , "Language.Haskell.Liquid.Prelude"
+                             , "Test.QuickCheck"]
+    mkImport m = HsImportDecl { importLoc = emptyLoc
+                              , importQualified = False
+                              , importAs = Nothing
+                              , importModule = Module m
+                              , importSpecs = Nothing
+                              }
+    spec =  qcMainFunc ++ arbitraryDecls
+
+qcMainFunc :: [String]
+qcMainFunc = [ prettyPrint qcMainTypeDecl
+             , prettyPrint qcMainFuncDecl ]
+
+arbitraryDecls :: [String]
+arbitraryDecls =  Prelude.map prettyPrint [ arbitraryValDecl ]

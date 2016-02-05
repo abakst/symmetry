@@ -102,8 +102,9 @@ name = HsIdent
 unName :: HsName -> String
 unName (HsIdent n) = n       
 
-eqClass   = UnQual (name "Eq")
+eqClass = UnQual (name "Eq")
 showClass = UnQual (name "Show")
+arbitraryClass = UnQual (name "Arbitrary")
 
 pidString :: Pid -> String
 pidString (PConc i)      = prefix "vP" . prefix "role" $ show i
@@ -556,3 +557,9 @@ pcEq p i = readPCMap p `eq` HsParen (HsLit (HsInt i))
 assert :: HsExp -> HsExp
 assert e
   = var "liquidAssert" $>$ e $>$ HsCon (Special HsUnitCon)
+
+qcMainTypeDecl :: HsDecl
+qcMainTypeDecl =  HsTypeSig emptyLoc
+                            [name "main"]
+                            (HsQualType [] rhs)
+                    where rhs = HsTyApp (HsTyCon $ UnQual $ name "IO") (HsTyCon $ Special HsUnitCon)

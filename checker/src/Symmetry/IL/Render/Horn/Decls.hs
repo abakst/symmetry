@@ -198,3 +198,59 @@ vecQCInst =  HsInstDecl emptyLoc [] showClass typeParam decls
                                          (HsUnGuardedRhs (HsLit $ HsString "some vector"))
                                          []
                      decls     = [HsFunBind [showImp]]
+
+
+-- main =  do quickCheck (\s plist -> runState s (getList plist) == ())
+qcMainFuncDecl :: HsDecl
+qcMainFuncDecl =  HsFunBind [ HsMatch emptyLoc
+                                      (name "main")
+                                      []
+                                      (HsUnGuardedRhs rhs)
+                                      []                     ]
+                    where pvarn n = HsPVar $ name n
+                          varn n  = HsVar $ UnQual $ name n
+                          rs_var  = HsVar $ UnQual $ runStateName
+                          exp2    = HsApp (HsApp rs_var (varn "s"))
+                                          (HsParen (HsApp (varn "getList") (varn "plist")))
+                          f       = HsLambda emptyLoc
+                                             [pvarn "s", pvarn "plist"]
+                                             (HsInfixApp exp2
+                                                         (HsQConOp $ UnQual $ HsSymbol "==")
+                                                         (HsCon $ Special $ HsUnitCon))
+                          exp     = HsApp (varn "quickCheck") (HsParen f)
+                          rhs     = HsDo [HsQualifier exp]
+
+-- instance Arbitrary Val where
+--   arbitrary = oneof [ return VUnit
+--                     , VInt  <$> arbitrary
+--                     , VStr  <$> arbitrary
+--                     , VPid  <$> arbitrary
+--                     , VInL  <$> arbitrary
+--                     , VInR  <$> arbitrary
+--                     , VPair <$> arbitrary <*> arbitrary ]
+
+-- main =  do quickCheck (\s plist -> runState s (getList plist) == ())
+arbitraryValDecl :: HsDecl
+arbitraryValDecl =  HsInstDecl emptyLoc [] arbitraryClass typeParam decls
+                      where typeParam = [HsTyVar $ valTyName]
+                            pvarn n   = HsPVar $ name n
+                            varn' n   = HsVar $ UnQual $ name n
+                            varn n    = HsVar $ UnQual n
+                            ret r     = HsApp (varn' "return") r
+                            arb       = varn' "arbitrary"
+                            fmap' f x = HsInfixApp f (HsQVarOp $ UnQual $ HsSymbol "<$>") x
+                            app' f x  = HsInfixApp f (HsQVarOp $ UnQual $ HsSymbol "<*>") x
+                            vals      = [ (ret $ varn unitValConsName)
+                                        , fmap' (varn intValConsName) arb
+                                        , fmap' (varn stringValConsName) arb
+                                        , fmap' (varn pidValConsName) arb
+                                        , fmap' (varn leftValConsName) arb
+                                        , fmap' (varn rightValConsName) arb
+                                        , app' (fmap' (varn intValConsName) arb) arb ]
+                            showImp   = HsMatch emptyLoc
+                                                (name "arbitrary")
+                                                []
+                                                (HsUnGuardedRhs (HsApp (varn' "oneof")
+                                                                       (HsList vals)))
+                                                []
+                            decls     = [HsFunBind [showImp]]

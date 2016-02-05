@@ -1,10 +1,20 @@
 module SymVector where
 
+import Test.QuickCheck
+
 data Vec a = V (Int -> a)
+
+instance Show (Vec a) where
+  show _ = "some vector"
+
 {-@
 data Vec a <dom :: Int -> Prop, rng :: Int -> a -> Prop>
      = V {a :: i:Int<dom> -> a <rng i>}
   @-}
+
+instance (Arbitrary a) => Arbitrary (Vec a) where
+  arbitrary = do a <- arbitrary
+                 return $ mkVec a
 
 
 {-@ emptyVec :: forall <p :: Int -> a -> Prop>. Vec <{\v -> 0=1}, p> a @-}

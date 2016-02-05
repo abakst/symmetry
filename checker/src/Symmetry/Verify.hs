@@ -45,6 +45,12 @@ runChecker :: Config a
 runChecker c fn
   = writeFile fn (renderSimulator c)
 
+runQuickChecker :: Config a
+                -> FilePath
+                -> IO ()
+runQuickChecker c fn
+  = writeFile fn (renderQCFile c)
+
 runCmd               :: Bool -> String -> FilePath -> CreateProcess -> IO ()
 runCmd verb pre wd c
   = do (_,Just hout,Just herr,p) <- createProcess c { cwd = Just wd
@@ -89,6 +95,7 @@ run1Cfg opt outd cfg
          copyVectorModule outd
        if (optVerify opt) then do
          runChecker cfg (outd </> "SymVerify.hs")
+         runQuickChecker cfg (outd </> "QC.hs")
          return True
        else
          return True
