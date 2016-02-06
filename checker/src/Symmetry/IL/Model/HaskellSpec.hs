@@ -286,7 +286,7 @@ pidPreApp ci
 pidDecl :: ConfigInfo Int
         -> [Decl]
 pidDecl ci
-  = [ DataDecl noLoc DataType [] (name pidPre) tvbinds cons []
+  = [ DataDecl noLoc DataType [] (name pidPre) tvbinds cons [(UnQual $ name "Show",[])]
     , TypeDecl noLoc (name pidType) [] (pidPreApp ci)
     ] ++
     (pidFn <$> pids ci)

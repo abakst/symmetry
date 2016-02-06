@@ -1,6 +1,8 @@
 module SymBoilerPlate where
 
-{-@ nonDet :: a -> {v:Int | true} @-}  
+import Test.QuickCheck
+
+{-@ nonDet :: a -> {v:Int | true} @-}
 nonDet :: a -> Int
 nonDet = undefined
 
@@ -22,6 +24,16 @@ data Val p = VUnit {}
            | VInR { vInR :: Val p }
            | VInL { vInL :: Val p }
            | VPair { vLeft :: Val p, vRight :: Val p }
+
+instance Arbitrary Val where
+  arbitrary = oneof [ return VUnit
+                    , return VUnInit
+                    , VInt  <$> arbitrary
+                    , VStr  <$> arbitrary
+                    , VPid  <$> arbitrary
+                    , VInL  <$> arbitrary
+                    , VInR  <$> arbitrary
+                    , VPair <$> arbitrary <*> arbitrary ]
 
 isVUnit, isVUnInit, isVInt, isVString, isVPid, isVInR, isVInL, isVPair :: Val p -> Bool
 isVUnit VUnit{} = True

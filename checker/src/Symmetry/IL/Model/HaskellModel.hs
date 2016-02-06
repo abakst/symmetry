@@ -273,6 +273,7 @@ instance ILModel HaskellModel where
   rule       = hRule
   matchVal   = hMatchVal
   printModel = printHaskell
+  printCheck = printQCFile
 
 
 ilExpPat (EPid q)
@@ -346,6 +347,21 @@ initialSched _
     fnType = TyFun (TyCon (UnQual (name stateRecordCons)))
                    schedType
 
+    -- -- Match noLoc (name runState) (pat [rulesPid rules]) Nothing (mkGuardedRhss rules) Nothing
+    -- totalRunState = Match noLoc (name runState)
+    --                       (pat [rulesPid rules])
+    --                       Nothing
+    --                       (UnGuardedRhs (Con $ Special UnitCon))
+    --                       Nothing
+
+totalCall :: ConfigInfo Int -> Decl
+totalCall ci =
+  FunBind [Match noLoc (name runState) args Nothing rhs Nothing]
+    where
+      bufs = [ wildcard | _ <- pids ci, _ <- tyMap ci ]
+      args = wildcard : bufs ++ [wildcard]
+      rhs  = UnGuardedRhs $ Con $ Special $ UnitCon
+
 initialCall :: ConfigInfo Int -> Decl
 initialCall ci =
   nameBind noLoc (name "check") call
@@ -362,7 +378,7 @@ printHaskell ci rs = unlines [ header
                              ]
   where
     header = unlines [ "{-# Language RecordWildCards #-}"
-                     , "module SymVerify () where"
+                     , "module SymVerify where"
                      , "import SymVector"
                      , "import SymMap"
                      , "import SymBoilerPlate"
@@ -374,6 +390,39 @@ printHaskell ci rs = unlines [ header
                    , unlines (prettyPrint <$> initialSched ci)
                    , prettyPrint (initialCall ci)
                    , printRules ci rs dl
+                   , prettyPrint (totalCall ci)
                    , ""
                    , initSpecOfConfig ci
                    ]
+
+printQCFile :: ConfigInfo Int -> [Rule HaskellModel] -> String
+printQCFile _ _
+  = unlines lhFile
+  where
+    lhFile = [ prettyPrint modVerify
+             , ""
+             ] ++ spec
+    modVerify = Module noLoc (ModuleName "QC") [] Nothing (Just exports) imports decls
+    exports   = []
+    decls     = []
+    imports   = mkImport <$> [ "SymVector"
+                             , "SymMap"
+                             , "SymVerify"
+                             , "Language.Haskell.Liquid.Prelude"
+                             , "Test.QuickCheck"]
+    mkImport m = ImportDecl { importLoc       = noLoc
+                            , importModule    = ModuleName m
+                            , importQualified = False
+                            , importSrc       = False
+                            , importAs        = Nothing
+                            , importSpecs     = Nothing
+                            , importSafe      = False
+                            , importPkg       = Nothing
+                            }
+    spec =  qcMainFunc ++ arbitraryDecls
+
+qcMainFunc :: [String]
+qcMainFunc = []
+
+arbitraryDecls :: [String]
+arbitraryDecls =  []
