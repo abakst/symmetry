@@ -17,23 +17,33 @@ nonDet = undefined
            | VPair { vLeft :: Val p, vRight :: Val p }
 @-}
 data Val p = VUnit {}
-           | VUnInit {}
-           | VInt { vInt :: Int }
-           | VString { vString :: String }
-           | VPid { vPid :: p }
-           | VInR { vInR :: Val p }
-           | VInL { vInL :: Val p }
-           | VPair { vLeft :: Val p, vRight :: Val p }
+             | VUnInit {}
+             | VInt { vInt :: Int }
+             | VString { vString :: String }
+             | VPid { vPid :: p }
+             | VInR { vInR :: Val p }
+             | VInL { vInL :: Val p }
+             | VPair { vLeft :: Val p, vRight :: Val p }
 
-instance Arbitrary Val where
+instance (Show a) => Show (Val a) where
+  show VUnit       = "VUnit"
+  show VUnInit     = "VUnInit"
+  show (VInt i)    = "VInt " ++ (show i)
+  show (VString s) = "VString " ++ s
+  show (VPid p)    = "VPid " ++ (show p)
+  show (VInR v)    = "VInR " ++ (show v)
+  show (VInL v)    = "VInL " ++ (show v)
+  show (VPair l r) = "VPair (" ++ show l ++ ", " ++ show r ++ ")"
+
+instance (Arbitrary a) => Arbitrary (Val a) where
   arbitrary = oneof [ return VUnit
                     , return VUnInit
-                    , VInt  <$> arbitrary
-                    , VStr  <$> arbitrary
-                    , VPid  <$> arbitrary
-                    , VInL  <$> arbitrary
-                    , VInR  <$> arbitrary
-                    , VPair <$> arbitrary <*> arbitrary ]
+                    , VInt    <$> arbitrary
+                    , VString <$> arbitrary
+                    , VPid    <$> arbitrary
+                    , VInL    <$> arbitrary
+                    , VInR    <$> arbitrary
+                    , VPair   <$> arbitrary <*> arbitrary ]
 
 isVUnit, isVUnInit, isVInt, isVString, isVPid, isVInR, isVInL, isVPair :: Val p -> Bool
 isVUnit VUnit{} = True

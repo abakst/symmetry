@@ -22,6 +22,7 @@ data Val p = VUnit {}
            | VInR { vInR :: Val p }
            | VInL { vInL :: Val p }
            | VPair { vLeft :: Val p, vRight :: Val p }
+           deriving Show
 
 isVUnit, isVUnInit, isVInt, isVString, isVPid, isVInR, isVInL, isVPair :: Val p -> Bool
 isVUnit VUnit{} = True

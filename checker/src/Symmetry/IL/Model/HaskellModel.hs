@@ -396,7 +396,7 @@ printHaskell ci rs = unlines [ header
                    ]
 
 printQCFile :: ConfigInfo Int -> [Rule HaskellModel] -> String
-printQCFile _ _
+printQCFile ci _
   = unlines lhFile
   where
     lhFile = [ prettyPrint modVerify
@@ -409,7 +409,8 @@ printQCFile _ _
                              , "SymMap"
                              , "SymVerify"
                              , "Language.Haskell.Liquid.Prelude"
-                             , "Test.QuickCheck"]
+                             , "Test.QuickCheck"
+                             ]
     mkImport m = ImportDecl { importLoc       = noLoc
                             , importModule    = ModuleName m
                             , importQualified = False
@@ -419,10 +420,39 @@ printQCFile _ _
                             , importSafe      = False
                             , importPkg       = Nothing
                             }
-    spec =  qcMainFunc ++ arbitraryDecls
+    spec =  "main :: IO ()" : (prettyPrint  $  qcMainFuncDecl ci)
+                            : ""
+                            : concatMap (\s -> [s,""]) (prettyPrint <$> arbitraryDecls ci)
 
-qcMainFunc :: [String]
-qcMainFunc = []
 
-arbitraryDecls :: [String]
-arbitraryDecls =  []
+arbitraryDecls :: ConfigInfo Int -> [Decl]
+arbitraryDecls ci = [ arbitraryPidPreDecl ci ]
+
+-- main =  do quickCheck
+--              (\s plist -> runState s ... (getList plist) == ())
+qcMainFuncDecl    :: ConfigInfo Int -> Decl
+qcMainFuncDecl ci =  FunBind [ Match noLoc (name "main") [] Nothing (UnGuardedRhs rhs) Nothing ]
+                     where pvarn n    = pvar $ name n
+                           varn n     = Var $ UnQual $ name n
+                           emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
+                           bufs       = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
+                           pidl       = varn "plist"
+                           exp2       = appFun (varn runState) ((varn "s") : bufs ++ [pidl])
+                           f          = Lambda noLoc
+                                                 [pvarn "s", pvarn "plist"]
+                                                 (InfixApp exp2
+                                                             (QConOp $ UnQual $ Symbol "==")
+                                                             (Con $ Special $ UnitCon))
+                           exp        = App (varn "quickCheck") (Paren f)
+                           rhs        = Do [Qualifier exp]
+
+-- InstDecl SrcLoc (Maybe Overlap) [TyVarBind] Context QName [Type] [InstDecl]
+-- Match SrcLoc Name [Pat] (Maybe Type) Rhs (Maybe Binds)
+arbitraryPidPreDecl    :: ConfigInfo Int -> Decl
+arbitraryPidPreDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
+                          where tc_name = UnQual $ name "Arbitrary"
+                                tv_name = TyVar $ name pidPre
+                                var' s  = var $ name s
+                                pid_ts  = [ var' $ pidConstructor p | p <- (pids ci) ]
+                                arb_rhs = UnGuardedRhs (app (var' "elements") (listE pid_ts))
+                                arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
