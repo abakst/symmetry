@@ -55,7 +55,7 @@ isAbs (PAbs _ _) = True
 isAbs _          = False
 
 isBounded :: [SetBound] -> Pid -> Bool
-isBounded bs (PAbs _ s) = s `elem` [ s' | Bounded s' _ <- bs ]
+isBounded bs (PAbs _ s) = s `elem` [ s' | Known s' _ <- bs ]
 isBounded _ _           = False
 
 data Label = LL | RL | VL Var
@@ -71,14 +71,25 @@ data ILPat = PUnit
            | PSum  ILPat ILPat
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
+data ILPred = ILBop Op ILExpr ILExpr                      
+            | ILAnd ILPred ILPred
+            | ILOr ILPred ILPred
+            | ILNot ILPred 
+            | ILPTrue
+             deriving (Ord, Eq, Read, Show, Typeable, Data)
+
+data Op = Eq | Lt | Le | Gt | Ge
+             deriving (Ord, Eq, Read, Show, Typeable, Data)
+
 data ILExpr = EUnit
-            | EInt           
+            | EInt Int
             | EString
             | EPid Pid
             | EVar Var
             | ELeft ILExpr
             | ERight ILExpr
             | EPair ILExpr ILExpr
+            | EPlus ILExpr ILExpr
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 -- send(p, EPid p)                      
@@ -157,6 +168,10 @@ data Stmt a = SSkip { annot :: a }
                    , annot  :: a
                    }
 
+            | SAssert { assertPred :: ILPred
+                      , annot :: a
+                      }
+
              -- x := p1 == p2;
             | SCompare { compareVar :: Var
                        , compareLhs :: Pid
@@ -187,7 +202,8 @@ data Stmt a = SSkip { annot :: a }
             -- | STest Var a
          deriving (Ord, Eq, Read, Show, Functor, Foldable, Data, Typeable)
 
-data SetBound = Bounded Set Int
+data SetBound = Known Set Int
+              | Unknown Set Var
                 deriving (Eq, Read, Show, Typeable)
 type Process a = (Pid, Stmt a)
 data Unfold = Conc Set Int deriving (Eq, Read, Show, Data, Typeable)
@@ -235,13 +251,13 @@ endLabels = nub . listify (isPrefixOf "end" . unlv)
 
 isBound :: Set -> [SetBound] -> Bool
 isBound s = any p
-  where p (Bounded s' _) = s == s'
+  where p (Known s' _) = s == s'
 
 boundAbs :: Config a -> Config a
 boundAbs c@(Config {cProcs = ps, cSets = bs})
   = c { cUnfold = us }
   where
-    us = [ Conc s n | (PAbs _ s, _) <- ps , Bounded s' n <- bs , s == s']
+    us = [ Conc s n | (PAbs _ s, _) <- ps , Known s' n <- bs , s == s']
 
 vars :: ILPat -> [Var]
 vars = nub . listify (const True)
@@ -291,6 +307,8 @@ instance Traversable Stmt where
     = flip SNonDet <$> f a <*> traverse (traverse f) ss
   traverse f (SIncr v a)
     = SIncr v <$> f a
+  traverse f (SAssert p a)
+    = SAssert p <$> f a
   traverse _ _
     = error "traverse undefined for non-source stmts"
 
@@ -415,7 +433,7 @@ instance Pretty MConstr where
 
 instance Pretty ILExpr where
   pretty EUnit     = text "()"
-  pretty EInt      = text "int"
+  pretty (EInt i)  = int i
   pretty (EVar v)  = pretty v
   pretty (EPid p)  = pretty p
   pretty (ELeft  e) = text "inl" <> parens (pretty e)
@@ -437,9 +455,25 @@ instance Pretty ILType where
   pretty (TSum p1 p2)  = parens (pretty p1 <+> text "+" <+> pretty p2)
   pretty (TProd p1 p2) = parens (pretty p1 <+> text "*" <+> pretty p2)
 
+instance Pretty Op where
+  pretty Eq = text "="
+  pretty Lt = text "<"
+  pretty Le = text "≤"
+  pretty Gt = text ">"
+  pretty Ge = text "≥"
+
+instance Pretty ILPred where
+  pretty (ILBop o e1 e2) = parens (pretty e1 <+> pretty o <+> pretty e2)
+  pretty (ILAnd p1 p2)   = parens (pretty p1 <+> text "&&" <+> pretty p2)
+  pretty (ILOr p1 p2)    = parens (pretty p1 <+> text "||" <+> pretty p2)
+  pretty (ILNot p)       = parens (text "~" <> pretty p)
+
 instance Pretty (Stmt a) where
   pretty (SSkip _)
     = text "<skip>"
+
+  pretty (SAssert e _)
+    = text "assert" <+> pretty e
 
   pretty (SIncr v _)
     = pretty v <> text "++"
@@ -501,7 +535,8 @@ instance Pretty (Config a) where
     where
       goGlob (v, t) = text "Global" <+> pretty v <+> text "::" <+> pretty t
       goGlobS s = text "Global" <+> pretty s
-      goB (Bounded s n) = text "|" <> pretty s <> text "|" <+> equals <+> int n
+      goB (Known s n) = text "|" <> pretty s <> text "|" <+> equals <+> int n
+      goB (Unknown s v) = text "|" <> pretty s <> text "|" <+> equals <+> pretty v
       go (pid, s) = text "Proc" <+> parens (pretty pid) <> colon <$$>
                     indent 2 (pretty s)
 

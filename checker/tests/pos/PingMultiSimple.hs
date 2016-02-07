@@ -18,20 +18,15 @@ pingServer = do (_ :: repr ()) <- recv -- 'recv a tt'
 master :: (DSL repr) => repr (RMulti -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do ps <- spawnMany r n pingServer
-      doMany ps (body n)
-      sent <- msgsSent
-      app assert (sent `eq` n)
+      doMany "l0" ps body
+
+      -- One of the invariants...
+      c    <- readGhost "l0"
+      assert (c `eq` n)
+
       return tt
   where
-    body n = lam $ \p -> do sent <- msgsSent
-                            app assert (sent `lt` n)
-                            send p tt
-
-msgsSent :: DSL repr => repr (Process repr Int)
-msgsSent = undefined                                 
-
-assert :: DSL repr => repr (Boolean -> Process repr ())            
-assert = undefined
+    body = lam $ \p -> do send p tt
 
 mainProc :: (DSL repr) => repr (Int -> ())
 mainProc = lam $ \n -> exec $ do r <- newRMulti

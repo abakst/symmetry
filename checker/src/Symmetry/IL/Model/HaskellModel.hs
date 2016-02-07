@@ -32,7 +32,7 @@ data HaskellModel = ExpM { unExp :: Exp }
 vExp :: String -> Exp
 vExp = var . name
 
-opEq, opAnd, opOr, opPlus, opMinus, opLt, opLte :: QOp
+opEq, opAnd, opOr, opPlus, opMinus, opLt, opLte, opGt, opGte :: QOp
 opEq   = op (sym "==")
 opAnd  = op (sym "&&")
 opOr   = op (sym "||")
@@ -40,6 +40,8 @@ opPlus = op (sym "+")
 opMinus= op (sym "-")
 opLt   = op (sym "<")
 opLte  = op (sym "<=")
+opGt   = op (sym ">")
+opGte  = op (sym ">=")
 
 neg :: Exp
 neg = vExp "not"
@@ -167,13 +169,29 @@ hSetPC ci p e
 con :: String -> Exp             
 con = Con . UnQual . name
 
-hExpr :: Pid -> ILExpr -> HaskellModel
-hExpr p EUnit    = ExpM $ con unitCons    
-hExpr p (EPid q@(PConc _)) = ExpM $ App (con pidCons) (vExp $ pidConstructor q)
-hExpr _ (EVar (V v))
-  = ExpM $ vExp v
-hExpr p (ELeft e)  = ExpM $ App (con leftCons) (let ExpM e' = hExpr p e in e')
-hExpr p (ERight e) = ExpM $ App (con rightCons) (let ExpM e' = hExpr p e in e')
+hExpr :: ConfigInfo Int -> Pid -> ILExpr -> HaskellModel
+hExpr _ p EUnit    = ExpM $ con unitCons    
+hExpr _ p (EPid q@(PConc _)) = ExpM $ App (con pidCons) (vExp $ pidConstructor q)
+hExpr ci p (EVar (V v))
+  = hReadState ci p v
+hExpr ci p (ELeft e)
+  = ExpM $ App (con leftCons) (unExp $ hExpr ci p e)
+hExpr ci p (ERight e)
+  = ExpM $ App (con rightCons) (unExp $ hExpr ci p e)
+
+hPred :: ConfigInfo Int -> Pid -> ILPred -> HaskellModel
+hPred ci _ ILPTrue
+  = ExpM $ vExp "True"
+hPred ci p (ILBop o e1 e2)
+  = ExpM $ paren (infixApp (unExp $ hExpr ci p e1)
+                           (qop o)
+                           (unExp $ hExpr ci p e2))
+  where
+    qop Eq = opEq
+    qop Lt = opLt
+    qop Le = opLte
+    qop Gt = opGt
+    qop Ge = opGte
 
 hReadPtrR ci p t
   = hReadState ci p (ptrR ci p t)
@@ -194,7 +212,7 @@ hReadPtrW ci p q t
 hPutMessage ci p q (e,t)
   = StateUpM [] [((q, t), e')]
   where
-    ExpM e' = hExpr p e
+    ExpM e' = hExpr ci p e
 
 hGetMessage ci p@PConc{} (V v, t)
   = hSetFields ci p [(v, ExpM $ getVec (vExp (buf ci p t)) e')]
@@ -232,10 +250,11 @@ hNonDet _ _
 hRule :: ConfigInfo Int
       -> Pid
       -> HaskellModel
+      -> Maybe (HaskellModel)
       -> HaskellModel
       -> Rule HaskellModel
-hRule _ p g us
-  = Rule p g us
+hRule _ p g assert us
+  = Rule p g assert us
 
 hJoinUpdates _ _ (StateUpM us bufs) (StateUpM us' bufs')
   = StateUpM (us ++ us') (bufs ++ bufs')
@@ -246,6 +265,7 @@ instance ILModel HaskellModel where
   incr       = hIncr
   decr       = hDecr
   expr       = hExpr
+  pred       = hPred
   lt         = hLt
   lte        = hLte
   eq         = hEq
@@ -288,29 +308,32 @@ printRules ci rs dl = prettyPrint $ FunBind matches
     mkMatch rules
       = Match noLoc (name runState) (pat [rulesPid rules]) Nothing (mkGuardedRhss rules) Nothing 
     mkGuardedRhss rules
-      = GuardedRhss [ mkRhs p grd up | Rule p (ExpM grd) up <- rules ]
-    mkRhs p grd (GuardedUpM f cases)
-      = GuardedRhs noLoc [Qualifier grd] (Case f (mkAlt p <$> cases))
-    mkRhs p grd (StateUpM fups bufups)
-      = GuardedRhs noLoc [Qualifier grd] (mkCall p fups bufups)
+      = GuardedRhss [ mkRhs p grd a up | Rule p (ExpM grd) a up <- rules ]
+    mkRhs p grd a (GuardedUpM f cases)
+      = GuardedRhs noLoc [Qualifier grd] (Case f (mkAlt p a <$> cases))
+    mkRhs p grd a (StateUpM fups bufups)
+      = GuardedRhs noLoc [Qualifier grd] (mkCall p a fups bufups)
     -- mkRhs p ms grd fups bufups
     --   = GuardedRhs noLoc [Qualifier grd] (mkCall p fups bufups)
-    mkAlt p (ile, StateUpM fups bufups)
-      = Alt noLoc (ilExpPat ile) (UnGuardedRhs (mkCall p fups bufups)) Nothing
+    mkAlt p a (ile, StateUpM fups bufups)
+      = Alt noLoc (ilExpPat ile) (UnGuardedRhs (mkCall p a fups bufups)) Nothing
     -- mkCase [(f, PatM p)] e
     --   = Case (vExp f) [Alt noLoc p (UnGuardedRhs e) Nothing]
     mkRecUp p fups
       = RecUpdate (vExp state) [mkFieldUp p f e | (f,e) <- fups]
     mkFieldUp p f e
       = FieldUpdate (UnQual (name f)) e
-    mkCall p fups bufups
+    mkCall p (Just (ExpM e)) fups bufups
+      = metaFunction "liquidAssert"
+         [e, paren (mkCall p Nothing fups bufups)]
+    mkCall p Nothing fups bufups
       = metaFunction runState
           (mkRecUp p fups : mkBufUps bufups ++ [vExp sched]) 
     mkBufUps bufups
       = [ findUp p t bufups | p <- pids ci, t <- fst <$> tyMap ci]
 
-    rulesPid rules = let Rule p _ _ = head rules in p
-    pidRule (Rule p _ _) = p
+    rulesPid rules = let Rule p _ _ _ = head rules in p
+    pidRule (Rule p _ _ _) = p
     eqPid  = (==) `on` pidRule
     perPid = groupBy eqPid $ sortBy (compare `on` pidRule) rs
 

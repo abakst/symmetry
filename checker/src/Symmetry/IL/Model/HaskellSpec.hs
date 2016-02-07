@@ -16,7 +16,7 @@ import           Language.Haskell.Exts.Build
 import           Language.Fixpoint.Types as F
 import           Text.Printf
 
-import Symmetry.IL.AST as AST
+import Symmetry.IL.AST as AST hiding (Op(..))
 import Symmetry.IL.ConfigInfo
 import Symmetry.IL.Model
 import Symmetry.IL.Model.HaskellDefs
@@ -228,9 +228,11 @@ builtinSpec = [nonDetSpec]
 ---------------------
 -- Type Declarations
 ---------------------
+intType, mapTyCon :: Type
 intType  = TyCon (UnQual (name "Int"))
 mapTyCon = TyCon (UnQual (name "Map_t"))
 
+mapType :: Type -> Type -> Type
 mapType k v = TyApp (TyApp mapTyCon k) v
 
 stateRecord :: [([Name], Type)] -> QualConDecl
@@ -257,7 +259,8 @@ stateDecl ci
                [ mkInt p (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci]
     valVarFs = [ mkVal p v | (p, v) <- valVars (stateVars ci) ]
     intVarFs = [ mkInt p v | (p, v) <- intVars (stateVars ci) ]
-    globFs   = [ ([name v], valHType ci) | v <- globVals (stateVars ci) ]
+    globFs   = [ ([name v], valHType ci) | v <- globVals (stateVars ci) ] ++
+               [ ([name v], intType)     | V v <- setBoundVars ci ]
 
     mkUnfold p  = ([name $ pidUnfold p], intType)
     mkBound p   = ([name $ pidBound p], intType)
