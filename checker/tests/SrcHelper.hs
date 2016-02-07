@@ -136,9 +136,8 @@ match5 msg f1 f2 f3 f4 f5 = match msg f1 $ lam $ \e1 ->
 
 compare :: ( ?callStack :: CallStack
            , DSL repr
-           , Ord a
            )
-        => repr (a -> a -> (Either () (Either () ())))
+        => repr (Int -> Int -> (Either () (Either () ())))
 compare  = lam $ \x -> lam $ \y -> ifte (lt x y) (inl tt)
                                      (ifte (eq x y) (inr $ inl tt) (inr $ inr tt))
 

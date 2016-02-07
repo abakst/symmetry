@@ -1,4 +1,5 @@
 {-# Language ParallelListComp #-}
+{-# Language TupleSections #-}
 module Symmetry.IL.Model.HaskellModel where
 
 import           Data.Char
@@ -71,7 +72,7 @@ putVec m key val
 
 putVec2D :: Exp -> Exp -> Exp -> Exp -> Exp
 putVec2D m key1 key2 val
-  = paren (app (app (app (app (vExp vecPutFn) key1) key2) val) m)
+  = paren (app (app (app (app (vExp vec2DPutFn) key1) key2) val) m)
 
 stateUpdate :: [(String, Exp)] -> Exp
 stateUpdate us
@@ -348,8 +349,30 @@ printRules ci rs dl = prettyPrint $ FunBind matches
     dlRhs      = UnGuardedRhs (metaFunction "liquidAssert" [dl, unit_con])
     dlpat      = pat (pids ci)
 
-    findUp p t bufups = maybe (vExp $ buf ci p t) (putVec (vExp $ buf ci p t) (vExp $ ptrW ci p t)) $
-                        lookup (p, t) bufups
+    findUp p t bufups
+      = maybe (vExp $ buf ci p t) (\(p, e) -> updateBuf ci p t e) $ findUpdate p t bufups
+
+updateBuf :: ConfigInfo Int -> Pid -> ILType -> Exp -> Exp
+updateBuf ci p@(PAbs _ _) t e
+  = putVec2D v i j e 
+    where
+      v = vExp $ buf ci p t
+      i = vExp $ pidIdx p
+      j = getMap (vExp $ ptrW ci p t) (vExp $ pidIdx p)
+updateBuf ci p t e
+  = putVec v i e
+  where
+    v = vExp $ buf ci p t
+    i = vExp $ ptrW ci p t
+          
+
+findUpdate :: Pid -> ILType -> [((Pid, ILType), Exp)] -> Maybe (Pid, Exp)
+findUpdate (PAbs _ (S s)) t bufups
+  = case [ (p, e) | ((p@(PAbs _ (S s')), t'), e) <- bufups, s == s', t == t' ] of
+      []  -> Nothing
+      x:_ -> Just x
+findUpdate p t bufups
+  = (p,) <$> lookup (p, t) bufups
 
 undef = "undefined"                               
 undefinedExp = vExp undef
