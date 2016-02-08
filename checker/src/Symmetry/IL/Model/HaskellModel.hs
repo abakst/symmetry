@@ -474,7 +474,8 @@ printQCFile ci _
 
 
 arbitraryDecls :: ConfigInfo Int -> [Decl]
-arbitraryDecls ci = [ arbitraryPidPreDecl ci ]
+arbitraryDecls ci = [ arbitraryPidPreDecl ci
+                    , arbitraryStateDecl  ci ]
 
 -- main =  do quickCheck
 --              (\s plist -> runState s ... (getList plist) == ())
@@ -505,10 +506,17 @@ arbitraryPidPreDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDec
 
 arbitraryStateDecl    :: ConfigInfo Int -> Decl
 arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
-                         where tc_name = UnQual $ name "Arbitrary"
-                               tv_name = TyVar $ name stateRecordCons
-                               var' s  = var $ name s
-                               arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
+                         where tc_name   = UnQual $ name "Arbitrary"
+                               tv_name   = TyVar $ name stateRecordCons
+                               var' s    = var $ name s
+                               fmap' f x = InfixApp f (QConOp $ UnQual $ Symbol "<$>") x
+                               fapp' f g = InfixApp f (QConOp $ UnQual $ Symbol "<*>") g
+                               vh:vt     = stateVarArbs ci
+                               gen_exp   = foldl (\e v -> fapp' e v)
+                                                 (fmap' (Con $ UnQual $ name stateRecordCons) vh)
+                                                 vt
+                               arb_rhs   = UnGuardedRhs $ gen_exp
+                               arb       = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
 
 
 stateVarArbs    :: ConfigInfo Int -> [Exp]
