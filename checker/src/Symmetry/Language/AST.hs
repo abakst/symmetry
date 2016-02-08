@@ -69,8 +69,9 @@ class Symantics repr where
        => repr ((a -> Process repr a) -> a -> Process repr a) -> repr (a -> Process repr a)
 
   -- Primitives:        
-  assert    :: repr Boolean -> repr (Process repr ())
-  readGhost :: String -> repr (Process repr Int)
+  assert     :: repr Boolean -> repr (Process repr ())
+  readGhost  :: String -> repr (Process repr Int)
+
   self      :: repr (Process repr (Pid RSing))
   send      :: (?callStack :: CallStack, Typeable a)
             => repr (Pid RSing) -> repr a -> repr (Process repr ())

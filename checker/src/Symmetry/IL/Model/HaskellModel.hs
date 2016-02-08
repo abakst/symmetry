@@ -325,8 +325,7 @@ printRules ci rs dl = prettyPrint $ FunBind matches
     mkFieldUp p f e
       = FieldUpdate (UnQual (name f)) e
     mkCall p (Just (ExpM e)) fups bufups
-      = metaFunction "liquidAssert"
-         [e, paren (mkCall p Nothing fups bufups)]
+      = mkAssert e (paren (mkCall p Nothing fups bufups))
     mkCall p Nothing fups bufups
       = metaFunction runState
           (mkRecUp p fups : mkBufUps bufups ++ [vExp sched]) 
@@ -346,11 +345,14 @@ printRules ci rs dl = prettyPrint $ FunBind matches
     schedPVar  = pvar (name sched)
 
     mkDlMatch  = Match noLoc (name runState) dlpat Nothing dlRhs Nothing
-    dlRhs      = UnGuardedRhs (metaFunction "liquidAssert" [dl, unit_con])
+    dlRhs      = UnGuardedRhs (mkAssert dl unit_con)
     dlpat      = pat (pids ci)
 
     findUp p t bufups
       = maybe (vExp $ buf ci p t) (\(p, e) -> updateBuf ci p t e) $ findUpdate p t bufups
+
+mkAssert e k
+  = infixApp (metaFunction "liquidAssert" [e]) (op . sym $ "$") k
 
 updateBuf :: ConfigInfo Int -> Pid -> ILType -> Exp -> Exp
 updateBuf ci p@(PAbs _ _) t e

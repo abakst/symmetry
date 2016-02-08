@@ -251,7 +251,7 @@ ruleOfStmt ci p s@SIter { iterVar = V v, iterSet = set, annot = a }
                               Just (Unknown _ (V x)) -> readState ci p x
                  SInts n -> int n
     (i, j)   = case (annot <$>) <$> cfgNext ci p a of
-                 Just [i, j] -> (j, i)
+                 Just [i, j] -> (i, j)
                  Just [i]    -> (i, -1)
 -------------------------
 -- assert e
