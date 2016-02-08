@@ -208,6 +208,10 @@ stateRecord :: [([Name], Type)] -> QualConDecl
 stateRecord fs
   = QualConDecl noLoc [] [] (RecDecl (name stateRecordCons) fs)
   
+removeDerives                           :: Decl -> Decl
+removeDerives (DataDecl s d c n ts qs _) = DataDecl s d c n ts qs []
+removeDerives _                          = undefined
+
 stateDecl :: ConfigInfo Int
           -> ([Decl], String)
 stateDecl ci
@@ -221,7 +225,7 @@ stateDecl ci
                            , ""
                            ]
 
-    dataReft     = printf "{-@ %s @-}" (pp dataDecl)
+    dataReft     = printf "{-@ %s @-}" (pp (removeDerives dataDecl))
     fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
     absFs    = concat [ [mkBound p, mkCounter p, mkUnfold p] | p <- pids ci, isAbs p ]
     pcFs     = [ mkPC p (pc p) | p <- pids ci ]
@@ -291,7 +295,7 @@ boundPred (Known (S s) n)
 boundPred (Unknown (S s) (V x))
   = eEq (eReadState "v" x) (eReadState "v" s)
 
-initSpecOfConfig :: ConfigInfo Int -> String               
+initSpecOfConfig :: ConfigInfo Int -> String
 initSpecOfConfig ci
   = unlines [ initStateReft concExpr
             , initSchedReft schedExprs

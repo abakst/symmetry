@@ -443,6 +443,22 @@ printHaskell ci rs = unlines [ header
                    , initSpecOfConfig ci
                    ]
 
+
+
+arbValStr = "instance (Arbitrary a) => Arbitrary (Val a) where \n\
+\  arbitrary = oneof [ return VUnit \n\
+\                    , return VUnInit \n\
+\                    , VInt    <$> arbitrary \n\
+\                    , VString <$> arbitrary \n\
+\                    , VPid    <$> arbitrary \n\
+\                    , VInL    <$> arbitrary \n\
+\                    , VInR    <$> arbitrary \n\
+\                    , VPair   <$> arbitrary <*> arbitrary ]"
+
+arbVecStr="instance (Arbitrary a) => Arbitrary (Vec a) where \n\
+\   arbitrary = do a <- arbitrary \n\
+\                  return $ mkVec a"
+
 printQCFile :: ConfigInfo Int -> [Rule HaskellModel] -> String
 printQCFile ci _
   = unlines lhFile
@@ -456,6 +472,7 @@ printQCFile ci _
     imports   = mkImport <$> [ "SymVector"
                              , "SymMap"
                              , "SymVerify"
+                             , "SymBoilerPlate"
                              , "Language.Haskell.Liquid.Prelude"
                              , "Test.QuickCheck"
                              ]
@@ -468,9 +485,11 @@ printQCFile ci _
                             , importSafe      = False
                             , importPkg       = Nothing
                             }
-    spec =  "main :: IO ()" : (prettyPrint  $  qcMainFuncDecl ci)
-                            : ""
-                            : concatMap (\s -> [s,""]) (prettyPrint <$> arbitraryDecls ci)
+    spec =  "main :: IO ()"
+            : (prettyPrint  $  qcMainFuncDecl ci) : ""
+            : arbValStr : ""
+            : arbVecStr : ""
+            : concatMap (\s -> [s,""]) (prettyPrint <$> arbitraryDecls ci)
 
 
 arbitraryDecls :: ConfigInfo Int -> [Decl]
@@ -495,6 +514,8 @@ qcMainFuncDecl ci =  FunBind [ Match noLoc (name "main") [] Nothing (UnGuardedRh
                            exp        = App (varn "quickCheck") (Paren f)
                            rhs        = Do [Qualifier exp]
 
+-- instance Arbitrary Pid_pre where
+--         arbitrary = elements [...]
 arbitraryPidPreDecl    :: ConfigInfo Int -> Decl
 arbitraryPidPreDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
                           where tc_name = UnQual $ name "Arbitrary"
@@ -504,6 +525,9 @@ arbitraryPidPreDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDec
                                 arb_rhs = UnGuardedRhs (app (var' "elements") (listE pid_ts))
                                 arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
 
+-- instance Arbitrary State where
+--         arbitrary
+--           = State <$> .. <*> ...
 arbitraryStateDecl    :: ConfigInfo Int -> Decl
 arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
                          where tc_name   = UnQual $ name "Arbitrary"
@@ -518,7 +542,8 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
                                arb_rhs   = UnGuardedRhs $ gen_exp
                                arb       = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
 
-
+-- for each field of the state record, use "return 0" for the integers and
+-- "arbitrary" for the rest of the generators
 stateVarArbs    :: ConfigInfo Int -> [Exp]
 stateVarArbs ci = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
                   where vararb   = var $ name $ "arbitrary"

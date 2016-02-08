@@ -1,7 +1,5 @@
 module SymBoilerPlate where
 
-import Test.QuickCheck
-
 {-@ nonDet :: a -> {v:Int | true} @-}
 nonDet :: a -> Int
 nonDet = undefined
@@ -34,16 +32,6 @@ instance (Show a) => Show (Val a) where
   show (VInR v)    = "VInR " ++ (show v)
   show (VInL v)    = "VInL " ++ (show v)
   show (VPair l r) = "VPair (" ++ show l ++ ", " ++ show r ++ ")"
-
-instance (Arbitrary a) => Arbitrary (Val a) where
-  arbitrary = oneof [ return VUnit
-                    , return VUnInit
-                    , VInt    <$> arbitrary
-                    , VString <$> arbitrary
-                    , VPid    <$> arbitrary
-                    , VInL    <$> arbitrary
-                    , VInR    <$> arbitrary
-                    , VPair   <$> arbitrary <*> arbitrary ]
 
 isVUnit, isVUnInit, isVInt, isVString, isVPid, isVInR, isVInL, isVPair :: Val p -> Bool
 isVUnit VUnit{} = True
