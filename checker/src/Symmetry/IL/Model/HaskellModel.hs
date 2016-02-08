@@ -446,8 +446,6 @@ qcMainFuncDecl ci =  FunBind [ Match noLoc (name "main") [] Nothing (UnGuardedRh
                            exp        = App (varn "quickCheck") (Paren f)
                            rhs        = Do [Qualifier exp]
 
--- InstDecl SrcLoc (Maybe Overlap) [TyVarBind] Context QName [Type] [InstDecl]
--- Match SrcLoc Name [Pat] (Maybe Type) Rhs (Maybe Binds)
 arbitraryPidPreDecl    :: ConfigInfo Int -> Decl
 arbitraryPidPreDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
                           where tc_name = UnQual $ name "Arbitrary"
@@ -456,3 +454,23 @@ arbitraryPidPreDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDec
                                 pid_ts  = [ var' $ pidConstructor p | p <- (pids ci) ]
                                 arb_rhs = UnGuardedRhs (app (var' "elements") (listE pid_ts))
                                 arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
+
+arbitraryStateDecl    :: ConfigInfo Int -> Decl
+arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
+                         where tc_name = UnQual $ name "Arbitrary"
+                               tv_name = TyVar $ name stateRecordCons
+                               var' s  = var $ name s
+                               arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
+
+
+stateVarArbs    :: ConfigInfo Int -> [Exp]
+stateVarArbs ci = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
+                  where vararb   = var $ name $ "arbitrary"
+                        ret0     = app (var $ name "return") (Lit $ Int 0)
+                        pcFs     = [ ret0 | p <- pids ci ]
+                        ptrFs    = [ ret0 | p <- pids ci, t <- fst <$> tyMap ci] ++
+                                   [ ret0 | p <- pids ci, t <- fst <$> tyMap ci]
+                        valVarFs = [ vararb | (p, v) <- valVars (stateVars ci) ]
+                        intVarFs = [ vararb | (p, v) <- intVars (stateVars ci) ]
+                        absFs    = concat [ [vararb, vararb, vararb] | p <- pids ci, isAbs p ]
+                        globFs   = [ vararb | v <- globVals (stateVars ci) ]
