@@ -54,6 +54,7 @@ getVec2D :: Int -> Int -> Vec2D a -> a
 getVec2D x y (V2D f) = f x y
 
 {-@ setVec2D :: forall a <r :: Int -> Int -> a -> Prop, d :: Int ->Int -> Prop>.
-                x:Int -> y:Int<d x> -> a:a<r x y> -> Vec2D <\i -> {j:Int<d i> | (y != j) }, r> a -> Vec2D <d,r> a @-}
+                x:Int -> y:Int<d x> -> a:a<r x y> -> Vec2D <\i -> {j:Int<d i> | (i = x) => (y != j) }, r> a -> Vec2D <d,r> a 
+@-}
 setVec2D :: Int -> Int -> a -> Vec2D a -> Vec2D a
 setVec2D x y v (V2D f) = V2D $ \i j -> if i == x && j == y then v else f i j

@@ -46,9 +46,9 @@ class Symantics repr where
   neg    :: repr Int -> repr Int
   plus   :: repr Int -> repr Int -> repr Int
 
-  eq   :: (Ord a) => repr a -> repr a -> repr Boolean
-  gt   :: (Ord a) => repr a -> repr a -> repr Boolean
-  lt   :: (Ord a) => repr a -> repr a -> repr Boolean
+  eq   :: Eq a => repr a -> repr a -> repr Boolean
+  gt   :: repr Int -> repr Int -> repr Boolean
+  lt   :: repr Int -> repr Int -> repr Boolean
 
   not  :: repr Boolean -> repr Boolean
   and  :: repr Boolean -> repr Boolean -> repr Boolean
@@ -69,6 +69,9 @@ class Symantics repr where
        => repr ((a -> Process repr a) -> a -> Process repr a) -> repr (a -> Process repr a)
 
   -- Primitives:        
+  assert     :: repr Boolean -> repr (Process repr ())
+  readGhost  :: String -> repr (Process repr Int)
+
   self      :: repr (Process repr (Pid RSing))
   send      :: (?callStack :: CallStack, Typeable a)
             => repr (Pid RSing) -> repr a -> repr (Process repr ())
@@ -83,9 +86,9 @@ class Symantics repr where
             => repr (Process repr RMulti)
   spawnMany :: (?callStack :: CallStack)
             => repr RMulti -> repr Int -> repr (Process repr ()) -> repr (Process repr (Pid RMulti))
-  doMany    :: repr (Pid RMulti) -> repr (Pid RSing -> Process repr a) -> repr (Process repr [a])
+  doMany    :: String -> repr (Pid RMulti) -> repr (Pid RSing -> Process repr a) -> repr (Process repr [a])
+  doN       :: String -> repr Int -> repr (Int -> Process repr a) -> repr (Process repr [a])
   lookup    :: repr (Pid RMulti) -> repr Int -> repr (Pid RSing)
-  doN       :: repr Int -> repr (Int -> Process repr a) -> repr (Process repr [a])
   forever   :: repr (Process repr ()) -> repr (Process repr ())
 
   die       :: repr (Process repr a)

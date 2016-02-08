@@ -16,7 +16,7 @@ import           Language.Haskell.Exts.Build
 import           Language.Fixpoint.Types as F
 import           Text.Printf
 
-import Symmetry.IL.AST as AST
+import Symmetry.IL.AST as AST hiding (Op(..))
 import Symmetry.IL.ConfigInfo
 import Symmetry.IL.Model
 import Symmetry.IL.Model.HaskellDefs
@@ -40,6 +40,12 @@ eEq e1 e2 = PAtom Eq e1 e2
 
 eLe :: F.Expr -> F.Expr -> F.Expr            
 eLe e1 e2 = PAtom Le e1 e2            
+
+eLt :: F.Expr -> F.Expr -> F.Expr            
+eLt e1 e2 = PAtom Lt e1 e2            
+
+eGt :: F.Expr -> F.Expr -> F.Expr            
+eGt e1 e2 = PAtom Gt e1 e2            
 
 eDec :: F.Expr -> F.Expr
 eDec e = EBin Minus e (F.expr (1 :: Int))
@@ -86,7 +92,9 @@ initOfPid ci (p@(PAbs _ (S s)), stmt)
                , eRange (eReadState st eK)
                  eZero (eReadState st (pidBound p))
                , eEq counterSum setSize
-               ] ++ counterInits
+               ] ++
+               counterInits
+                 
     st       = "v"
     eK       = pidUnfold p
     counterInit  = eEq setSize (readCtr 0)
@@ -186,51 +194,14 @@ valMeasures
 builtinSpec :: [String]
 builtinSpec = [nonDetSpec]
 
--- pidSpecString  Config { cProcs = ps }
---   = case absPs of
---       [] -> printf "{-@ data %s = %s @-}" pidTyString cstrs
---       _  -> printf "{-@ data %s %s = %s @-}" pidTyString cstrs
---     where
---       (absPs, concPs) = partition isAbs (fst <$> ps)
---       cstrs     = intercalate " | " ((go <$> concPs) ++ (goAbs <$> absPs))
---       go p@(PConc _)  = (pid p)
---       goAbs p@(PAbs _ _) = printf "%s { pidIdx :: Int }" (unName (pidNameOfPid p))
-
--- recQuals (HsDataDecl _ _ _ _ [c] _)
---   = unlines $ recQualsCon c
---   where
---     printTy (HsUnBangedTy (HsTyTuple _)) = "a"
---     printTy t             = pp t
---     recQualsCon (HsRecDecl _ _ fs)
---       = concatMap recQualField fs
---     recQualField ([f], t)
---       = [ printf "{-@ qualif Deref_%s(v:%s, x:%s): v = %s x @-}"
---             (unName f) (printTy t) stateTyString (unName f)
---         , printf "{-@ qualif Eq_%s(v:%s, x:%s): %s v = %s x @-}"
---             (unName f) stateTyString stateTyString (unName f) (unName f)
---         ]
-
--- stateRecordDefSpec :: Config Int -> HsDecl -> String
--- stateRecordDefSpec Config { cProcs = cs } (HsDataDecl _ _ _ _ [c] _)
---   = printf "data State <%s> = State { %s }"
---            (intercalate ", " ((dom <$> ps) ++ (rng <$> ps)))
---            (intercalate ", " (declFields c)) -- fields
---   where
---     dom p = printf "dom%s :: Int -> Prop" (toLower <$> pidString p)
---     rng p = printf "rng%s :: Int -> Val -> Prop" (toLower <$> pidString p)
---     ps = fst <$> cs
---     declFields (HsRecDecl _ _ fs) = declField <$> fs
---     declField ([f], t)
---       -- | t == vecType valType   = printf "%s <%s, %s> :: %s" (pp f) (dom p) (rng p)
---       -- | t == vec2DType valType = undefined
---       | otherwise = printf "%s :: %s" (pp f) (pp t)
-
 ---------------------
 -- Type Declarations
 ---------------------
+intType, mapTyCon :: Type
 intType  = TyCon (UnQual (name "Int"))
 mapTyCon = TyCon (UnQual (name "Map_t"))
 
+mapType :: Type -> Type -> Type
 mapType k v = TyApp (TyApp mapTyCon k) v
 
 stateRecord :: [([Name], Type)] -> QualConDecl
@@ -258,7 +229,8 @@ stateDecl ci
                [ mkInt p (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci]
     valVarFs = [ mkVal p v | (p, v) <- valVars (stateVars ci) ]
     intVarFs = [ mkInt p v | (p, v) <- intVars (stateVars ci) ]
-    globFs   = [ ([name v], valHType ci) | v <- globVals (stateVars ci) ]
+    globFs   = [ ([name v], valHType ci) | v <- globVals (stateVars ci) ] ++
+               [ ([name v], intType)     | V v <- setBoundVars ci ]
 
     mkUnfold p  = ([name $ pidUnfold p], intType)
     mkBound p   = ([name $ pidBound p], intType)
@@ -313,18 +285,11 @@ pidFn p
     truerhs = UnGuardedRhs (var (sym "True"))
     falserhs = UnGuardedRhs (var (sym "False"))
 
--- stateRecordSpec :: ConfigInfo Int -> String
--- stateRecordSpec ci
---   = unlines [ printf "{-@ %s @-}" st
---             , measuresOfConfig (config ci)
---             , valMeasures
---             , recQuals st
---             ]
---     where
---       st = stateDecl ci
-
--- valTypeSpec :: String
--- valTypeSpec = printf "{-@ %s @-}" (pp valDecl)
+boundPred :: SetBound -> F.Expr
+boundPred (Known (S s) n)
+  = eEq (F.expr n) (eReadState "v" s)
+boundPred (Unknown (S s) (V x))
+  = eEq (eReadState "v" x) (eReadState "v" s)
 
 initSpecOfConfig :: ConfigInfo Int -> String               
 initSpecOfConfig ci
@@ -339,12 +304,13 @@ initSpecOfConfig ci
 --            , stateRecordSpec ci
 --            , valTypeSpec
             ]
-     -- ++ qualsOfConfig ci
+     ++ (unlines $ scrapeQuals ci)
     
     where
       concExpr   = pAnd  ((initOfPid ci <$> cProcs (config ci)) ++
                           [ eEqZero (eReadState (symbol "v") (symbol v))
-                          | V v <- iters ])
+                          | V v <- iters ] ++
+                          catMaybes [ boundPred <$> setBound ci s | (PAbs _ s) <- pids ci ])
       iters      = everything (++) (mkQ [] goVars) (cProcs (config ci))
       goVars :: Stmt Int -> [Var]
       goVars SIter {iterVar = v} = [v]
@@ -360,104 +326,56 @@ recvTy = everything (++) (mkQ [] go)
     go (SRecv (t, _) _) = [t]
     go _                 = []
 
+---------------------
 -- Qualifiers                           
-{-
-pc = 0 => f x = y
--}
-{-
-data Context = Iter Var Set
-             | Loop Var
-               deriving (Eq, Ord, Show)
+---------------------
+mkQual :: String
+       -> [(String, String)]
+       -> F.Expr
+       -> String
+mkQual n args e
+  = printf "{-@ qualif %s(%s): %s @-}" n argString eString 
+  where
+    eString = show $ pprint e
+    argString = intercalate ", " (go <$> args)
+    go (a,t) = printf "%s:%s" a t
 
-qualsOfConfig :: ConfigInfo Int -> String
-qualsOfConfig ci 
-  = unlines $ concatMap (qualsOfProc ci) (cProcs (config ci))
-
-qualsOfProc ci (p, s)
-  = qualsOfStmt ci [] p rds [wrs] s
-    where
-      rds = Map.fromList ((const 0<$>) <$> tyMap ci)
-      wrs = Map.fromList (zip (pids ci) (repeat rds))
-
-qualsOfStmt :: ConfigInfo Int
-            -> [Context] -- stack of contexts
-            -> Pid -- whose stmt
-            -> Map.Map ILType Int             -- recvs
-            -> [Map.Map Pid (Map.Map ILType Int)] -- send alternatives
-            -> Stmt Int
+scrapeQuals :: ConfigInfo Int
             -> [String]
-qualsOfStmt ci ctxt p rds wrs s@SSend{ sndPid = q, sndMsg = (t, _) }
-  = renderQual ci ctxt p rds wrs (annot s) ++
-    concatMap (qualsOfStmt ci ctxt p rds (incWrTy q t wrs)) (childStmts ci p s)
-qualsOfStmt ci ctxt p rds wrs s@SRecv{ rcvMsg = (t, _) }
-  = renderQual ci ctxt p rds wrs (annot s) ++
-    concatMap (qualsOfStmt ci ctxt p (incRdTy t rds) wrs) (childStmts ci p s)
-qualsOfStmt ci ctxt p rds wrs s@SIter{ iterBody = b }
-  = renderQual ci ctxt p rds wrs (annot s) ++
-    qualsOfStmt ci' ctxt' p rds wrs b ++
-                -- This isn't right:
-    concatMap (qualsOfStmt ci' ctxt' p rds wrs) (childStmts ci' p s)
+scrapeQuals ci
+  = scrapeIterQuals ci ++
+    scrapeAssertQuals ci
+
+scrapeIterQuals :: ConfigInfo Int
+                -> [String]
+scrapeIterQuals ci
+  = concat [ everything (++) (mkQ [] (go p)) s | (p, s) <- cProcs (config ci) ]
   where
-    ctxt' = Iter (iterVar s) (iterSet s) : ctxt
-    ci'   = ci { cfg = upd <$> cfg ci }
-    upd (p', m) | p == p'   = (p, M.map (filter ((/= (annot s)) . annot)) m)
-                | otherwise = (p', m)
-qualsOfStmt ci ctxt p rds wrs s
-  = renderQual ci ctxt p rds wrs (annot s) ++
-    concatMap (qualsOfStmt ci ctxt p rds wrs) (childStmts ci p s)
--- qualsOfStmt rds wrs cfg s
---   = [printf "PC = %s => READ = %s && SEND = %s" (show (annot s)) (showpp rds) (showpp wrs)] ++
---     concatMap (qualsOfStmt rds wrs cfg) (M.findWithDefault [] (annot s) cfg)
-renderQual ci ctxt p rds wrs i
-  = [ printf "{-@ qualif Rd(v:State): (%s v) = %d => %s @-}"
-             (pc p) i (renderRds ci p rds) ] ++
-    [ printf "{-@ qualif Wr(v:State): (%s v) = %d => %s @-}"
-             (pc p) i (renderWrs ci ctxt wrs) ]
+    go :: Pid -> Stmt Int -> [String]
+    go p SIter { iterVar = V v, iterSet = S set, iterBody = b, annot = a }
+      = [mkQual "IterInv" [("v", stateRecordCons)]
+        (F.PImp (eReadState "v" (pc p) `eGt` F.expr a) (eReadState "v" v `eEq` eReadState "v" set))] ++
+        iterQuals p v set b
+    go _ _
+      = []
 
-renderRds' :: Map.Map ILType [(ILExpr,Int)] -> [F.Expr]
-renderRds' m = go <$> Map.toList m
+iterQuals :: Pid -> String -> String -> Stmt Int -> [String]
+iterQuals p@(PConc _) v set b
+  = [mkQual "IterInv" [("v", stateRecordCons)]
+            (eReadState "v" v `eLe` eReadState "v" set)] ++
+    everything (++) (mkQ [] go) b
   where
-    go (t, n) = undefined
+    go :: Stmt Int -> [String]
+    go s
+       = [mkQual "Iter" [("v", stateRecordCons)]
+                         (pcImpl p (annot s) (eReadState "v" v `eLt` eReadState "v" set))]
 
-renderRds :: ConfigInfo Int -> Pid -> Map.Map ILType Int -> String
-renderRds ci p m = Map.foldrWithKey go "" m
-  where
-    go t n "" = printf "(%s v) = %d" (ptrR ci p t) n
-    go t n s  = printf "(%s v) = %d && %s" (ptrR ci p t) n s
+pcImpl :: Pid -> Int -> F.Expr -> F.Expr
+pcImpl p i e
+  = F.PImp (eReadState "v" (pc p) `eEq` (F.expr i)) e
 
-renderWrs :: ConfigInfo Int -> [Context] -> [Map.Map Pid (Map.Map ILType Int)] -> String
-renderWrs ci ctxt ms
-  = unlines $ concat [renderOneWr <$> Map.toList m | m <- ms]
-  where
-    renderOneWr (p, tm) = Map.foldrWithKey (go p) "" tm
-    go p t n "" = printf "(%s v) = %d"       (ptrW ci p t) n
-    go p t n s  = printf "(%s v) = %d && %s" (ptrW ci p t) n n s
-
-iterContext ctxt v
-  = length $ [ c | c@(Iter v' _) <- ctxt, v == v' ]
-
-incRdTy t m = Map.alter go t m
-  where
-    go Nothing  = Just 1
-    go (Just n) = Just (n + 1)
-
-incWrTy :: ILExpr
-        -> ILType
-        -> [Map.Map Pid (Map.Map ILType Int)]
-        -> [Map.Map Pid (Map.Map ILType Int)]
-incWrTy (EPid p) t ms
-  = Map.alter (Map.alter go t <$>) p <$> ms
-  where
-    go Nothing  = Just 1
-    go (Just n) = Just (n + 1)
-incWrTy (AST.EVar _) t ms
-  = [ Map.alter (Map.alter go t <$>) q m | m <- ms, q <- Map.keys m ]
-  where
-    go Nothing  = Just 1
-    go (Just n) = Just (n + 1)
-
-
-childStmts :: ConfigInfo Int -> Pid -> Stmt Int -> [Stmt Int]
-childStmts ci p (annot -> -1) = []
-childStmts ci p s             = maybe [SSkip (-1)] id $ cfgNext ci p (annot s)
--}
+scrapeAssertQuals :: ConfigInfo Int
+                  -> [String]
+scrapeAssertQuals ci
+  = []
+    

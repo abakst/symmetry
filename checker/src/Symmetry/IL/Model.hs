@@ -2,7 +2,7 @@
 {-# Language FunctionalDependencies #-}
 module Symmetry.IL.Model where
 
-import Prelude hiding (and, or)
+import Prelude hiding (and, or, pred)
 import Data.Generics
 import Data.Char
 import Symmetry.IL.AST
@@ -85,13 +85,14 @@ ptrR ci p t = pidTyName ci p t "ptrR"
 ptrW :: ConfigInfo Int -> Pid -> ILType -> String           
 ptrW ci p t = pidTyName ci p t "ptrW"
 
-data Rule e = Rule Pid e e --[(String, e)], [((Pid, ILType), e)])
+data Rule e = Rule Pid e (Maybe e) e -- p grd assert body
               deriving Show
 
 class ILModel e where
-  true     :: e
-  false    :: e
-  expr     :: Pid -> ILExpr -> e
+  true      :: e
+  false     :: e
+  expr      :: ConfigInfo Int -> Pid -> ILExpr -> e
+  pred      :: ConfigInfo Int -> Pid -> ILPred -> e
   add       :: e -> e -> e
   incr      :: e -> e
   decr      :: e -> e
@@ -102,12 +103,14 @@ class ILModel e where
   lt        :: e -> e -> e
   lte       :: e -> e -> e
   int       :: Int -> e
+
   readPC    :: ConfigInfo Int -> Pid -> e
   readPCCounter :: ConfigInfo Int -> Pid -> e -> e
   readPtrR  :: ConfigInfo Int -> Pid -> ILType -> e
   readPtrW  :: ConfigInfo Int -> Pid -> Pid -> ILType -> e
   readRoleBound :: ConfigInfo Int -> Pid -> e
   readState :: ConfigInfo Int -> Pid -> String -> e
+
   nonDet    :: ConfigInfo Int -> Pid -> e
   matchVal  :: ConfigInfo Int -> Pid -> e -> [(ILExpr, e)] -> e
 
@@ -121,7 +124,7 @@ class ILModel e where
   getMessage :: ConfigInfo Int -> Pid -> (Var, ILType) -> e
 
   -- rule
-  rule     :: ConfigInfo Int -> Pid -> e -> e -> Rule e
+  rule     :: ConfigInfo Int -> Pid -> e -> Maybe e -> e -> Rule e
 
   printModel :: ConfigInfo Int -> [Rule e] -> String
   printCheck :: ConfigInfo Int -> [Rule e] -> String
@@ -150,6 +153,8 @@ nextPC ci p s = nextPC' ci p $ cfgNext ci p (annot s)
     nextPC' ci p (Just [s])
       = setPC ci p (int (annot s))
 
+mkRule :: ILModel e => ConfigInfo Int -> Pid -> e -> e -> Rule e
+mkRule ci p grd bdy = rule ci p grd Nothing bdy
 -------------------------
 -- Statement "semantics"    
 -------------------------
@@ -161,7 +166,7 @@ ruleOfStmt :: ILModel e => ConfigInfo Int -> Pid -> Stmt Int -> [Rule e]
 -- p!e::t
 -------------------------
 ruleOfStmt ci p s@SSend { sndPid = EPid q, sndMsg = (t, e) }
-  = [rule ci p grd (seqUpdates ci p upds)]
+  = [mkRule ci p grd (seqUpdates ci p upds)]
   where
     grd  = pcGuard ci p s
     upds = [ incrPtrW ci p q t
@@ -170,7 +175,7 @@ ruleOfStmt ci p s@SSend { sndPid = EPid q, sndMsg = (t, e) }
            ]
     
 ruleOfStmt ci p s@SSend { sndPid = x@EVar {} , sndMsg = (t, e) }
-  = [ rule ci p grd (matchVal ci p (expr p x) [(EPid q, ups q) | q <- pids ci]) ]
+  = [ mkRule ci p grd (matchVal ci p (expr ci p x) [(EPid q, ups q) | q <- pids ci]) ]
   -- = concat [ matchVal ci p x (EPid q) <$> ruleOfStmt ci p (sub q) | q <- pids ci ]
     where
       grd = pcGuard ci p s
@@ -184,7 +189,7 @@ ruleOfStmt ci p s@SSend { sndPid = x@EVar {} , sndMsg = (t, e) }
 -- ?(v :: t)
 -------------------------
 ruleOfStmt ci p s@SRecv{ rcvMsg = (t, v) }
-  = [ rule ci p grd (seqUpdates ci p upds) ]
+  = [ mkRule ci p grd (seqUpdates ci p upds) ]
   where
     grd  = pcGuard ci p s `and`
            (readPtrR ci p t `lt` readPtrW ci p p t)
@@ -197,24 +202,24 @@ ruleOfStmt ci p s@SRecv{ rcvMsg = (t, v) }
 -- case x of ...    
 -------------------------
 ruleOfStmt ci p s@SCase{caseLPat = V l, caseRPat = V r}
-  = [ rule ci p grd (matchVal ci p (expr p $ EVar (caseVar s)) cases)]
+  = [ mkRule ci p grd (matchVal ci p (expr ci p $ EVar (caseVar s)) cases)]
   where
     grd = pcGuard ci p s
     mkLocal v = EVar (V ("local_" ++ v))
     cases = [ (ELeft (mkLocal l), lUpdates)
             , (ERight (mkLocal r), rUpdates)
             ]
-    lUpdates = seqUpdates ci p [ setState ci p [(l, expr p $ mkLocal l)]
+    lUpdates = seqUpdates ci p [ setState ci p [(l, expr ci p $ mkLocal l)]
                                , setPC ci p (int $ annot (caseLeft s))
                                ]
-    rUpdates = seqUpdates ci p [ setState ci p [(r, expr p $ mkLocal r)]
+    rUpdates = seqUpdates ci p [ setState ci p [(r, expr ci p $ mkLocal r)]
                                , setPC ci p (int $ annot (caseRight s))
                                ]
 -------------------------
 -- nondet choice
 -------------------------
 ruleOfStmt ci p s@SNonDet{}
-  = [ rule ci p (grd s') (us s') | s' <- nonDetBody s ]
+  = [ mkRule ci p (grd s') (us s') | s' <- nonDetBody s ]
   where
     grd s' = pcGuard ci p s `and`
             (nonDet ci p `eq` (int (annot s')))
@@ -223,35 +228,45 @@ ruleOfStmt ci p s@SNonDet{}
 -------------------------
 -- for (i < n) ...
 -------------------------
-ruleOfStmt ci p s@SIncr { incrVar = (V v), annot = a }
-  = [ rule ci p b (seqUpdates ci p upds) ]
+ruleOfStmt ci p s@SIncr { incrVar = V v }
+  = [ mkRule ci p b (seqUpdates ci p upds) ]
   where
     b    = pcGuard ci p s
     upds = [ setState ci p [(v, incr (readState ci p v))]
            , nextPC ci p s
            ]
     
-ruleOfStmt ci p s@SIter { iterVar = (V v), iterSet = set, annot = a }
-  = [ rule ci p b    (seqUpdates ci p loopUpds)
-    , rule ci p notb (seqUpdates ci p exitUpds)
+ruleOfStmt ci p s@SIter { iterVar = V v, iterSet = set, annot = a }
+  = [ mkRule ci p b    (seqUpdates ci p loopUpds)
+    , mkRule ci p notb (seqUpdates ci p exitUpds)
     ]
   where
     b        = pcGuard ci p s `and` lt ve se
-    notb     = pcGuard ci p s `and` lte se ve
+    notb     = pcGuard ci p s `and` (lneg (lt ve se))
     loopUpds = [ setPC ci p (int i) ]
     exitUpds = [ setPC ci p (int j) ]
     ve       = readState ci p v
     se       = case set of
-                 S s'    -> readState ci p s'
+                 S _    -> case setBound ci set of
+                              Just (Known _ n) -> int n
+                              Just (Unknown _ (V x)) -> readState ci p x
                  SInts n -> int n
     (i, j)   = case (annot <$>) <$> cfgNext ci p a of
-                 Just [i, j] -> (j, i)
+                 Just [i, j] -> (i, j)
                  Just [i]    -> (i, -1)
+-------------------------
+-- assert e
+-------------------------
+ruleOfStmt ci p s@SAssert{}
+  = [ rule ci p (pcGuard ci p s) q (nextPC ci p s) ]
+  where
+    q = Just (pred ci p (assertPred s))
+
 -------------------------
 -- catch all
 -------------------------
 ruleOfStmt ci p s
-  = [ rule ci p (pcGuard ci p s) (nextPC ci p s) ]
+  = [ mkRule ci p (pcGuard ci p s) (nextPC ci p s) ]
 
 ruleOfProc :: (ILModel e) => ConfigInfo Int -> Process Int -> [Rule e]
 ruleOfProc c (p, s)

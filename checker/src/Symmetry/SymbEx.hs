@@ -22,7 +22,7 @@ import           Control.Monad.State hiding (join, get, put)
 import           Symmetry.Language.AST as L
 import qualified Symmetry.IL.AST       as IL
 
-data Var a = V Int deriving (Ord, Eq, Show)
+data Var a = V String deriving (Ord, Eq, Show)
 
 type REnv = M.Map Role (AbsVal Int, IL.Stmt ())
 
@@ -62,7 +62,8 @@ stateToConfigs state
           kvs   = M.toList renv
           concProcs = [ (IL.PConc n, s) | (S (RS n), (_, s)) <- kvs ]
           absProcs  = [ (roleToPid r, s) | (M r, (_, s)) <- kvs ]
-          setBounds = [ IL.Bounded (roleToSet r) x | (M r, (AInt _ (Just x), _)) <- kvs ]
+          setBounds = [ IL.Known   (roleToSet r) x | (M r, (AInt _ (Just x), _)) <- kvs ] ++
+                      [ IL.Unknown (roleToSet r) (varToIL x) | (M r, (AInt (Just x) _, _)) <- kvs ]
           sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
           procs = concProcs ++ absProcs
           globals = mapMaybe lookupType
@@ -119,7 +120,7 @@ freshTId = do n <- gets ntypes
               return n
 
 freshVar :: SymbExM (Var a)
-freshVar = V <$> freshInt
+freshVar = (V . show) <$> freshInt
 
 fresh :: AbsVal t -> SymbExM (AbsVal t)
 fresh (AUnit _)    = AUnit . Just <$> freshVar
@@ -127,8 +128,8 @@ fresh (AInt _ n)   = (\v -> return (AInt (Just v) n))  =<< freshVar
 fresh (AString _)  = AString . Just <$> freshVar
 fresh (ASum _ l r) = do v  <- Just <$> freshVar
                         i  <- freshInt
-                        fl <- mapM ((setVar (V i) <$>) . fresh) l
-                        fr <- mapM ((setVar (V i) <$>) . fresh) r
+                        fl <- mapM ((setVar (V (show i)) <$>) . fresh) l
+                        fr <- mapM ((setVar (V (show i)) <$>) . fresh) r
                         return $ ASum v fl fr
 fresh (AProd _ l r) = do v  <- Just <$> freshVar
                          fl <- fresh l
@@ -155,6 +156,7 @@ data AbsVal t where
   APidCompare :: (Maybe (Var (Pid RSing)), L.Pid (Maybe RSing))
               -> (Maybe (Var (Pid RSing)), L.Pid (Maybe RSing))
               -> AbsVal Boolean
+  APred       :: Maybe (Var Boolean) -> Maybe IL.ILPred -> AbsVal Boolean
   --
   AUnit      :: Maybe (Var ()) -> AbsVal ()
   AInt       :: Maybe (Var Int) -> Maybe Int -> AbsVal Int
@@ -333,13 +335,13 @@ joinStmt s1 s2
   = IL.SNonDet [s1, s2] ()
 
 varToIL :: Var a -> IL.Var
-varToIL (V x) = IL.V ("x_" ++ show x)
+varToIL (V x) = IL.V ("x_" ++ x)
 
 varToILSet :: Var a -> IL.Set
-varToILSet (V x) = IL.S ("x_" ++ show x)
+varToILSet (V x) = IL.S ("x_" ++ x)
 
 varToILSetVar :: Var a -> IL.Set
-varToILSetVar (V x) = IL.SV ("x_" ++ show x)
+varToILSetVar (V x) = IL.SV ("x_" ++ x)
 
 pidAbsValToIL :: (?callStack :: CallStack)
               => AbsVal (Pid RSing) -> IL.ILExpr
@@ -360,11 +362,11 @@ absToIL (AArrow _ _)  = error "TBD: absToIL AArrow"
 absToIL (ARoleSing _ _)  = error "TBD: absToIL ARoleSing"
 absToIL (ARoleMulti _ _)  = error "TBD: absToIL ARoleMulti"
 
-absToIL (AUnit _)         = [IL.EUnit]
-absToIL (AInt (Just x) _) = [IL.EVar (varToIL x)]
-absToIL (AInt  _ _)       = [IL.EInt]
-absToIL (AString _)       = [IL.EString]
-absToIL (AList _ _)       = error "TBD: absToIL List"
+absToIL (AUnit _)          = [IL.EUnit]
+absToIL (AInt (Just x) _)  = [IL.EVar (varToIL x)]
+absToIL (AInt  _ (Just i)) = [IL.EInt i]
+absToIL (AString _)        = [IL.EString]
+absToIL (AList _ _)        = error "TBD: absToIL List"
 
 absToIL (APidElem Nothing (Just i) (Pid (Just r)))
   = [IL.EPid (IL.PAbs (varToIL i) (roleToSet r))]
@@ -523,7 +525,7 @@ symSpawnMany r n p = SE $ do (ARoleMulti _ r') <- runSE r
                              return $ AProc Nothing skip (APidMulti Nothing (Pid (Just r')))
 
 -------------------------------------------------
--- | The Syntax-directed Symbolic Execution
+-- | The Symbolic Execution
 -------------------------------------------------
 
 -------------------------------------------------
@@ -564,19 +566,31 @@ symNeg :: SymbEx Int -> SymbEx Int
 symNeg _ = arb
 
 -------------------------------------------------
-symEq, symGt, symLt :: Ord a
-                    => SymbEx a
-                    -> SymbEx a
-                    -> SymbEx Boolean
+symEq :: Eq a
+      => SymbEx a
+      -> SymbEx a
+      -> SymbEx Boolean
 -------------------------------------------------
 symEq a b  = SE $ do av <- runSE a
                      bv <- runSE b
-                     case (av, bv) of
-                       (APid ax apid, APid bx bpid) ->
-                         return $ APidCompare (ax, apid) (bx, bpid)
-                       _ ->
-                         runSE arb
-                       
+                     return $ APred Nothing (Just (eqPred av bv))
+
+eqPred :: AbsVal a -> AbsVal a -> IL.ILPred
+eqPred (AInt (Just x) _) (AInt (Just y) _)
+  = IL.ILBop IL.Eq (IL.EVar (varToIL x)) (IL.EVar (varToIL y))
+eqPred (AInt (Just x) _) (AInt _ (Just i))
+  = IL.ILBop IL.Eq (IL.EInt i) (IL.EVar (varToIL x))
+eqPred (AInt _ (Just i)) (AInt (Just x) _)
+  = IL.ILBop IL.Eq (IL.EInt i) (IL.EVar (varToIL x))
+eqPred _ _
+  = undefined
+
+-------------------------------------------------
+symGt, symLt :: Ord a
+             => SymbEx a
+             -> SymbEx a
+             -> SymbEx Boolean
+-------------------------------------------------
 symGt _ _  = arb
 symLt _ _  = arb
 
@@ -638,6 +652,22 @@ symMatchList l nilCase consCase
                       cv <- runSE $ symApp consCase (pair (SE . return $ v) tl)
                       return (cv `join` nilv)
               AList _ Nothing  -> return nilv
+
+-------------------------------------------------
+symAssert :: SymbEx Boolean -> SymbEx (Process SymbEx ())
+-------------------------------------------------
+symAssert exp
+  = SE $ do bool <- runSE exp
+            case bool of
+              APred _ (Just e) -> return $ AProc Nothing (assert e) (AUnit Nothing)
+  where
+    assert e = IL.SAssert { IL.assertPred = e, IL.annot = () }
+
+-------------------------------------------------
+symReadGhost :: String -> SymbEx (Process SymbEx Int)
+-------------------------------------------------
+symReadGhost s
+  = SE . return $ AProc Nothing skip $ AInt (Just $ V s) Nothing
 
 -------------------------------------------------
 symSelf :: SymbEx (Process SymbEx (Pid RSing))
@@ -711,12 +741,14 @@ symNewRMulti
             return (AProc Nothing skip (ARoleMulti Nothing (RM n)))
 
 -------------------------------------------------
-symDoN :: SymbEx Int
+symDoN :: String
+       -> SymbEx Int
        -> SymbEx (Int -> Process SymbEx a)
        -> SymbEx (Process SymbEx [a])
 -------------------------------------------------
-symDoN n f
-  = SE $ do v <- freshVar
+symDoN s n f
+  = SE $ do -- v <- freshVar
+            let v = V s
             AInt x nv <- runSE n
             AArrow _ g <- runSE f
             AProc _ s _ <- runSE (g (AInt Nothing Nothing))
@@ -730,6 +762,7 @@ symDoN n f
                       sv = IL.SVar v  ()
                   in IL.SLoop v ((s `seqStmt` sv) `joinStmt` skip) ()
 
+-------------------------------------------------
 symLookup :: SymbEx (Pid RMulti)
           -> SymbEx Int
           -> SymbEx (Pid RSing)
@@ -741,20 +774,21 @@ symLookup p i
                    
 
 -------------------------------------------------
-symDoMany :: SymbEx (Pid RMulti)
+symDoMany :: String
+          -> SymbEx (Pid RMulti)
           -> SymbEx (Pid RSing -> Process SymbEx a)
           -> SymbEx (Process SymbEx [a])
 -------------------------------------------------
-symDoMany p f
+symDoMany s p f
   = SE $ do APidMulti x pid {- (Pid (Just r)) -} <- runSE p
             AArrow _ g                 <- runSE f
+            -- v <- freshVar
+            let v = V s
             case (x, pid) of
               (_, Pid (Just r)) -> do
-                v <- freshVar
                 AProc _ s _  <- runSE (g (APidElem Nothing (Just v) (Pid (Just r))))
                 return $ AProc Nothing (iter v r s) (error "TBD: symDoMany")
               (Just x, _) -> do
-                v <- freshVar
                 AProc _ s _  <- runSE (g (APidElem (Just x) (Just v) (Pid Nothing)))
                 return $ AProc Nothing (iterVar v x s) (error "TBD: symDoMany")
     where
@@ -864,7 +898,7 @@ symMatchSum (ASum x vl vr) l r
         (v1, v2) <- case x of
                       Nothing -> error "does this happen?" -- return (Nothing, Nothing)
                       _       -> do i  <- freshInt -- instead of freshVar to reuse var in diff. branch
-                                    return (V i, V i)
+                                    return (V (show i), V (show i))
         val1 <- setVar v1 <$> runSE arb
         val2 <- setVar v2 <$> runSE arb
         c1 <- runSE . app l . SE . return $ val1
@@ -934,6 +968,8 @@ instance Symantics SymbEx where
 
   lam       = symLam
   app       = symApp
+  readGhost = symReadGhost
+  assert    = symAssert
   self      = symSelf
   bind      = symBind
   fixM      = symFixM

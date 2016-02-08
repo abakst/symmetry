@@ -65,3 +65,17 @@ mkCInfo c = CInfo { config    = c
 
 lookupTy :: ConfigInfo a -> ILType -> Integer
 lookupTy ci t = fromJust . List.lookup t $ tyMap ci
+
+setBound :: ConfigInfo Int -> Set -> Maybe SetBound
+setBound ci s
+  | not (List.null known)   = Just $ head known
+  | not (List.null unknown) = Just $ head unknown
+  | otherwise               = Nothing
+  where
+    bs = cSets (config ci)
+    known = [ k | k@(Known s' _) <- bs, s == s' ]
+    unknown = [ u | u@(Unknown s' _) <- bs, s == s' ]
+
+setBoundVars :: ConfigInfo a -> [Var]
+setBoundVars ci
+  = [ v | Unknown _ v <- cSets (config ci) ]
