@@ -12,14 +12,13 @@ import Symmetry.Language
 import Symmetry.Verify
 
 pingServer :: (DSL repr) => repr (Pid RSing -> Process repr ())
-pingServer = lam $ \p -> do send p tt
+pingServer = lam $ \_ -> return tt
 
 master :: (DSL repr) => repr (RMulti -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do myPid <- self
       ps <- spawnMany r n (app pingServer myPid)
-      doMany "loop_0" ps (lam $ \_ -> do (_ :: repr ())  <- recv
-                                         return tt)
+      doMany "loop_0" ps (lam $ \p -> send p tt)
       return tt
 
 mainProc :: (DSL repr) => repr (Int -> ())

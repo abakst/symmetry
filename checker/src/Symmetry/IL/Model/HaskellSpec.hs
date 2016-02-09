@@ -2,11 +2,11 @@
 {-# LANGUAGE ViewPatterns #-}
 module Symmetry.IL.Model.HaskellSpec where
 
-import           Data.Char
+-- import           Data.Char
 import           Data.Generics
-import qualified Data.IntMap.Strict as M
-import qualified Data.IntSet as S
-import qualified Data.Map.Strict as Map
+-- import qualified Data.IntMap.Strict as M
+-- import qualified Data.IntSet as S
+-- import qualified Data.Map.Strict as Map
 import           Data.List
 import           Data.Maybe
 import           Language.Haskell.Exts.Pretty
@@ -65,6 +65,9 @@ eEqZero e = eEq e eZero
 
 eApp :: Symbolic a => a -> [F.Expr] -> F.Expr            
 eApp f = EApp (dummyLoc $ symbol f)
+
+eImp p q
+  = F.PImp p q
 
 pidToExpr :: Pid -> F.Expr        
 pidToExpr p@(PConc _) = eVar $ pid p        
@@ -353,7 +356,7 @@ scrapeIterQuals ci
     go :: Pid -> Stmt Int -> [String]
     go p SIter { iterVar = V v, iterSet = S set, iterBody = b, annot = a }
       = [mkQual "IterInv" [("v", stateRecordCons)]
-        (F.PImp (eReadState "v" (pc p) `eGt` F.expr a) (eReadState "v" v `eEq` eReadState "v" set))] ++
+        (eImp (eReadState "v" (pc p) `eGt` F.expr a) (eReadState "v" v `eEq` eReadState "v" set))] ++
         iterQuals p v set b
     go _ _
       = []
@@ -371,7 +374,7 @@ iterQuals p@(PConc _) v set b
 
 pcImpl :: Pid -> Int -> F.Expr -> F.Expr
 pcImpl p i e
-  = F.PImp (eReadState "v" (pc p) `eEq` (F.expr i)) e
+  = eImp (eReadState "v" (pc p) `eEq` (F.expr i)) e
 
 scrapeAssertQuals :: ConfigInfo Int
                   -> [String]
