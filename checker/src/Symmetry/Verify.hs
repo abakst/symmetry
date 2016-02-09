@@ -27,6 +27,7 @@ import Text.PrettyPrint.Leijen  (pretty, nest, text, (<>), line, hPutDoc)
 import qualified Data.Map.Strict as M
 
 data MainOptions = MainOptions { optVerify  :: Bool
+                               , optQC      :: Bool
                                , optVerbose :: Bool
                                , optProcess :: Bool
                                , optModel   :: Bool
@@ -36,6 +37,7 @@ data MainOptions = MainOptions { optVerify  :: Bool
 instance Options MainOptions where
   defineOptions
     = MainOptions <$> simpleOption "verify" False "Run Verifier"
+                  <*> simpleOption "qc" False "Generate QuickCheck files"
                   <*> simpleOption "verbose" False "Verbose Output"
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
                   <*> simpleOption "dump-model" False "Dump Spin model"
@@ -69,32 +71,31 @@ runCmd verb pre wd c
                          _           -> do
                            putStrLn =<< hGetContents h
                            exitWith (ExitFailure 126)
-copyMapModule d
+copyMapModule opt d
   = do f <- getDataFileName ("include" </> "SymMap.hs")
        copyFile f (d </> "SymMap.hs")
 
-copyVectorModule d
-  = do f <- getDataFileName ("include" </> "SymVector.hs")
+copyVectorModule opt d
+  = do let f' = if optQC opt
+                   then "SymVectorQC.hs"
+                   else "SymVector.hs"
+       f <- getDataFileName ("include" </> f')
        copyFile f (d </> "SymVector.hs")
 
-copyBoilerModule d
+copyBoilerModule opt d
   = do f <- getDataFileName ("include" </> "SymBoilerPlate.hs")
        copyFile f (d </> "SymBoilerPlate.hs")
 
-includes
-  = [ "SymMap.hs", "SymBoilerPlate.hs", "SymVector.hs" ]
-
-copyIncludes d
-  = mapM_ go includes
-  where
-    go f = do h <- getDataFileName ("include" </> f)
-              copyFile h (d </> f)
+copyIncludes opt d =
+  mapM_ (\f -> f opt d) [ copyMapModule
+                        , copyVectorModule
+                        , copyBoilerModule ]
 
 run1Cfg :: MainOptions -> FilePath -> Config () -> IO Bool
 run1Cfg opt outd cfg
   = do when (optModel opt) $ do
          createDirectoryIfMissing True outd
-         copyIncludes outd
+         copyIncludes opt outd
        if (optVerify opt) then do
          let (cinfo, m) = generateModel cfg                   
              f          = printHaskell cinfo m
