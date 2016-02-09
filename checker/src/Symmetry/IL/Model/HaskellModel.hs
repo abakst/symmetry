@@ -183,6 +183,12 @@ hExpr ci p (ERight e)
 hPred :: ConfigInfo Int -> Pid -> ILPred -> HaskellModel
 hPred ci _ ILPTrue
   = ExpM $ vExp "True"
+hPred ci p (ILNot b)
+  = ExpM $ (paren (metaFunction "not" [unExp $ hPred ci p b]))
+hPred ci p (ILAnd b1 b2)
+  = ExpM $ InfixApp (unExp $ hPred ci p b1) opAnd (unExp $ hPred ci p b2)
+hPred ci p (ILOr b1 b2)
+  = ExpM $ InfixApp (unExp $ hPred ci p b1) opOr (unExp $ hPred ci p b2)
 hPred ci p (ILBop o e1 e2)
   = ExpM $ paren (infixApp (unExp $ hExpr ci p e1)
                            (qop o)

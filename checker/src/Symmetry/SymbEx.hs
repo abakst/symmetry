@@ -597,7 +597,14 @@ symLt _ _  = arb
 -------------------------------------------------
 symNot :: SymbEx Boolean -> SymbEx Boolean
 -------------------------------------------------
-symNot _   = arb
+symNot b   = SE $ do v <- runSE b
+                     return $ case v of
+                                APred Nothing Nothing ->
+                                  APred Nothing Nothing
+                                APred Nothing (Just p) ->
+                                  APred Nothing (Just (IL.ILNot p))
+                                _ ->
+                                  error "TBD: symNot"
 
 -------------------------------------------------
 symAnd, symOr :: SymbEx Boolean

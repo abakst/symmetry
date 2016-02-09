@@ -224,7 +224,7 @@ stateDecl ci
                            ]
 
     dataReft     = printf "{-@ %s @-}" (pp dataDecl)
-    fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
+    fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs ++ glSets
     absFs    = concat [ [mkBound p, mkCounter p, mkUnfold p] | p <- pids ci, isAbs p ]
     pcFs     = [ mkPC p (pc p) | p <- pids ci ]
     ptrFs    = [ mkInt p (ptrR ci p t) | p <- pids ci, t <- fst <$> tyMap ci] ++
@@ -233,6 +233,7 @@ stateDecl ci
     intVarFs = [ mkInt p v | (p, v) <- intVars (stateVars ci) ]
     globFs   = [ ([name v], valHType ci) | v <- globVals (stateVars ci) ] ++
                [ ([name v], intType)     | V v <- setBoundVars ci ]
+    glSets   = [ ([name v], intType)     | S v <- globSets (stateVars ci) ]
 
     mkUnfold p  = ([name $ pidUnfold p], intType)
     mkBound p   = ([name $ pidBound p], intType)
@@ -311,7 +312,9 @@ initSpecOfConfig ci
     where
       concExpr   = pAnd  ((initOfPid ci <$> cProcs (config ci)) ++
                           [ eEqZero (eReadState (symbol "v") (symbol v))
-                          | V v <- iters ] ++
+                            | V v <- iters ] ++
+                          [ eGt (eReadState (symbol "v") (symbol v)) eZero
+                            | S v <- globSets (stateVars ci) ] ++ -- TODO do not assume this...
                           catMaybes [ boundPred <$> setBound ci s | (PAbs _ s) <- pids ci ])
       iters      = everything (++) (mkQ [] goVars) (cProcs (config ci))
       goVars :: Stmt Int -> [Var]
@@ -356,10 +359,15 @@ scrapeIterQuals ci
     go :: Pid -> Stmt Int -> [String]
     go p SIter { iterVar = V v, iterSet = S set, iterBody = b, annot = a }
       = [mkQual "IterInv" [("v", stateRecordCons)]
-        (eImp (eReadState "v" (pc p) `eGt` F.expr a) (eReadState "v" v `eEq` eReadState "v" set))] ++
+          (eImp (eReadState "v" (pc p) `eEq` F.expr i)
+                (eReadState "v" v `eEq` eReadState "v" set)) | i <- pcAfter a] ++
         iterQuals p v set b
     go _ _
       = []
+    pcAfter i = (-1) : [ j | j <- pcVals, j > i ]
+    pcVals :: [Int]
+    pcVals = nub $ everything (++) (mkQ [] (return . annot)) (cProcs $ config ci)
+        
 
 iterQuals :: Pid -> String -> String -> Stmt Int -> [String]
 iterQuals p@(PConc _) v set b

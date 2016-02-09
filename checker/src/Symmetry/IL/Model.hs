@@ -246,9 +246,11 @@ ruleOfStmt ci p s@SIter { iterVar = V v, iterSet = set, annot = a }
     exitUpds = [ setPC ci p (int j) ]
     ve       = readState ci p v
     se       = case set of
-                 S _    -> case setBound ci set of
-                              Just (Known _ n) -> int n
-                              Just (Unknown _ (V x)) -> readState ci p x
+                 S ss    -> readState ci p ss
+                            -- case setBound ci set of
+                            --   Just (Known _ n) -> int n
+                            --   Just (Unknown _ (V x)) -> readState ci p x
+                            --   Nothing -> readState ci p ss
                  SInts n -> int n
     (i, j)   = case (annot <$>) <$> cfgNext ci p a of
                  Just [i, j] -> (i, j)

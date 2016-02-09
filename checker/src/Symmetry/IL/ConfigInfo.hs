@@ -13,6 +13,7 @@ type TyMap = [(ILType, Integer)]
 data ConfigState = CState { intVars     :: [(Pid, String)]
                           , valVars     :: [(Pid, String)]
                           , globVals    :: [String]
+                          , globSets    :: [Set]
                           } 
 
 data ConfigInfo a = CInfo { config     :: Config a
@@ -26,11 +27,13 @@ mkCState :: Config Int -> ConfigState
 mkCState c = CState { valVars  = vs
                     , intVars  = is
                     , globVals = gs
+                    , globSets = gsets
                     }
   where
     vs   = [ (p, v) | (p,s)  <- cProcs c, V v <- recvVars s ++ patVars s ]
     is   = [ (p, i) | (p, s) <- cProcs c, V i <- everything (++) (mkQ [] intVar) s ]
     gs   = [ v | (V v, _) <- cGlobals c ]
+    gsets = cGlobalSets c
 
     intVar :: Stmt Int -> [Var]
     intVar (SIter { iterVar = i }) = [i]

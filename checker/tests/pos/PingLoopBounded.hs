@@ -13,13 +13,15 @@ import Symmetry.Verify
 
 pingServer :: forall repr. (DSL repr) => repr (Int -> Process repr ())
 pingServer = lam $ \n ->
-               do doN n (lam $ \_ -> (recv :: repr (Process repr ())))
+               do doN "loop1" n (lam $ \_ -> (recv :: repr (Process repr ())))
                   return tt
 
 master :: (DSL repr) => repr (RSing -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do p <- spawn r (app pingServer n)
-      doN n (lam $ \_ -> send p tt)
+      doN "loop0" n (lam $ \_ -> send p tt)
+      c <- readGhost "loop0"
+      assert (c `eq` n)
       return tt
 
 mainProc :: (DSL repr) => repr (Int -> ())
@@ -27,4 +29,4 @@ mainProc = lam $ \n -> exec $ do r <- newRSing
                                  app (app master r) n
 
 main :: IO ()
-main = checkerMain (int 2 |> mainProc)
+main = checkerMain (arb |> mainProc)

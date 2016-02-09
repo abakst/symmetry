@@ -239,11 +239,12 @@ unboundSets s
   = allSetVars \\ boundSetVars
   where
     allSetVars = nub $ listify isSetVar s
+    isSetVar (S _)       = True
     isSetVar (SV _)      = True
     isSetVar _           = False
     boundSetVars         = nub $ everything (++) (mkQ [] go) s
     go :: Data a => Stmt a -> [Set]
-    go (SRecv (_,_) _)   = []
+    go (SRecv (_, V x) _)= [S x] -- TODO
     go _                 = []
 
 endLabels :: (Data a, Typeable a) => Stmt a -> [LVar]

@@ -7,7 +7,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 module Main where
 
-import Prelude hiding ((>>=), (>>), fail, return) 
+import Prelude hiding ((>>=), (>>), fail, return, not) 
 import Symmetry.Language
 import Symmetry.Verify
 
@@ -23,6 +23,7 @@ master = lam $ \r -> lam $ \n ->
       -- One of the invariants...
       c    <- readGhost "l0"
       assert (c `eq` n)
+      assert (not (c `eq` n))
 
       return tt
   where
