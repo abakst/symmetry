@@ -300,6 +300,7 @@ instance ILModel HaskellModel where
   rule       = hRule
   matchVal   = hMatchVal
   printModel = printHaskell
+  printCheck = printQCFile
 
 
 ilExpPat (EPid q)
@@ -400,6 +401,21 @@ initialSched _
     fnType = TyFun (TyCon (UnQual (name stateRecordCons)))
                    schedType
 
+    -- -- Match noLoc (name runState) (pat [rulesPid rules]) Nothing (mkGuardedRhss rules) Nothing
+    -- totalRunState = Match noLoc (name runState)
+    --                       (pat [rulesPid rules])
+    --                       Nothing
+    --                       (UnGuardedRhs (Con $ Special UnitCon))
+    --                       Nothing
+
+totalCall :: ConfigInfo Int -> Decl
+totalCall ci =
+  FunBind [Match noLoc (name runState) args Nothing rhs Nothing]
+    where
+      bufs = [ wildcard | _ <- pids ci, _ <- tyMap ci ]
+      args = wildcard : bufs ++ [wildcard]
+      rhs  = UnGuardedRhs $ Con $ Special $ UnitCon
+
 initialCall :: ConfigInfo Int -> Decl
 initialCall ci =
   nameBind noLoc (name "check") call
@@ -416,7 +432,7 @@ printHaskell ci rs = unlines [ header
                              ]
   where
     header = unlines [ "{-# Language RecordWildCards #-}"
-                     , "module SymVerify () where"
+                     , "module SymVerify where"
                      , "import SymVector"
                      , "import SymMap"
                      , "import SymBoilerPlate"
@@ -428,6 +444,120 @@ printHaskell ci rs = unlines [ header
                    , unlines (prettyPrint <$> initialSched ci)
                    , prettyPrint (initialCall ci)
                    , printRules ci rs dl
+                   , prettyPrint (totalCall ci)
                    , ""
                    , initSpecOfConfig ci
                    ]
+
+
+
+arbValStr = "instance (Arbitrary a) => Arbitrary (Val a) where \n\
+\  arbitrary = oneof [ return VUnit \n\
+\                    , return VUnInit \n\
+\                    , VInt    <$> arbitrary \n\
+\                    , VString <$> arbitrary \n\
+\                    , VPid    <$> arbitrary \n\
+\                    , VInL    <$> arbitrary \n\
+\                    , VInR    <$> arbitrary \n\
+\                    , VPair   <$> arbitrary <*> arbitrary ]"
+
+arbVecStr="instance (Arbitrary a) => Arbitrary (Vec a) where \n\
+\   arbitrary = do a <- arbitrary \n\
+\                  return $ mkVec a"
+
+printQCFile :: ConfigInfo Int -> [Rule HaskellModel] -> String
+printQCFile ci _
+  = unlines lhFile
+  where
+    lhFile = [ prettyPrint modVerify
+             , ""
+             ] ++ spec
+    modVerify = Module noLoc (ModuleName "QC") [] Nothing (Just exports) imports decls
+    exports   = []
+    decls     = []
+    imports   = mkImport <$> [ "SymVector"
+                             , "SymMap"
+                             , "SymVerify"
+                             , "SymBoilerPlate"
+                             , "Language.Haskell.Liquid.Prelude"
+                             , "Test.QuickCheck"
+                             ]
+    mkImport m = ImportDecl { importLoc       = noLoc
+                            , importModule    = ModuleName m
+                            , importQualified = False
+                            , importSrc       = False
+                            , importAs        = Nothing
+                            , importSpecs     = Nothing
+                            , importSafe      = False
+                            , importPkg       = Nothing
+                            }
+    spec =  "main :: IO ()"
+            : (prettyPrint  $  qcMainFuncDecl ci) : ""
+            : arbValStr : ""
+            : arbVecStr : ""
+            : concatMap (\s -> [s,""]) (prettyPrint <$> arbitraryDecls ci)
+
+
+arbitraryDecls :: ConfigInfo Int -> [Decl]
+arbitraryDecls ci = [ arbitraryPidPreDecl ci
+                    , arbitraryStateDecl  ci ]
+
+-- main =  do quickCheck
+--              (\s plist -> runState s ... (getList plist) == ())
+qcMainFuncDecl    :: ConfigInfo Int -> Decl
+qcMainFuncDecl ci =  FunBind [ Match noLoc (name "main") [] Nothing (UnGuardedRhs rhs) Nothing ]
+                     where pvarn n    = pvar $ name n
+                           varn n     = Var $ UnQual $ name n
+                           emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
+                           bufs       = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
+                           pidl       = varn "plist"
+                           exp2       = appFun (varn runState) ((varn "s") : bufs ++ [pidl])
+                           f          = Lambda noLoc
+                                                 [pvarn "s", pvarn "plist"]
+                                                 (InfixApp exp2
+                                                             (QConOp $ UnQual $ Symbol "==")
+                                                             (Con $ Special $ UnitCon))
+                           exp        = App (varn "quickCheck") (Paren f)
+                           rhs        = Do [Qualifier exp]
+
+-- instance Arbitrary Pid_pre where
+--         arbitrary = elements [...]
+arbitraryPidPreDecl    :: ConfigInfo Int -> Decl
+arbitraryPidPreDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
+                          where tc_name = UnQual $ name "Arbitrary"
+                                tv_name = TyVar $ name pidPre
+                                var' s  = var $ name s
+                                pid_ts  = [ var' $ pidConstructor p | p <- (pids ci) ]
+                                arb_rhs = UnGuardedRhs (app (var' "elements") (listE pid_ts))
+                                arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
+
+-- instance Arbitrary State where
+--         arbitrary
+--           = State <$> .. <*> ...
+arbitraryStateDecl    :: ConfigInfo Int -> Decl
+arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
+                         where tc_name   = UnQual $ name "Arbitrary"
+                               tv_name   = TyVar $ name stateRecordCons
+                               var' s    = var $ name s
+                               fmap' f x = InfixApp f (QConOp $ UnQual $ Symbol "<$>") x
+                               fapp' f g = InfixApp f (QConOp $ UnQual $ Symbol "<*>") g
+                               vh:vt     = stateVarArbs ci
+                               gen_exp   = foldl (\e v -> fapp' e v)
+                                                 (fmap' (Con $ UnQual $ name stateRecordCons) vh)
+                                                 vt
+                               arb_rhs   = UnGuardedRhs $ gen_exp
+                               arb       = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
+
+-- for each field of the state record, use "return 0" for the integers and
+-- "arbitrary" for the rest of the generators
+stateVarArbs    :: ConfigInfo Int -> [Exp]
+stateVarArbs ci = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
+                  where vararb   = var $ name $ "arbitrary"
+                        ret0     = app (var $ name "return") (Lit $ Int 0)
+                        pcFs     = [ ret0 | p <- pids ci ]
+                        ptrFs    = [ ret0 | p <- pids ci, t <- fst <$> tyMap ci] ++
+                                   [ ret0 | p <- pids ci, t <- fst <$> tyMap ci]
+                        valVarFs = [ vararb | (p, v) <- valVars (stateVars ci) ]
+                        intVarFs = [ vararb | (p, v) <- intVars (stateVars ci) ]
+                        absFs    = concat [ [vararb, vararb, vararb] | p <- pids ci, isAbs p ]
+                        globFs   = [ vararb | v <- globVals (stateVars ci) ]

@@ -6,7 +6,7 @@ import Symmetry.SymbEx
 import Symmetry.IL.AST
 import Symmetry.IL.Model (generateModel)
 --import Symmetry.IL.Model.ConfigInfo
-import Symmetry.IL.Model.HaskellModel (printHaskell)
+import Symmetry.IL.Model.HaskellModel (printHaskell,printQCFile)
 -- import Symmetry.IL.Unfold
 -- import Symmetry.IL.Inst
 -- import Symmetry.IL.TrailParser
@@ -98,7 +98,9 @@ run1Cfg opt outd cfg
        if (optVerify opt) then do
          let (cinfo, m) = generateModel cfg                   
              f          = printHaskell cinfo m
+             qf         = printQCFile cinfo m
          writeFile (outd </> "SymVerify.hs") f
+         writeFile (outd </> "QC.hs") qf
          return True
        else
          return True

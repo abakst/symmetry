@@ -127,7 +127,8 @@ class ILModel e where
   rule     :: ConfigInfo Int -> Pid -> e -> Maybe e -> e -> Rule e
 
   printModel :: ConfigInfo Int -> [Rule e] -> String
-                
+  printCheck :: ConfigInfo Int -> [Rule e] -> String
+
 -------------------------
 -- "Macros"
 -------------------------
