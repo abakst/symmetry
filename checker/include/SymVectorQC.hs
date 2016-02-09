@@ -1,39 +1,55 @@
 module SymVector where
 
+import Data.IntMap.Strict as Map
+import Control.Monad
+import Data.Aeson
+
 --this is the qc file
 
-data Vec a = V (Int -> a)
+data Vec a = V (IntMap a)
 {-@
 data Vec a <dom :: Int -> Prop, rng :: Int -> a -> Prop>
      = V {a :: i:Int<dom> -> a <rng i>}
   @-}
 
-instance Show (Vec a) where
-  show _ = "some vector"
+instance (Show a) => Show (Vec a) where
+  show (V m) = show m
+
+instance (FromJSON a) => FromJSON (Vec a) where
+  parseJSON o@(Object _) = V <$> parseJSON o
+  parseJSON _            = mzero
+
+instance (ToJSON a) => ToJSON (Vec a) where
+  toJSON (V m) = toJSON m
+
 
 {-@ emptyVec :: forall <p :: Int -> a -> Prop>. Vec <{\v -> 0=1}, p> a @-}
 emptyVec     :: Vec  a
-emptyVec     = V $ \_ -> (error "Empty array!")
+emptyVec     = V (Map.empty)
 
 
 {-@ mkVec :: x:a -> Vec <{\v -> 0=0}, {\i v-> v=x}> a @-}
 mkVec     :: a -> Vec  a
-mkVec x   = V $ \_ -> x
+mkVec x   = undefined
 
 {-@ getVec :: forall a <r :: x0: Int -> x1: a -> Prop, d :: x0: Int -> Prop>.
              i: Int<d> ->
              a: Vec<d, r> a ->
              a<r i> @-}
 getVec :: Int -> Vec a -> a
-getVec i (V f) = f i
+getVec i (V m) = let v = Map.lookup i m
+                     f Nothing = error "Empty array!"
+                     f (Just a) = a
+                 in f v
 
 {-@ setVec :: forall a <r :: x0: Int -> x1: a -> Prop, d :: x0: Int -> Prop>.
       i: Int<d> ->
       x: a<r i> ->
-      a: Vec <{v:Int<d> | v != i}, r> a -> 
+      a: Vec <{v:Int<d> | v != i}, r> a ->
       Vec <d, r> a @-}
 setVec :: Int -> a -> Vec a -> Vec a
-setVec i v (V f) = V $ \k -> if k == i then v else f k
+setVec i v (V m) = let m' = Map.insert i v m
+                   in  V m'
 
 data Vec2D a = V2D (Int -> Int -> a)
 {-@

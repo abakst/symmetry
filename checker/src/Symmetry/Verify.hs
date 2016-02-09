@@ -72,7 +72,10 @@ runCmd verb pre wd c
                            putStrLn =<< hGetContents h
                            exitWith (ExitFailure 126)
 copyMapModule opt d
-  = do f <- getDataFileName ("include" </> "SymMap.hs")
+  = do let f' = if optQC opt
+                   then "SymMapQC.hs"
+                   else "SymMap.hs"
+       f <- getDataFileName ("include" </> f')
        copyFile f (d </> "SymMap.hs")
 
 copyVectorModule opt d
