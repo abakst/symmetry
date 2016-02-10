@@ -5,7 +5,7 @@ module Symmetry.Verify where
 import Symmetry.SymbEx
 import Symmetry.IL.AST
 import Symmetry.IL.Model (generateModel)
---import Symmetry.IL.Model.ConfigInfo
+import Symmetry.IL.ConfigInfo
 import Symmetry.IL.Model.HaskellModel (printHaskell,printQCFile)
 -- import Symmetry.IL.Unfold
 -- import Symmetry.IL.Inst
@@ -100,9 +100,10 @@ run1Cfg opt outd cfg
          createDirectoryIfMissing True outd
          copyIncludes opt outd
        if (optVerify opt) then do
-         let (cinfo, m) = generateModel cfg                   
-             f          = printHaskell cinfo m
-             qf         = printQCFile cinfo m
+         let (cinfo, m) = generateModel cfg
+             cinfo'     = cinfo {isQC = optQC opt}
+             f          = printHaskell cinfo' m
+             qf         = printQCFile cinfo' m
          writeFile (outd </> "SymVerify.hs") f
          writeFile (outd </> "QC.hs") qf
          return True

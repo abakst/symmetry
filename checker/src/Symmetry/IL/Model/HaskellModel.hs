@@ -425,13 +425,12 @@ printHaskell ci rs = unlines [ header
                              , body
                              ]
   where
-    header = unlines [ "{-# Language RecordWildCards #-}"
-                     , "module SymVerify where"
-                     , "import SymVector"
-                     , "import SymMap"
-                     , "import SymBoilerPlate"
-                     , "import Language.Haskell.Liquid.Prelude"
-                     ]
+    header = unlines $ [ "{-# Language RecordWildCards #-}"
+                       , "module SymVerify where"
+                       , "import SymVector"
+                       , "import SymMap"
+                       , "import SymBoilerPlate"
+                       ] ++ (if isQC ci then [] else ["Language.Haskell.Liquid.Prelude"])
 
     ExpM dl   = deadlockFree ci
     body = unlines [ unlines (prettyPrint <$> initialState ci)
@@ -473,9 +472,9 @@ printQCFile ci _
                              , "SymMap"
                              , "SymVerify"
                              , "SymBoilerPlate"
-                             , "Language.Haskell.Liquid.Prelude"
                              , "Test.QuickCheck"
-                             ]
+                             ] ++
+                  (if isQC ci then [] else ["Language.Haskell.Liquid.Prelude"])
     mkImport m = ImportDecl { importLoc       = noLoc
                             , importModule    = ModuleName m
                             , importQualified = False
