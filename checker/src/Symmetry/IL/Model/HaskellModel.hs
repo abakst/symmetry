@@ -442,76 +442,45 @@ printHaskell ci rs = unlines [ header
                    , initSpecOfConfig ci
                    ]
 
-
-
-arbValStr = "instance (Arbitrary a) => Arbitrary (Val a) where \n\
-\  arbitrary = oneof [ return VUnit \n\
-\                    , return VUnInit \n\
-\                    , VInt    <$> arbitrary \n\
-\                    , VString <$> arbitrary \n\
-\                    , VPid    <$> arbitrary \n\
-\                    , VInL    <$> arbitrary \n\
-\                    , VInR    <$> arbitrary \n\
-\                    , VPair   <$> arbitrary <*> arbitrary ]"
-
-arbVecStr="instance (Arbitrary a) => Arbitrary (Vec a) where \n\
-\   arbitrary = do a <- arbitrary \n\
-\                  return $ mkVec a"
+-- ######################################################################
+-- ### QUICK CHECK ######################################################
+-- ######################################################################
 
 printQCFile :: ConfigInfo Int -> [Rule HaskellModel] -> String
 printQCFile ci _
   = unlines lhFile
   where
-    lhFile = [ prettyPrint modVerify
-             , ""
-             ] ++ spec
-    modVerify = Module noLoc (ModuleName "QC") [] Nothing (Just exports) imports decls
-    exports   = []
-    decls     = []
-    imports   = mkImport <$> [ "SymVector"
-                             , "SymMap"
-                             , "SymVerify"
-                             , "SymBoilerPlate"
-                             , "Test.QuickCheck"
-                             ] ++
-                  (if isQC ci then [] else ["Language.Haskell.Liquid.Prelude"])
-    mkImport m = ImportDecl { importLoc       = noLoc
-                            , importModule    = ModuleName m
-                            , importQualified = False
-                            , importSrc       = False
-                            , importAs        = Nothing
-                            , importSpecs     = Nothing
-                            , importSafe      = False
-                            , importPkg       = Nothing
-                            }
-    spec =  "main :: IO ()"
-            : (prettyPrint  $  qcMainFuncDecl ci) : ""
+    sep    = concatMap (\s -> [s,""])
+    lhFile = sep (map unlines [header, spec])
+    header = [ "{-# Language RecordWildCards #-}"
+             , "{-# LANGUAGE OverloadedStrings #-}"
+             , "module QC () where"
+             , "import SymVector"
+             , "import SymVector"
+             , "import SymMap"
+             , "import SymVerify"
+             , "import SymBoilerPlate"
+             , "import Test.QuickCheck"
+             , "import Test.QuickCheck.Monadic"
+             , "import Data.Aeson"
+             , "import Data.Aeson.Encode.Pretty"
+             , "import Control.Monad"
+             , "import Data.ByteString.Lazy.Char8 as C (putStrLn)"
+             ]
+    spec =  mainStr
+            : (prettyPrint  $  prop_runStateDecl ci) : ""
+            : log_statesStr
             : arbValStr : ""
             : arbVecStr : ""
-            : concatMap (\s -> [s,""]) (prettyPrint <$> arbitraryDecls ci)
+            : sep (prettyPrint <$> arbitraryDecls ci)
+
+emptyListCon = Con $ Special $ ListCon
+unitCon      = Con $ Special $ UnitCon
 
 
 arbitraryDecls :: ConfigInfo Int -> [Decl]
 arbitraryDecls ci = [ arbitraryPidPreDecl ci
                     , arbitraryStateDecl  ci ]
-
--- main =  do quickCheck
---              (\s plist -> runState s ... (getList plist) == ())
-qcMainFuncDecl    :: ConfigInfo Int -> Decl
-qcMainFuncDecl ci =  FunBind [ Match noLoc (name "main") [] Nothing (UnGuardedRhs rhs) Nothing ]
-                     where pvarn n    = pvar $ name n
-                           varn n     = Var $ UnQual $ name n
-                           emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
-                           bufs       = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
-                           pidl       = varn "plist"
-                           exp2       = appFun (varn runState) ((varn "s") : bufs ++ [pidl])
-                           f          = Lambda noLoc
-                                                 [pvarn "s", pvarn "plist"]
-                                                 (InfixApp exp2
-                                                             (QConOp $ UnQual $ Symbol "==")
-                                                             (Con $ Special $ UnitCon))
-                           exp        = App (varn "quickCheck") (Paren f)
-                           rhs        = Do [Qualifier exp]
 
 -- instance Arbitrary Pid_pre where
 --         arbitrary = elements [...]
@@ -554,3 +523,55 @@ stateVarArbs ci = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
                         intVarFs = [ vararb | (p, v) <- intVars (stateVars ci) ]
                         absFs    = concat [ [vararb, vararb, vararb] | p <- pids ci, isAbs p ]
                         globFs   = [ vararb | v <- globVals (stateVars ci) ]
+
+
+-- prop_runState :: State -> [Pid_pre] -> Property
+-- prop_runState s plist = monadicIO $ do
+--   let l = runState s emptyVec emptyVec plist []
+--   if null l
+--      then return ()
+--      else run (log_states l)
+--   assert True
+prop_runStateDecl    :: ConfigInfo Int -> Decl
+prop_runStateDecl ci =  FunBind [ Match noLoc (name "prop_runState") args Nothing (UnGuardedRhs rhs) Nothing ]
+                          where pvarn n    = pvar $ name n
+                                varn n     = Var $ UnQual $ name n
+                                args       = [pvarn "s", pvarn "plist"]
+                                emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
+                                -- turn buffers into empty vectors
+                                bufs       = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
+                                -- runState s ... plist []
+                                rs_app     = appFun (varn runState)
+                                                    ((varn "s") : bufs ++ [varn "plist", emptyListCon])
+                                -- if (null l) then return () else run (log_states l)
+                                if_exp     = If (app (varn "null") (varn "l"))
+                                                (app (varn "return") unitCon)
+                                                (app (varn "run") (Paren (app (varn "log_states") (varn "l"))))
+                                -- let l = runState ... in if ...
+                                let_exp    = Let (BDecls [PatBind noLoc (pvarn "l") (UnGuardedRhs rs_app) Nothing])
+                                                 if_exp
+                                -- do let ...; assert True
+                                do_exp     = Do [ Qualifier let_exp
+                                                , Qualifier (app (varn "assert") (Con $ UnQual $ name "True"))]
+                                dollar x y = InfixApp x (QConOp $ UnQual $ Symbol "$") y
+                                rhs        = dollar (varn "monadicIO") do_exp
+
+mainStr="main :: IO ()\n\
+\main = quickCheck prop_runState\n"
+
+log_statesStr="log_states :: [State] -> IO ()\n\
+\log_states ss =  forM_ ss (C.putStrLn . encodePretty . toJSON)\n"
+
+arbValStr = "instance (Arbitrary a) => Arbitrary (Val a) where \n\
+\  arbitrary = oneof [ return VUnit \n\
+\                    , return VUnInit \n\
+\                    , VInt    <$> arbitrary \n\
+\                    , VString <$> arbitrary \n\
+\                    , VPid    <$> arbitrary \n\
+\                    , VInL    <$> arbitrary \n\
+\                    , VInR    <$> arbitrary \n\
+\                    , VPair   <$> arbitrary <*> arbitrary ]\n"
+
+arbVecStr="instance (Arbitrary a) => Arbitrary (Vec a) where \n\
+\   arbitrary = do a <- arbitrary \n\
+\                  return $ mkVec a\n"

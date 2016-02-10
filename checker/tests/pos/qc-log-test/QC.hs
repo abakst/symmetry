@@ -12,18 +12,21 @@ import Data.Aeson.Encode.Pretty
 import Control.Monad
 import Data.ByteString.Lazy.Char8 as C (putStrLn)
 
+main :: IO ()
+main = quickCheck prop_runState
+
 prop_runState :: State -> [Pid_pre] -> Property
 prop_runState s plist = monadicIO $ do
   let l = runState s emptyVec emptyVec plist []
   if null l
      then return ()
-     else run (C.putStrLn $ encodePretty $ toJSON l)
+     else run (log_states l)
   assert True
 
-main :: IO ()
-main = quickCheck prop_runState
+log_states   :: [State] -> IO ()
+log_states l =  forM_ l (C.putStrLn . encodePretty . toJSON)
 
-instance (Arbitrary a) => Arbitrary (Val a) where 
+instance (Arbitrary a) => Arbitrary (Val a) where
   arbitrary = oneof [ return VUnit 
                     , return VUnInit 
                     , VInt    <$> arbitrary 
