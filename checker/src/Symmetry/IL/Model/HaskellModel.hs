@@ -10,7 +10,7 @@ import           Language.Haskell.Exts.SrcLoc
 import           Language.Haskell.Exts.Syntax hiding (Rule, EVar)
 import           Language.Haskell.Exts.Build
 import           Language.Haskell.Exts.Pretty
-import           Symmetry.IL.Model.HaskellSpec (initSpecOfConfig)
+import           Symmetry.IL.Model.HaskellSpec (initSpecOfConfig, valHType, intType, mapType)
 
 import           Symmetry.IL.AST
 import           Symmetry.IL.Model
@@ -473,14 +473,22 @@ printQCFile ci _
             : arbValStr : ""
             : arbVecStr : ""
             : sep (prettyPrint <$> arbitraryDecls ci)
+            ++ sep (prettyPrint <$> jsonDecls ci)
 
 emptyListCon = Con $ Special $ ListCon
 unitCon      = Con $ Special $ UnitCon
 
+infix_syn sym f g = InfixApp f (QConOp $ UnQual $ Symbol sym) g
+fmap_syn          = infix_syn "<$>"
+fapp_syn          = infix_syn "<*>"
 
 arbitraryDecls :: ConfigInfo Int -> [Decl]
 arbitraryDecls ci = [ arbitraryPidPreDecl ci
                     , arbitraryStateDecl  ci ]
+
+jsonDecls   :: ConfigInfo Int -> [Decl]
+jsonDecls ci = ($ ci) <$> [ stateFromJSONDecl
+                          , stateToJSONDecl   ]
 
 -- instance Arbitrary Pid_pre where
 --         arbitrary = elements [...]
@@ -501,29 +509,12 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
                          where tc_name   = UnQual $ name "Arbitrary"
                                tv_name   = TyVar $ name stateRecordCons
                                var' s    = var $ name s
-                               fmap' f x = InfixApp f (QConOp $ UnQual $ Symbol "<$>") x
-                               fapp' f g = InfixApp f (QConOp $ UnQual $ Symbol "<*>") g
                                vh:vt     = stateVarArbs ci
-                               gen_exp   = foldl (\e v -> fapp' e v)
-                                                 (fmap' (Con $ UnQual $ name stateRecordCons) vh)
-                                                 vt
+                               gen_exp   = foldl' (\e v -> fapp_syn e v)
+                                                  (fmap_syn (Con $ UnQual $ name stateRecordCons) vh)
+                                                  vt
                                arb_rhs   = UnGuardedRhs $ gen_exp
                                arb       = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
-
--- for each field of the state record, use "return 0" for the integers and
--- "arbitrary" for the rest of the generators
-stateVarArbs    :: ConfigInfo Int -> [Exp]
-stateVarArbs ci = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
-                  where vararb   = var $ name $ "arbitrary"
-                        ret0     = app (var $ name "return") (Lit $ Int 0)
-                        pcFs     = [ ret0 | p <- pids ci ]
-                        ptrFs    = [ ret0 | p <- pids ci, t <- fst <$> tyMap ci] ++
-                                   [ ret0 | p <- pids ci, t <- fst <$> tyMap ci]
-                        valVarFs = [ vararb | (p, v) <- valVars (stateVars ci) ]
-                        intVarFs = [ vararb | (p, v) <- intVars (stateVars ci) ]
-                        absFs    = concat [ [vararb, vararb, vararb] | p <- pids ci, isAbs p ]
-                        globFs   = [ vararb | v <- globVals (stateVars ci) ]
-
 
 -- prop_runState :: State -> [Pid_pre] -> Property
 -- prop_runState s plist = monadicIO $ do
@@ -555,6 +546,113 @@ prop_runStateDecl ci =  FunBind [ Match noLoc (name "prop_runState") args Nothin
                                                 , Qualifier (app (varn "assert") (Con $ UnQual $ name "True"))]
                                 dollar x y = InfixApp x (QConOp $ UnQual $ Symbol "$") y
                                 rhs        = dollar (varn "monadicIO") do_exp
+
+
+stateVarsNTList    :: ConfigInfo Int -> [(String,Type)]
+stateVarsNTList ci =
+  pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
+  where -- program counters
+        pcFs     = [ mkPC p (pc p) | p <- pids ci ]
+        -- read & write pointers (of type integer)
+        ptrFs    = [ mkInt p (ptrR ci p t) | p <- pids ci, t <- fst <$> tyMap ci] ++
+                   [ mkInt p (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci]
+        -- value variables
+        valVarFs = [ mkVal p v | (p, v) <- valVars (stateVars ci) ]
+        -- integer variables
+        intVarFs = [ mkInt p v | (p, v) <- intVars (stateVars ci) ]
+        -- ???
+        absFs    = concat [ [mkBound p, mkCounter p, mkUnfold p] | p <- pids ci, isAbs p ]
+        -- global variables ???
+        globFs = [ (v, valHType ci) | v <- globVals (stateVars ci) ] ++
+                 [ (v, intType)     | V v <- setBoundVars ci ]
+
+        -- helper functions
+        mkUnfold p  = (pidUnfold p, intType)
+        mkBound p   = (pidBound p,  intType)
+        mkCounter p = (pcCounter p, mapType intType intType)
+        mkPC  = liftMap intType
+        mkVal = liftMap (valHType ci)
+        mkInt = liftMap intType
+        liftMap t p v = (v, if isAbs p then mapType intType t else t)
+
+
+-- for each field of the state record, use "return 0" for the integers and
+-- "arbitrary" for the rest of the generators
+stateVarArbs    :: ConfigInfo Int -> [Exp]
+stateVarArbs ci = map getArb (stateVarsNTList ci)
+                    where getArb (_, TyCon (UnQual (Ident n)))
+                            | n == "Int" = ret0
+                            | otherwise  = vararb
+                          getArb (_, TyApp (TyCon (UnQual (Ident _))) _) = vararb
+
+                          vararb   = var $ name $ "arbitrary"
+                          ret0     = app (var $ name "return") (Lit $ Int 0)
+
+-- instance FromJSON State where
+--   parseJSON (Object s) = State <$>
+--                          s .: "pidR0Pc" <*>
+--                          s .: "pidR1Pc" <*>
+--                          s .: "pidR0PtrR0" <*>
+--                          s .: "pidR1PtrR0" <*>
+--                          s .: "pidR0PtrW0" <*>
+--                          s .: "pidR1PtrW0" <*>
+--                          s .: "x_3"
+--   parseJSON _            = mzero
+
+stateFromJSONDecl    :: ConfigInfo Int -> Decl
+stateFromJSONDecl ci =
+  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [fr, fr_err])]
+  where
+        fr = Match noLoc (name "parseJSON") fr_arg Nothing (UnGuardedRhs rhs) Nothing
+        -- State <$> s .: <first var> <*> s .: <second var> <*> ...
+        rhs = foldl' (\e s -> fapp_syn e s) rhs' ns'
+        -- State <$> s .: <first var>
+        rhs' = fmap_syn (Con $ qname stateRecordCons) n'
+        -- parser for each variable
+        varParser n = infix_syn ".:" (var $ name "s") (Lit $ String n)
+        -- the names of the arguments in the state
+        n':ns' = map (varParser . fst) (stateVarsNTList ci)
+
+        -- parseJSON _ = mzero
+        fr_err  = Match noLoc (name "parseJSON") [PWildCard] Nothing rhs_err Nothing
+        rhs_err = UnGuardedRhs $ var $ name $ "mzero"
+
+        tc_name = UnQual $ name "FromJSON"
+        tv_name = TyVar $ name stateRecordCons
+        qname n = UnQual $ name n
+        pvarn n = Language.Haskell.Exts.Syntax.PVar $ name n
+        fr_arg = [PApp (qname "Object") [pvarn "s"]]
+
+
+-- instance ToJSON State where
+--   toJSON s@State{..} = object [ "pidR0Pc"    .= pidR0Pc
+--                               , "pidR1Pc"    .= pidR1Pc
+--                               , "pidR0PtrR0" .= pidR0PtrR0
+--                               , "pidR1PtrR0" .= pidR1PtrR0
+--                               , "pidR0PtrW0" .= pidR0PtrW0
+--                               , "pidR1PtrW0" .= pidR1PtrW0
+--                               , "x_3"        .= x_3        ]
+stateToJSONDecl    :: ConfigInfo Int -> Decl
+stateToJSONDecl ci =
+  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [to])]
+  where
+        to = Match noLoc (name "toJSON") to_arg Nothing (UnGuardedRhs rhs) Nothing
+
+        -- State <$> s .: <first var> <*> s .: <second var> <*> ...
+        rhs = app (var $ name "object") (listE exps)
+
+        -- ["<var 1>" .= <var 1>, ..., "<var n>" .= <var n>]
+        exps = map (\(n,_) -> infix_syn ".=" (Lit $ String n) (var $ name n))
+                   (stateVarsNTList ci)
+
+        -- parseJSON _ = mzero
+        fr_err  = Match noLoc (name "parseJSON") [PWildCard] Nothing rhs_err Nothing
+        rhs_err = UnGuardedRhs $ var $ name $ "mzero"
+        tc_name = UnQual $ name "ToJSON"
+        tv_name = TyVar $ name stateRecordCons
+        qname n = UnQual $ name n
+        pvarn n = Language.Haskell.Exts.Syntax.PVar $ name n
+        to_arg = [PRec (qname "State") [PFieldWildcard]]
 
 mainStr="main :: IO ()\n\
 \main = quickCheck prop_runState\n"
