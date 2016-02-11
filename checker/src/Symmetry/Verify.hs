@@ -103,9 +103,9 @@ run1Cfg opt outd cfg
          let (cinfo, m) = generateModel cfg
              cinfo'     = cinfo {isQC = optQC opt}
              f          = printHaskell cinfo' m
-             qf         = printQCFile cinfo' m
          writeFile (outd </> "SymVerify.hs") f
-         writeFile (outd </> "QC.hs") qf
+         when (optQC opt)
+              (writeFile (outd </> "QC.hs") (printQCFile cinfo' m))
          return True
        else
          return True

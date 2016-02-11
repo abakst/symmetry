@@ -490,31 +490,7 @@ jsonDecls   :: ConfigInfo Int -> [Decl]
 jsonDecls ci = ($ ci) <$> [ stateFromJSONDecl
                           , stateToJSONDecl   ]
 
--- instance Arbitrary Pid_pre where
---         arbitrary = elements [...]
-arbitraryPidPreDecl    :: ConfigInfo Int -> Decl
-arbitraryPidPreDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
-                          where tc_name = UnQual $ name "Arbitrary"
-                                tv_name = TyVar $ name pidPre
-                                var' s  = var $ name s
-                                pid_ts  = [ var' $ pidConstructor p | p <- (pids ci) ]
-                                arb_rhs = UnGuardedRhs (app (var' "elements") (listE pid_ts))
-                                arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
-
--- instance Arbitrary State where
---         arbitrary
---           = State <$> .. <*> ...
-arbitraryStateDecl    :: ConfigInfo Int -> Decl
-arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
-                         where tc_name   = UnQual $ name "Arbitrary"
-                               tv_name   = TyVar $ name stateRecordCons
-                               var' s    = var $ name s
-                               vh:vt     = stateVarArbs ci
-                               gen_exp   = foldl' (\e v -> fapp_syn e v)
-                                                  (fmap_syn (Con $ UnQual $ name stateRecordCons) vh)
-                                                  vt
-                               arb_rhs   = UnGuardedRhs $ gen_exp
-                               arb       = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
+-- ### QuickCheck helpers ##################################################
 
 -- prop_runState :: State -> [Pid_pre] -> Property
 -- prop_runState s plist = monadicIO $ do
@@ -548,6 +524,47 @@ prop_runStateDecl ci =  FunBind [ Match noLoc (name "prop_runState") args Nothin
                                 rhs        = dollar (varn "monadicIO") do_exp
 
 
+-- ### Arbitrary instances ##################################################
+
+-- instance Arbitrary State where
+--         arbitrary
+--           = State <$> .. <*> ...
+arbitraryStateDecl    :: ConfigInfo Int -> Decl
+arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
+                         where tc_name   = UnQual $ name "Arbitrary"
+                               tv_name   = TyVar $ name stateRecordCons
+                               var' s    = var $ name s
+                               vh:vt     = stateVarArbs ci
+                               gen_exp   = foldl' (\e v -> fapp_syn e v)
+                                                  (fmap_syn (Con $ UnQual $ name stateRecordCons) vh)
+                                                  vt
+                               arb_rhs   = UnGuardedRhs $ gen_exp
+                               arb       = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
+
+-- instance Arbitrary Pid_pre where
+--         arbitrary = elements [...]
+arbitraryPidPreDecl    :: ConfigInfo Int -> Decl
+arbitraryPidPreDecl ci =
+  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
+  where tc_name = UnQual $ name "Arbitrary"
+        tv_name = TyVar $ name pidPre
+        var' s  = var $ name s
+        pid_ts  = [ var' $ pidConstructor p | p <- (pids ci) ]
+        arb_rhs = UnGuardedRhs (app (var' "elements") (listE pid_ts))
+        arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
+
+        mkPidCons  pt     = QualConDecl noLoc [] [] (mkPidCons' pt)
+        mkPidCons' (p, t) = if isAbs p
+                              then ConDecl (name (pidConstructor p)) [TyVar t]
+                              else ConDecl (name (pidConstructor p)) []
+
+        cons        = mkPidCons <$> ts
+        tvbinds     = [ UnkindedVar t | (p, t) <- ts, isAbs p  ]
+        ts          = [ (p, mkTy t) | p <- pids ci | t <- [0..] ]
+        mkTy        = name . ("p" ++) . show
+
+
+-- Returns the name and type of each variable in the State
 stateVarsNTList    :: ConfigInfo Int -> [(String,Type)]
 stateVarsNTList ci =
   pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
@@ -583,22 +600,22 @@ stateVarArbs ci = map getArb (stateVarsNTList ci)
                     where getArb (_, TyCon (UnQual (Ident n)))
                             | n == "Int" = ret0
                             | otherwise  = vararb
-                          getArb (_, TyApp (TyCon (UnQual (Ident _))) _) = vararb
+                          getArb (_, TyApp (TyCon (UnQual (Ident "Val"))) _) = vararb
+                          getArb (_, TyApp (TyApp (TyCon (UnQual (Ident "Map_t"))) _ ) _ ) = retMap
+                          getArb x = error ("Unimplemented generator: " ++ (show x))
 
                           vararb   = var $ name $ "arbitrary"
                           ret0     = app (var $ name "return") (Lit $ Int 0)
+                          retMap   = app (var $ name "return") (var $ name "emptyMap")
+
+-- ### Aeson (FromJSON, ToJSON) instances ##################################################
 
 -- instance FromJSON State where
 --   parseJSON (Object s) = State <$>
 --                          s .: "pidR0Pc" <*>
---                          s .: "pidR1Pc" <*>
---                          s .: "pidR0PtrR0" <*>
---                          s .: "pidR1PtrR0" <*>
---                          s .: "pidR0PtrW0" <*>
---                          s .: "pidR1PtrW0" <*>
+--                          ...
 --                          s .: "x_3"
 --   parseJSON _            = mzero
-
 stateFromJSONDecl    :: ConfigInfo Int -> Decl
 stateFromJSONDecl ci =
   InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [fr, fr_err])]
@@ -625,20 +642,16 @@ stateFromJSONDecl ci =
 
 
 -- instance ToJSON State where
---   toJSON s@State{..} = object [ "pidR0Pc"    .= pidR0Pc
---                               , "pidR1Pc"    .= pidR1Pc
---                               , "pidR0PtrR0" .= pidR0PtrR0
---                               , "pidR1PtrR0" .= pidR1PtrR0
---                               , "pidR0PtrW0" .= pidR0PtrW0
---                               , "pidR1PtrW0" .= pidR1PtrW0
---                               , "x_3"        .= x_3        ]
+--   toJSON State{..} = object [ "pidR0Pc"    .= pidR0Pc
+--                             , ...
+--                             , "x_3"        .= x_3        ]
 stateToJSONDecl    :: ConfigInfo Int -> Decl
 stateToJSONDecl ci =
   InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [to])]
   where
         to = Match noLoc (name "toJSON") to_arg Nothing (UnGuardedRhs rhs) Nothing
 
-        -- State <$> s .: <first var> <*> s .: <second var> <*> ...
+        -- = object ["<var 1>" .= <var 1>, ..., "<var n>" .= <var n>]
         rhs = app (var $ name "object") (listE exps)
 
         -- ["<var 1>" .= <var 1>, ..., "<var n>" .= <var n>]
@@ -652,7 +665,32 @@ stateToJSONDecl ci =
         tv_name = TyVar $ name stateRecordCons
         qname n = UnQual $ name n
         pvarn n = Language.Haskell.Exts.Syntax.PVar $ name n
+        -- State{..}
         to_arg = [PRec (qname "State") [PFieldWildcard]]
+
+-- instance FromJSON Pid_pre where
+--   parseJSON (String s)
+--     | s == "PIDR0" = return PIDR0
+--     | s == "PIDR1" = return PIDR1
+--   parseJSON _ = mzero
+
+-- instance ToJSON Pid_pre where
+--   toJSON PIDR0 = String "PIDR0"
+--   toJSON PIDR1 = String "PIDR1"
+
+-- -- instance Arbitrary Pid_pre where
+-- --         arbitrary = elements [...]
+-- arbitraryPidPreDecl    :: ConfigInfo Int -> Decl
+-- arbitraryPidPreDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
+--                           where tc_name = UnQual $ name "Arbitrary"
+--                                 tv_name = TyVar $ name pidPre
+--                                 var' s  = var $ name s
+--                                 pid_ts  = [ var' $ pidConstructor p | p <- (pids ci) ]
+--                                 arb_rhs = UnGuardedRhs (app (var' "elements") (listE pid_ts))
+--                                 arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
+
+
+-- ### "Static" functions to be included ##################################################
 
 mainStr="main :: IO ()\n\
 \main = quickCheck prop_runState\n"
