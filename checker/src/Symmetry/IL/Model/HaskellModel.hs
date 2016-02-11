@@ -541,27 +541,30 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
                                arb_rhs   = UnGuardedRhs $ gen_exp
                                arb       = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
 
--- instance Arbitrary Pid_pre where
---         arbitrary = elements [...]
+-- instance Arbitrary p1 => Arbitrary (Pid_pre p1) where
+--         arbitrary = oneof [return PIDR0, PIDR2 <$> arbitrary, ...]
 arbitraryPidPreDecl    :: ConfigInfo Int -> Decl
 arbitraryPidPreDecl ci =
-  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
-  where tc_name = UnQual $ name "Arbitrary"
-        tv_name = TyVar $ name pidPre
-        var' s  = var $ name s
-        pid_ts  = [ var' $ pidConstructor p | p <- (pids ci) ]
-        arb_rhs = UnGuardedRhs (app (var' "elements") (listE pid_ts))
+  InstDecl noLoc Nothing [] ctx tc_name [tv_name] [InsDecl (FunBind [arb])]
+  where
+        -- possible context class
+        ctx     = [ClassA tc_name [TyVar v] | v <- pid_vars]
+        tc_name = UnQual $ name "Arbitrary"
+        -- Pid_pre p1 ...
+        tv_name = TyParen (foldl' TyApp (TyVar $ name pidPre) [TyVar v | v <- pid_vars])
         arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
+        arb_rhs = UnGuardedRhs (app (var' "oneOf") (listE pid_ts))
+        pid_ts  = Prelude.map pidGen ts
 
-        mkPidCons  pt     = QualConDecl noLoc [] [] (mkPidCons' pt)
-        mkPidCons' (p, t) = if isAbs p
-                              then ConDecl (name (pidConstructor p)) [TyVar t]
-                              else ConDecl (name (pidConstructor p)) []
+        pidName p = Con $ UnQual $ name (pidConstructor p)
+        pidGen (p, t) = if isAbs p
+                          then fmap_syn (pidName p) (var' "arbitrary")
+                          else app (var' "return") (pidName p)
 
-        cons        = mkPidCons <$> ts
-        tvbinds     = [ UnkindedVar t | (p, t) <- ts, isAbs p  ]
-        ts          = [ (p, mkTy t) | p <- pids ci | t <- [0..] ]
-        mkTy        = name . ("p" ++) . show
+        var' s  = var $ name s
+        pid_vars = [ t | (p, t) <- ts, isAbs p  ]
+        ts       = [ (p, mkTy t) | p <- pids ci | t <- [0..] ]
+        mkTy     = name . ("p" ++) . show
 
 
 -- Returns the name and type of each variable in the State
