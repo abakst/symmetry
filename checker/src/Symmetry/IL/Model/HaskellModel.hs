@@ -491,7 +491,7 @@ jsonDecls   :: ConfigInfo Int -> [Decl]
 jsonDecls ci = ($ ci) <$> [ stateFromJSONDecl
                           , stateToJSONDecl
                           , pidFromJSONDecl
-                          ]
+                          , pidToJSONDecl     ]
 
 -- ### QuickCheck helpers ##################################################
 
@@ -680,10 +680,10 @@ stateToJSONDecl ci =
         -- State{..}
         to_arg = [PRec (qname "State") [PFieldWildcard]]
 
--- instance FromJSON Pid_pre where
---   parseJSON (String s)
---     | s == "PIDR0" = return PIDR0
---     | s == "PIDR1" = return PIDR1
+-- instance (FromJSON p1) => FromJSON (Pid_pre p1) where
+--   parseJSON (Object o) = case toList o of
+--     [(k,v)] | k == "PIDR0" -> return PIDR0
+--             | k == "PIDR2" -> PIDR2 <$> parseJSON v
 --   parseJSON _ = mzero
 pidFromJSONDecl    :: ConfigInfo Int -> Decl
 pidFromJSONDecl ci =
@@ -692,14 +692,24 @@ pidFromJSONDecl ci =
         fr     = Match noLoc (name "parseJSON") fr_arg Nothing (UnGuardedRhs rhs) Nothing
         fr_arg = [PApp (qname "Object") [pvarn "o"]]
 
-        -- State <$> s .: <first var> <*> s .: <second var> <*> ...
-        rhs = foldl' (\e s -> fapp_syn e s) rhs' ns'
-        -- State <$> s .: <first var>
-        rhs' = fmap_syn (Con $ qname stateRecordCons) n'
-        -- parser for each variable
-        varParser n = infix_syn ".:" (var $ name "s") (Lit $ String n)
-        -- the names of the arguments in the state
-        n':ns' = map (varParser . fst) (stateVarsNTList ci)
+        -- case H.toList o of ...
+        rhs = Case (app (qvar (ModuleName "H") (name "toList")) (var' "o")) alts
+
+        -- [(key,value)]
+        alts     = [Alt noLoc case_pat case_rhs Nothing]
+
+        -- [(k,v)] | ...
+        case_pat = PList [PTuple Boxed [pvar' "k", pvar' "v"]]
+        -- ... | k = PIDR0 -> return PIDR0 ...
+        case_rhs = GuardedRhss guards
+
+        guards   = [ GuardedRhs noLoc [g_stmt p] (g_exp p) | p <- pids ci ]
+        g_stmt p = Qualifier $ infix_syn "==" (var' "k")
+                                              (Lit $ String (pidConstructor p))
+        g_exp p = let pidCon = Con $ UnQual $ name (pidConstructor p)
+                  in if isAbs p
+                     then fmap_syn pidCon (app (var' "parseJSON") (var' "v"))
+                     else app (var' "return") pidCon
 
         -- parseJSON _ = mzero
         fr_err  = Match noLoc (name "parseJSON") [PWildCard] Nothing rhs_err Nothing
@@ -711,16 +721,53 @@ pidFromJSONDecl ci =
         -- Pid_pre p1 ...
         tv_name = TyParen (foldl' TyApp (TyVar $ name pidPre) [TyVar v | v <- pid_vars])
 
+        var' s  = var $ name s
+        pvar' s = pvar $ name s
         qname n = UnQual $ name n
         pvarn n = Language.Haskell.Exts.Syntax.PVar $ name n
-        var' s  = var $ name s
+
         pid_vars = [ t | (p, t) <- ts, isAbs p  ]
         ts       = [ (p, mkTy t) | p <- pids ci | t <- [0..] ]
         mkTy     = name . ("p" ++) . show
 
--- instance ToJSON Pid_pre where
---   toJSON PIDR0 = String "PIDR0"
---   toJSON PIDR1 = String "PIDR1"
+-- instance (ToJSON p1) => ToJSON (Pid_pre p1) where
+--   toJSON PIDR0       = object [ "PIDR0" .= Null ]
+--   toJSON (PIDR2 pid) = object [ "PIDR2" .= toJSON pid ]
+pidToJSONDecl    :: ConfigInfo Int -> Decl
+pidToJSONDecl ci =
+  InstDecl noLoc Nothing [] ctx tc_name [tv_name] [InsDecl (FunBind tos)]
+  where
+        tos = [Match noLoc
+                     (name "toJSON")
+                     [to_arg p]
+                     Nothing
+                     (UnGuardedRhs (to_rhs p))
+                     Nothing | p <- pids ci]
+
+        to_arg p = if isAbs p
+                   then PParen $ PApp (qname (pidConstructor p)) [pvarn "pid"]
+                   else PApp (qname (pidConstructor p)) []
+
+        to_rhs p = app (var' "object")
+                       (listE [infix_syn ".="
+                                         (Lit $ String (pidConstructor p))
+                                         (if isAbs p
+                                             then app (var' "toJSON") (var' "pid")
+                                             else Con $ qname "Null")])
+
+        -- possible context class
+        ctx     = [ClassA tc_name [TyVar v] | v <- pid_vars]
+        tc_name = UnQual $ name "ToJSON"
+        -- Pid_pre p1 ...
+        tv_name = TyParen (foldl' TyApp (TyVar $ name pidPre) [TyVar v | v <- pid_vars])
+
+        var' s  = var $ name s
+        qname n = UnQual $ name n
+        pvarn n = Language.Haskell.Exts.Syntax.PVar $ name n
+
+        pid_vars = [ t | (p, t) <- ts, isAbs p  ]
+        ts       = [ (p, mkTy t) | p <- pids ci | t <- [0..] ]
+        mkTy     = name . ("p" ++) . show
 
 -- ### "Static" functions to be included ##################################################
 
