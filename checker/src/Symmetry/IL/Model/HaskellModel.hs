@@ -328,8 +328,15 @@ printRules ci rs dl = prettyPrint $ FunBind matches
     mkCall p (Just (ExpM e)) fups bufups
       = mkAssert e (paren (mkCall p Nothing fups bufups))
     mkCall p Nothing fups bufups
-      = metaFunction runState
-          (mkRecUp p fups : mkBufUps bufups ++ [vExp sched]) 
+      = Let (BDecls [PatBind noLoc
+                             (pvar $ name "qc_s'")
+                             (UnGuardedRhs $ mkRecUp p fups)
+                             Nothing]) $
+            metaFunction runState
+                         ((var $ name "qc_s'") : mkBufUps bufups ++ [vExp sched] ++
+                          (ifQC ci (Paren $ infix_syn ":"
+                                                      (var $ name "qc_s'")
+                                                      (var $ name "qc_ss"))))
     mkBufUps bufups
       = [ findUp p t bufups | p <- pids ci, t <- fst <$> tyMap ci]
 
@@ -340,13 +347,16 @@ printRules ci rs dl = prettyPrint $ FunBind matches
 
     pat ps = [ PAsPat (name state) (PRec (UnQual (name stateRecordCons)) [PFieldWildcard]) ] ++
              [ pvar (name (buf ci q t)) | q <- pids ci, t <- fst <$> tyMap ci ] ++
-             [ mkSchedPat ps ]
+             [ mkSchedPat ps ] ++
+             (ifQC ci (pvar (name "qc_ss")))
 
     mkSchedPat ps = foldr (\q rest -> PInfixApp (pidPattern q) list_cons_name rest) schedPVar ps
     schedPVar  = pvar (name sched)
 
     mkDlMatch  = Match noLoc (name runState) dlpat Nothing dlRhs Nothing
-    dlRhs      = UnGuardedRhs (mkAssert dl unit_con)
+    dlRhs      = UnGuardedRhs (mkAssert dl (if isQC ci
+                                              then (var $ name "qc_ss")
+                                              else unit_con))
     dlpat      = pat (pids ci)
 
     findUp p t bufups
@@ -407,14 +417,15 @@ totalCall ci =
   FunBind [Match noLoc (name runState) args Nothing rhs Nothing]
     where
       bufs = [ wildcard | _ <- pids ci, _ <- tyMap ci ]
-      args = wildcard : bufs ++ [wildcard]
-      rhs  = UnGuardedRhs $ Con $ Special $ UnitCon
+      args = (wildcard : bufs) ++ [wildcard] ++ (ifQC ci wildcard)
+      rhs  = UnGuardedRhs $ if isQC ci then emptyListCon else unitCon
 
 initialCall :: ConfigInfo Int -> Decl
 initialCall ci =
   nameBind noLoc (name "check") call
     where
-      call = metaFunction runState (vExp initState : bufs ++ [initSchedCall])
+      call = metaFunction runState (vExp initState : bufs ++ [initSchedCall] ++ ss)
+      ss = ifQC ci emptyListCon
       bufs = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
       emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
       initSchedCall = metaFunction initSched [vExp initState]
@@ -479,6 +490,8 @@ printQCFile ci _
 emptyListCon = Con $ Special $ ListCon
 unitCon      = Con $ Special $ UnitCon
 
+ifQC ci x = if isQC ci then [x] else []
+
 infix_syn sym f g = InfixApp f (QConOp $ UnQual $ Symbol sym) g
 fmap_syn          = infix_syn "<$>"
 fapp_syn          = infix_syn "<*>"
@@ -512,17 +525,12 @@ prop_runStateDecl ci =
         -- turn buffers into empty vectors
         bufs       = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
         -- runState s ... plist []
-        -- rs_app     = appFun (varn runState)
-        --                     ((varn "s") : bufs ++ [varn "plist", emptyListCon])
-        -- FIXME
         rs_app     = appFun (varn runState)
-                            ((varn "s") : bufs ++ [varn "plist"])
+                            ((varn "s") : bufs ++ [varn "plist", emptyListCon])
         -- if (null l) then return () else run (log_states l)
-        -- if_exp     = If (app (varn "null") (varn "l"))
-        --                 (app (varn "return") unitCon)
-        --                 (app (varn "run") (Paren (app (varn "log_states") (varn "l"))))
-        -- FIXME
-        if_exp     = app (varn "return") (Con $ Special $ UnitCon)
+        if_exp     = If (app (qvar (ModuleName "Prelude") (name "null")) (varn "l"))
+                        (app (varn "return") unitCon)
+                        (app (varn "run") (Paren (app (varn "log_states") (varn "l"))))
         -- let l = runState ... in if ...
         let_exp    = Let (BDecls [PatBind noLoc (pvarn "l") (UnGuardedRhs rs_app) Nothing])
                          if_exp

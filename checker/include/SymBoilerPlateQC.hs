@@ -64,8 +64,8 @@ instance (ToJSON p) => ToJSON (Val p) where
   toJSON (VInL v)    = object [ "VInL"    .= toJSON v     ]
   toJSON (VPair l r) = object [ "VPair"   .= toJSON (l,r) ]
 
-liquidAssert p _ = if p
-                     then ()
+liquidAssert p x = if p
+                     then x
                      else error "ASSERTION FAILURE !"
 
 isVUnit, isVUnInit, isVInt, isVString, isVPid, isVInR, isVInL, isVPair :: Val p -> Bool
