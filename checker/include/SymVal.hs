@@ -1,9 +1,6 @@
 module SymBoiler where
 
-import Control.Monad
-import Data.Aeson
-
-{-@ nonDet :: a -> {v:Int | true} @-}  
+{-@ nonDet :: a -> {v:Int | true} @-}
 nonDet :: a -> Int
 nonDet = undefined
 

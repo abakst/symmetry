@@ -447,7 +447,7 @@ printHaskell ci rs = unlines [ header
                        , "import SymVector"
                        , "import SymMap"
                        , "import SymBoilerPlate"
-                       ] ++ (if isQC ci then [] else ["Language.Haskell.Liquid.Prelude"])
+                       ] ++ (if isQC ci then [] else ["import Language.Haskell.Liquid.Prelude"])
 
     ExpM dl   = deadlockFree ci
     body = unlines [ unlines (prettyPrint <$> initialState ci)
@@ -482,12 +482,14 @@ printQCFile ci _
              , "import Data.Aeson"
              , "import Data.Aeson.Encode.Pretty"
              , "import Control.Monad"
-             , "import Data.ByteString.Lazy.Char8 as C (putStrLn)"
-             , "import Data.HashMap.Strict as H"
+             , "import Data.ByteString.Lazy.Char8 as C (putStrLn, writeFile, readFile)"
+             , "import Data.HashMap.Strict as H hiding (map,filter,null)"
+             , "import Data.Maybe"
+             , "import System.Directory"
              ]
-    spec =  mainStr
-            : (prettyPrint  $  prop_runStateDecl ci) : ""
-            : log_statesStr
+    spec =  qcDefsStr
+            : qcMainStr
+            : (prettyPrint  $  run_testDecl ci) : ""
             : arbValStr : ""
             : arbVecStr : ""
             : sep (prettyPrint <$> arbitraryDecls ci)
@@ -514,6 +516,10 @@ jsonDecls ci = ($ ci) <$> [ stateFromJSONDecl
 
 -- ### QuickCheck helpers ##################################################
 
+-- run_test (s,plist)
+--   = let l = runState s emptyVec emptyVec plist []
+--     in (reverse l, plist)
+
 -- prop_runState :: State -> [Pid_pre] -> Property
 -- prop_runState s plist = monadicIO $ do
 --   let l = runState s emptyVec emptyVec plist []
@@ -521,30 +527,23 @@ jsonDecls ci = ($ ci) <$> [ stateFromJSONDecl
 --         then return ()
 --         else run (log_states l)
 --   assert True
-prop_runStateDecl    :: ConfigInfo Int -> Decl
-prop_runStateDecl ci =
-  FunBind [ Match noLoc (name "prop_runState") args Nothing (UnGuardedRhs rhs) Nothing ]
+run_testDecl    :: ConfigInfo Int -> Decl
+run_testDecl ci =
+  FunBind [ Match noLoc (name "run_test") args Nothing (UnGuardedRhs rhs) Nothing ]
   where pvarn n    = pvar $ name n
         varn n     = Var $ UnQual $ name n
-        args       = [pvarn "s", pvarn "plist"]
+        args       = [PTuple Boxed [pvarn "s", pvarn "plist"]]
         emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
         -- turn buffers into empty vectors
         bufs       = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
         -- runState s ... plist []
         rs_app     = appFun (varn runState)
                             ((varn "s") : bufs ++ [varn "plist", emptyListCon])
-        -- if (null l) then return () else run (log_states l)
-        if_exp     = If (app (qvar (ModuleName "Prelude") (name "null")) (varn "l"))
-                        (app (varn "return") unitCon)
-                        (app (varn "run") (Paren (app (varn "log_states") (varn "l"))))
-        -- let l = runState ... in if ...
-        let_exp    = Let (BDecls [PatBind noLoc (pvarn "l") (UnGuardedRhs rs_app) Nothing])
-                         if_exp
-        -- do let ...; assert True
-        do_exp     = Do [ Qualifier let_exp
-                        , Qualifier (app (varn "assert") (Con $ UnQual $ name "True"))]
-        dollar x y = InfixApp x (QConOp $ UnQual $ Symbol "$") y
-        rhs        = dollar (varn "monadicIO") do_exp
+        -- let l = runState ... in ...
+        rhs        = Let (BDecls [PatBind noLoc (pvarn "l") (UnGuardedRhs rs_app) Nothing])
+                         ret_exp
+        -- (reverse l, plist)
+        ret_exp    = Tuple Boxed [app (varn "reverse") (varn "l"), (varn "plist")]
 
 
 -- ### Arbitrary instances ##################################################
@@ -784,12 +783,22 @@ pidToJSONDecl ci =
         mkTy     = name . ("p" ++) . show
 
 -- ### "Static" functions to be included ##################################################
+qcDefsStr="fn          = \"states.json\"\n\
+\sample_size = 100000\n"
 
-mainStr="main :: IO ()\n\
-\main = quickCheck prop_runState\n"
+qcMainStr="main :: IO () \n\
+\main = do b <- doesFileExist fn \n\
+\          when b (removeFile fn) \n\
+\\n\
+\          inputs  <- generate $ vector sample_size :: IO [(State,[Pid])] \n\
+\          let results  = map run_test inputs \n\
+\              results' = filter (not . null . fst) results \n\
+\          C.writeFile fn (encodePretty $ toJSON results') \n\
+\\n\
+\          bs <- C.readFile fn \n\
+\          let Just l = decode bs :: Maybe [([State],[Pid])] \n\
+\          Prelude.putStrLn (\"Successfull runs: \" ++ (show $ length l)) \n"
 
-log_statesStr="log_states :: [State] -> IO ()\n\
-\log_states ss =  forM_ ss (C.putStrLn . encodePretty . toJSON)\n"
 
 arbValStr = "instance (Arbitrary a) => Arbitrary (Val a) where \n\
 \  arbitrary = oneof [ return VUnit \n\
