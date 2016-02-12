@@ -89,3 +89,14 @@ instance FromJSON Pid_pre where
 instance ToJSON Pid_pre where
   toJSON PIDR0 = String "PIDR0"
   toJSON PIDR1 = String "PIDR1"
+
+-- data Pid_pre p1 = PIDR0
+--                 | PIDR2 p1
+--                 deriving Show
+
+instance FromJSON p1 => FromJSON (Pid_pre p1) where
+        parseJSON (Object s)
+          = case H.toList s of
+              [(key,value)] | key == "PIDR0" -> return PIDR0
+                            | key == "PIDR2" -> PIDR2 <$> parseJSON value
+        parseJSON _ = mzero

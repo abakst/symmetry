@@ -79,14 +79,19 @@ copyMapModule opt d
        copyFile f (d </> "SymMap.hs")
 
 copyVectorModule opt d
-  = do let f' = if optQC opt
+  = do
+       let f' = if optQC opt
                    then "SymVectorQC.hs"
                    else "SymVector.hs"
        f <- getDataFileName ("include" </> f')
        copyFile f (d </> "SymVector.hs")
 
 copyBoilerModule opt d
-  = do f <- getDataFileName ("include" </> "SymBoilerPlate.hs")
+  = do
+       let f' = if optQC opt
+                   then "SymBoilerPlateQC.hs"
+                   else "SymBoilerPlate.hs"
+       f <- getDataFileName ("include" </> f')
        copyFile f (d </> "SymBoilerPlate.hs")
 
 copyIncludes opt d =

@@ -33,11 +33,6 @@ instance (Show a) => Show (Val a) where
   show (VInL v)    = "VInL " ++ (show v)
   show (VPair l r) = "VPair (" ++ show l ++ ", " ++ show r ++ ")"
 
-liquidAssert p _ = if p
-                     then ()
-                     else error "ASSERTION FAILURE !"
-
-
 isVUnit, isVUnInit, isVInt, isVString, isVPid, isVInR, isVInL, isVPair :: Val p -> Bool
 isVUnit VUnit{} = True
 isVUnit _       = False

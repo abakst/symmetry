@@ -466,6 +466,7 @@ printQCFile ci _
              , "import Data.Aeson.Encode.Pretty"
              , "import Control.Monad"
              , "import Data.ByteString.Lazy.Char8 as C (putStrLn)"
+             , "import Data.HashMap.Strict as H"
              ]
     spec =  mainStr
             : (prettyPrint  $  prop_runStateDecl ci) : ""
@@ -488,40 +489,48 @@ arbitraryDecls ci = [ arbitraryPidPreDecl ci
 
 jsonDecls   :: ConfigInfo Int -> [Decl]
 jsonDecls ci = ($ ci) <$> [ stateFromJSONDecl
-                          , stateToJSONDecl   ]
+                          , stateToJSONDecl
+                          , pidFromJSONDecl
+                          ]
 
 -- ### QuickCheck helpers ##################################################
 
 -- prop_runState :: State -> [Pid_pre] -> Property
 -- prop_runState s plist = monadicIO $ do
 --   let l = runState s emptyVec emptyVec plist []
---   if null l
---      then return ()
---      else run (log_states l)
+--   in if null l
+--         then return ()
+--         else run (log_states l)
 --   assert True
 prop_runStateDecl    :: ConfigInfo Int -> Decl
-prop_runStateDecl ci =  FunBind [ Match noLoc (name "prop_runState") args Nothing (UnGuardedRhs rhs) Nothing ]
-                          where pvarn n    = pvar $ name n
-                                varn n     = Var $ UnQual $ name n
-                                args       = [pvarn "s", pvarn "plist"]
-                                emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
-                                -- turn buffers into empty vectors
-                                bufs       = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
-                                -- runState s ... plist []
-                                rs_app     = appFun (varn runState)
-                                                    ((varn "s") : bufs ++ [varn "plist", emptyListCon])
-                                -- if (null l) then return () else run (log_states l)
-                                if_exp     = If (app (varn "null") (varn "l"))
-                                                (app (varn "return") unitCon)
-                                                (app (varn "run") (Paren (app (varn "log_states") (varn "l"))))
-                                -- let l = runState ... in if ...
-                                let_exp    = Let (BDecls [PatBind noLoc (pvarn "l") (UnGuardedRhs rs_app) Nothing])
-                                                 if_exp
-                                -- do let ...; assert True
-                                do_exp     = Do [ Qualifier let_exp
-                                                , Qualifier (app (varn "assert") (Con $ UnQual $ name "True"))]
-                                dollar x y = InfixApp x (QConOp $ UnQual $ Symbol "$") y
-                                rhs        = dollar (varn "monadicIO") do_exp
+prop_runStateDecl ci =
+  FunBind [ Match noLoc (name "prop_runState") args Nothing (UnGuardedRhs rhs) Nothing ]
+  where pvarn n    = pvar $ name n
+        varn n     = Var $ UnQual $ name n
+        args       = [pvarn "s", pvarn "plist"]
+        emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
+        -- turn buffers into empty vectors
+        bufs       = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
+        -- runState s ... plist []
+        -- rs_app     = appFun (varn runState)
+        --                     ((varn "s") : bufs ++ [varn "plist", emptyListCon])
+        -- FIXME
+        rs_app     = appFun (varn runState)
+                            ((varn "s") : bufs ++ [varn "plist"])
+        -- if (null l) then return () else run (log_states l)
+        -- if_exp     = If (app (varn "null") (varn "l"))
+        --                 (app (varn "return") unitCon)
+        --                 (app (varn "run") (Paren (app (varn "log_states") (varn "l"))))
+        -- FIXME
+        if_exp     = app (varn "return") (Con $ Special $ UnitCon)
+        -- let l = runState ... in if ...
+        let_exp    = Let (BDecls [PatBind noLoc (pvarn "l") (UnGuardedRhs rs_app) Nothing])
+                         if_exp
+        -- do let ...; assert True
+        do_exp     = Do [ Qualifier let_exp
+                        , Qualifier (app (varn "assert") (Con $ UnQual $ name "True"))]
+        dollar x y = InfixApp x (QConOp $ UnQual $ Symbol "$") y
+        rhs        = dollar (varn "monadicIO") do_exp
 
 
 -- ### Arbitrary instances ##################################################
@@ -553,7 +562,7 @@ arbitraryPidPreDecl ci =
         -- Pid_pre p1 ...
         tv_name = TyParen (foldl' TyApp (TyVar $ name pidPre) [TyVar v | v <- pid_vars])
         arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
-        arb_rhs = UnGuardedRhs (app (var' "oneOf") (listE pid_ts))
+        arb_rhs = UnGuardedRhs (app (var' "oneof") (listE pid_ts))
         pid_ts  = Prelude.map pidGen ts
 
         pidName p = Con $ UnQual $ name (pidConstructor p)
@@ -676,22 +685,42 @@ stateToJSONDecl ci =
 --     | s == "PIDR0" = return PIDR0
 --     | s == "PIDR1" = return PIDR1
 --   parseJSON _ = mzero
+pidFromJSONDecl    :: ConfigInfo Int -> Decl
+pidFromJSONDecl ci =
+  InstDecl noLoc Nothing [] ctx tc_name [tv_name] [InsDecl (FunBind [fr, fr_err])]
+  where
+        fr     = Match noLoc (name "parseJSON") fr_arg Nothing (UnGuardedRhs rhs) Nothing
+        fr_arg = [PApp (qname "Object") [pvarn "o"]]
+
+        -- State <$> s .: <first var> <*> s .: <second var> <*> ...
+        rhs = foldl' (\e s -> fapp_syn e s) rhs' ns'
+        -- State <$> s .: <first var>
+        rhs' = fmap_syn (Con $ qname stateRecordCons) n'
+        -- parser for each variable
+        varParser n = infix_syn ".:" (var $ name "s") (Lit $ String n)
+        -- the names of the arguments in the state
+        n':ns' = map (varParser . fst) (stateVarsNTList ci)
+
+        -- parseJSON _ = mzero
+        fr_err  = Match noLoc (name "parseJSON") [PWildCard] Nothing rhs_err Nothing
+        rhs_err = UnGuardedRhs $ var $ name $ "mzero"
+
+        -- possible context class
+        ctx     = [ClassA tc_name [TyVar v] | v <- pid_vars]
+        tc_name = UnQual $ name "FromJSON"
+        -- Pid_pre p1 ...
+        tv_name = TyParen (foldl' TyApp (TyVar $ name pidPre) [TyVar v | v <- pid_vars])
+
+        qname n = UnQual $ name n
+        pvarn n = Language.Haskell.Exts.Syntax.PVar $ name n
+        var' s  = var $ name s
+        pid_vars = [ t | (p, t) <- ts, isAbs p  ]
+        ts       = [ (p, mkTy t) | p <- pids ci | t <- [0..] ]
+        mkTy     = name . ("p" ++) . show
 
 -- instance ToJSON Pid_pre where
 --   toJSON PIDR0 = String "PIDR0"
 --   toJSON PIDR1 = String "PIDR1"
-
--- -- instance Arbitrary Pid_pre where
--- --         arbitrary = elements [...]
--- arbitraryPidPreDecl    :: ConfigInfo Int -> Decl
--- arbitraryPidPreDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
---                           where tc_name = UnQual $ name "Arbitrary"
---                                 tv_name = TyVar $ name pidPre
---                                 var' s  = var $ name s
---                                 pid_ts  = [ var' $ pidConstructor p | p <- (pids ci) ]
---                                 arb_rhs = UnGuardedRhs (app (var' "elements") (listE pid_ts))
---                                 arb     = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
-
 
 -- ### "Static" functions to be included ##################################################
 
