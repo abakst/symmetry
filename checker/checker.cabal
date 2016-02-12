@@ -17,8 +17,11 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 data-files:          include/SymMap.hs
+                   , include/SymMapQC.hs
                    , include/SymVector.hs
+                   , include/SymVectorQC.hs
                    , include/SymBoilerPlate.hs
+                   , include/SymBoilerPlateQC.hs
 library
   exposed-modules: Symmetry.Language.AST
                    Symmetry.Language.Syntax
@@ -58,6 +61,8 @@ library
                      , fgl
                      , wl-pprint >=1.2 && <1.3
                      , QuickCheck >= 2.8.1
+                     , aeson
+                     , aeson-pretty
   hs-source-dirs:      src
                      , tests
   default-language:    Haskell2010
