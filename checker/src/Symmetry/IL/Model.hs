@@ -32,12 +32,13 @@ valCons = [ unitCons
           ]
 
 -- Constant Names
-sched, state, initState, initSched, nondet :: String
+sched, state, initState, initSched, nondet, nondetRange :: String
 state = "state"
 sched = "sched"
 initState = "state0"
 initSched = "sched0"
 nondet    = "nonDet"
+nondetRange = "nonDetRange"
 
 mapGetFn, mapPutFn, vecGetFn, vecPutFn :: String
 mapGetFn = "get"
@@ -112,8 +113,9 @@ class ILModel e where
   readRoleBound :: ConfigInfo Int -> Pid -> e
   readState :: ConfigInfo Int -> Pid -> String -> e
 
-  nonDet    :: ConfigInfo Int -> Pid -> e
-  matchVal  :: ConfigInfo Int -> Pid -> e -> [(ILExpr, e)] -> e
+  nonDet      :: ConfigInfo Int -> Pid -> e
+  nonDetRange :: ConfigInfo Int -> Pid -> Set -> e
+  matchVal    :: ConfigInfo Int -> Pid -> e -> [(ILExpr, e)] -> e
 
   -- updates
   joinUpdate :: ConfigInfo Int -> Pid -> e -> e -> e
@@ -258,6 +260,17 @@ ruleOfStmt ci p s@SIter { iterVar = V v, iterSet = set, annot = a }
     (i, j)   = case (annot <$>) <$> cfgNext ci p a of
                  Just [i, j] -> (i, j)
                  Just [i]    -> (i, -1)
+-------------------------
+-- choose i in I (s)
+-------------------------
+ruleOfStmt ci p s@SChoose { chooseVar = V v, chooseSet = set }
+  = [ mkRule ci p grd (seqUpdates ci p ups) ]
+  where
+    grd = pcGuard ci p s
+    ups = [ setPC ci p (int (annot (chooseBody s)))
+          , setState ci p [(v, nonDetRange ci p set)]
+          ]
+
 -------------------------
 -- assert e
 -------------------------

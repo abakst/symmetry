@@ -270,6 +270,15 @@ hNonDet :: ConfigInfo Int
 hNonDet _ _
   = ExpM $ metaFunction nondet [vExp sched]
 
+hNonDetRange :: ConfigInfo Int
+             -> Pid
+             -> Set
+             -> HaskellModel
+hNonDetRange ci p (S s)
+  = ExpM $ metaFunction nondetRange [intE 0, unExp $ readState ci p s]
+hNonDetRange _ _ _
+  = error "hNonDetRange (TBD)"
+
 hRule :: ConfigInfo Int
       -> Pid
       -> HaskellModel
@@ -304,6 +313,7 @@ instance ILModel HaskellModel where
   readPCCounter = hReadPCCounter
   readRoleBound = hReadRoleBound
   nonDet = hNonDet
+  nonDetRange = hNonDetRange
 
   joinUpdate = hJoinUpdates
   setPC      = hSetPC

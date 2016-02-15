@@ -4,6 +4,10 @@ module SymBoilerPlate where
 nonDet :: a -> Int
 nonDet = undefined
 
+{-@ nonDetRange :: x:Int -> y:Int -> {v:Int | x <= v && v < y} @-}  
+nonDetRange :: Int -> Int -> Int
+nonDetRange = undefined
+
 {-@
  data Val p = VUnit {}
            | VUnInit {}
