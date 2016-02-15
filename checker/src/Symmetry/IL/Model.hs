@@ -3,6 +3,7 @@
 module Symmetry.IL.Model where
 
 import Prelude hiding (and, or, pred)
+import Text.Printf
 import Data.Generics
 import Data.Char
 import Symmetry.IL.AST
@@ -151,6 +152,8 @@ nextPC ci p s = nextPC' ci p $ cfgNext ci p (annot s)
       = setPC ci p (int (-1))
     nextPC' ci p (Just [s])
       = setPC ci p (int (annot s))
+    nextPC' ci p (Just ss)
+      = error (printf "nextPC %s => (%s)" (show s) (show ss))
 
 mkRule :: ILModel e => ConfigInfo Int -> Pid -> e -> e -> Rule e
 mkRule ci p grd bdy = rule ci p grd Nothing bdy
@@ -204,7 +207,7 @@ ruleOfStmt ci p s@SCase{caseLPat = V l, caseRPat = V r}
   = [ mkRule ci p grd (matchVal ci p (expr ci p $ EVar (caseVar s)) cases)]
   where
     grd = pcGuard ci p s
-    mkLocal v = EVar (V ("local_" ++ v))
+    mkLocal v = EVar (GV ("local_" ++ v))
     cases = [ (ELeft (mkLocal l), lUpdates)
             , (ERight (mkLocal r), rUpdates)
             ]

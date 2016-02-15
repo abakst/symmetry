@@ -6,17 +6,18 @@ import           Data.Char
 import           Data.List
 import           Data.Maybe
 import           Data.Function
+import           Text.Printf
 import           Language.Haskell.Exts.SrcLoc
 import           Language.Haskell.Exts.Syntax hiding (Rule, EVar)
 import           Language.Haskell.Exts.Build
 import           Language.Haskell.Exts.Pretty
-import           Symmetry.IL.Model.HaskellSpec (initSpecOfConfig)
 
 import           Symmetry.IL.AST
 import           Symmetry.IL.Model
 import           Symmetry.IL.ConfigInfo
 import           Symmetry.IL.Model.HaskellDefs
 import           Symmetry.IL.Model.HaskellDeadlock
+import           Symmetry.IL.Model.HaskellSpec (initSpecOfConfig)
   
 ---------------------------------
 -- Wrapper type for Haskell code
@@ -171,14 +172,29 @@ con :: String -> Exp
 con = Con . UnQual . name
 
 hExpr :: ConfigInfo Int -> Pid -> ILExpr -> HaskellModel
-hExpr _ p EUnit    = ExpM $ con unitCons    
-hExpr _ p (EPid q@(PConc _)) = ExpM $ App (con pidCons) (vExp $ pidConstructor q)
+hExpr _ _ EUnit    = ExpM $ con unitCons    
+hExpr _ _ EString  = ExpM $ con stringCons
+hExpr _ _ (EInt i) = hInt i
+hExpr _ _ (EPid q@(PConc _))
+  = ExpM $ App (con pidCons) (vExp $ pidConstructor q)
+hExpr ci p (EPid q@(PAbs (V v) _))
+  = ExpM $ App (con pidCons) (App (vExp $ pidConstructor q) (unExp $ readState ci p v))
+hExpr _ _ (EPid q@(PAbs _ _))
+  = ExpM $ App (con pidCons) (App (vExp $ pidConstructor q) (vExp $ pidIdx q))
+hExpr _ _ (EVar (GV v))
+  = ExpM . vExp $ v
 hExpr ci p (EVar (V v))
   = hReadState ci p v
 hExpr ci p (ELeft e)
   = ExpM $ App (con leftCons) (unExp $ hExpr ci p e)
 hExpr ci p (ERight e)
   = ExpM $ App (con rightCons) (unExp $ hExpr ci p e)
+hExpr ci p (EPair e1 e2)
+  = ExpM $ App (App (con pairCons) (unExp $ hExpr ci p e1))
+               (unExp $ hExpr ci p e2)
+
+hExpr ci p e
+  = error (printf "hExpr: TBD(%s)" (show e))
 
 hPred :: ConfigInfo Int -> Pid -> ILPred -> HaskellModel
 hPred ci _ ILPTrue
@@ -302,12 +318,19 @@ instance ILModel HaskellModel where
   printModel = printHaskell
 
 
+ilExpPat :: ILExpr -> Pat
 ilExpPat (EPid q)
   = PApp (UnQual (name pidCons)) [pidPattern q]
-ilExpPat (ELeft (EVar (V v)))
-  = PApp (UnQual (name leftCons)) [pvar (name v)]
-ilExpPat (ERight (EVar (V v)))
-  = PApp (UnQual (name rightCons)) [pvar (name v)]
+ilExpPat (ELeft (EVar v))
+  = PApp (UnQual (name leftCons)) [varPat v]
+ilExpPat (ERight (EVar v))
+  = PApp (UnQual (name rightCons)) [varPat v]
+ilExpPat e
+  = error (printf "ilExpPath TODO(%s)" (show e))
+
+varPat :: Var -> Pat    
+varPat (V v)  = pvar $ name v
+varPat (GV v) = pvar $ name v
 
 printRules ci rs dl = prettyPrint $ FunBind matches
   where
