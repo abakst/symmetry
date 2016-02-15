@@ -1,5 +1,5 @@
 module SymMap where
- 
+
 
 data Map_t k v = M (k -> v)
 {-@ embed Map_t as Map_t @-}

@@ -21,6 +21,7 @@ data ConfigInfo a = CInfo { config     :: Config a
                           , tyMap      :: TyMap
                           , pids       :: [Pid]
                           , cfg        :: [(Pid, IntMap [Stmt Int])]
+                          , isQC       :: Bool
                           }
 
 mkCState :: Config Int -> ConfigState 
@@ -56,6 +57,7 @@ mkCInfo c = CInfo { config    = c
                   , tyMap     = tyMap
                   , pids      = fst <$> cProcs c
                   , cfg       = mkCfg <$> cProcs c
+                  , isQC      = False
                   }
   where
     mkCfg (p, s) = (p, buildStmtCfg s)

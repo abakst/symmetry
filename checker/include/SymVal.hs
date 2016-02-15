@@ -1,6 +1,6 @@
 module SymBoiler where
 
-{-@ nonDet :: a -> {v:Int | true} @-}  
+{-@ nonDet :: a -> {v:Int | true} @-}
 nonDet :: a -> Int
 nonDet = undefined
 
