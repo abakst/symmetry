@@ -186,6 +186,10 @@ hExpr _ _ (EPid q@(PAbs _ _))
   = ExpM $ App (con pidCons) (App (vExp $ pidConstructor q) (vExp $ pidIdx q))
 hExpr _ _ (EVar (GV v))
   = ExpM . vExp $ v
+hExpr ci p (EVar (VPtrR t))
+  = readPtrR ci p t
+hExpr ci p (EVar (VPtrW t))
+  = readPtrW ci p p t
 hExpr ci p (EVar (V v))
   = hReadState ci p v
 hExpr ci p (ELeft e)

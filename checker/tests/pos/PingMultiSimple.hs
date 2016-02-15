@@ -7,27 +7,29 @@
 {-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 module Main where
 
-import Prelude hiding ((>>=), (>>), fail, return, not) 
+import Prelude hiding ((>>=), (>>), fail, return, not, or) 
 import Symmetry.Language
 import Symmetry.Verify
 
-pingServer :: (DSL repr) => repr (Process repr ())
-pingServer = do (_ :: repr ()) <- recv
+pingServer :: forall repr. DSL repr => repr (Process repr ())
+pingServer = do ptrr  <- readPtrR (arb :: repr ())
+                l0    <- readGhost "l0"
+                myIdx <- readMyIdx
+                assert (not (myIdx `lt` l0) `or` (ptrr `eq` int 1))
+                (_ :: repr ()) <- recv
                 return tt
 
 master :: (DSL repr) => repr (RMulti -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do ps <- spawnMany r n pingServer
-      -- yield (G:T, R:T)
       doMany "l0" ps body
 
       -- One of the invariants...
       c    <- readGhost "l0"
-      assert (c `eq` n)
-      assert (not (c `eq` n))
+      -- assert (c `eq` n)
+      assert (c `lt` n)
 
       return tt
-      -- yield (G:\forall 0 <= i < n. PtrW[i] = 1; R: T)
   where
     body = lam $ \p -> do send p tt
 

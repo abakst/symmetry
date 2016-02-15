@@ -63,6 +63,18 @@ class Symantics repr where
   lam  :: (repr a -> repr b) -> repr (a -> b)
   app  :: repr (a -> b) -> repr a -> repr b
 
+  -- "Types"
+  inl   :: repr a -> repr (a :+: b)
+  inr   :: repr b -> repr (a :+: b)
+  pair  :: repr a -> repr b -> repr (a, b)
+  proj1 :: repr (a, b) -> repr a
+  proj2 :: repr (a, b) -> repr b
+
+  match :: (?callStack :: CallStack, Typeable a, Typeable b, ArbPat repr a, ArbPat repr b)
+        => repr (a :+: b) -> repr (a -> c) -> repr (b -> c) -> repr c
+  matchList :: (?callStack :: CallStack, Typeable a, ArbPat repr a)
+            => repr [a] -> repr (() -> b) -> repr ((a, [a]) -> b) -> repr b
+
   -- Monads:
   ret  :: repr a -> repr (Process repr a)
   bind :: repr (Process repr a) -> repr (a -> Process repr b) -> repr (Process repr b)
@@ -70,9 +82,6 @@ class Symantics repr where
        => repr ((a -> Process repr a) -> a -> Process repr a) -> repr (a -> Process repr a)
 
   -- Primitives:        
-  assert     :: repr Boolean -> repr (Process repr ())
-  readGhost  :: String -> repr (Process repr Int)
-
   self      :: repr (Process repr (Pid RSing))
   send      :: (?callStack :: CallStack, Typeable a)
             => repr (Pid RSing) -> repr a -> repr (Process repr ())
@@ -94,19 +103,16 @@ class Symantics repr where
 
   die       :: repr (Process repr a)
 
+  -- Verification Primitives:        
+  assert     :: repr Boolean -> repr (Process repr ())
+  readGhost  :: String -> repr (Process repr Int)
+  readPtrR   :: Typeable a => repr a -> repr (Process repr Int)
+  readPtrW   :: Typeable a => repr a -> repr (Process repr Int)
+  readMyIdx  :: repr (Process repr Int)
+
+
   -- "Run" a process             
   exec      :: repr (Process repr a) -> repr a 
-
-  inl   :: repr a -> repr (a :+: b)
-  inr   :: repr b -> repr (a :+: b)
-  pair  :: repr a -> repr b -> repr (a, b)
-  proj1 :: repr (a, b) -> repr a
-  proj2 :: repr (a, b) -> repr b
-
-  match :: (?callStack :: CallStack, Typeable a, Typeable b, ArbPat repr a, ArbPat repr b)
-        => repr (a :+: b) -> repr (a -> c) -> repr (b -> c) -> repr c
-  matchList :: (?callStack :: CallStack, Typeable a, ArbPat repr a)
-            => repr [a] -> repr (() -> b) -> repr ((a, [a]) -> b) -> repr b
 
 class Pat pat where
   joinPat  :: pat a -> pat a -> pat a

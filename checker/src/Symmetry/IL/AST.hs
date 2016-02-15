@@ -28,6 +28,8 @@ data Set = S String
 
 data Var = V String  -- Local Var
          | GV String -- Global Var
+         | VPtrR ILType -- Special Variable (read ptr for type)
+         | VPtrW ILType -- Special Variable (read ptr for type)
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data LVar = LV { unlv :: String }

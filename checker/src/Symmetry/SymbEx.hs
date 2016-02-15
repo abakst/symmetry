@@ -22,7 +22,11 @@ import           Control.Monad.State hiding (join, get, put)
 import           Symmetry.Language.AST as L
 import qualified Symmetry.IL.AST       as IL
 
-data Var a = V String deriving (Ord, Eq, Show)
+data Var a = V String
+           | VIdx RMulti
+           | VPtrR IL.ILType
+           | VPtrW IL.ILType
+             deriving (Ord, Eq, Show)
 
 type REnv = M.Map Role (AbsVal Int, IL.Stmt ())
 
@@ -95,7 +99,9 @@ calcType v (IL.EPair e1 e2) (IL.TProd l r) =
 calcType _ _ _ = Nothing
                            
 roleToPid :: RMulti -> IL.Pid
-roleToPid r = IL.PAbs (IL.GV ("i" ++ roleToString r)) (roleToSet r)
+roleToPid r = IL.PAbs (roleIdxVar r) (roleToSet r)
+
+roleIdxVar r = IL.GV ("i" ++ roleToString r)              
 
 emptyState :: SymbState
 emptyState = SymbState { renv = M.empty
@@ -336,7 +342,10 @@ joinStmt s1 s2
   = IL.SNonDet [s1, s2] ()
 
 varToIL :: Var a -> IL.Var
-varToIL (V x) = IL.V ("x_" ++ x)
+varToIL (V x)     = IL.V ("x_" ++ x)
+varToIL (VPtrR x) = IL.VPtrR x
+varToIL (VPtrW x) = IL.VPtrW x
+varToIL (VIdx r)  = roleIdxVar r
 
 varToILSet :: Var a -> IL.Set
 varToILSet (V x) = IL.S ("x_" ++ x)
@@ -576,26 +585,32 @@ symEq :: Eq a
 -------------------------------------------------
 symEq a b  = SE $ do av <- runSE a
                      bv <- runSE b
-                     return $ APred Nothing (Just (eqPred av bv))
+                     return $ APred Nothing (Just (opPred IL.Eq av bv))
 
-eqPred :: AbsVal a -> AbsVal a -> IL.ILPred
-eqPred (AInt (Just x) _) (AInt (Just y) _)
-  = IL.ILBop IL.Eq (IL.EVar (varToIL x)) (IL.EVar (varToIL y))
-eqPred (AInt (Just x) _) (AInt _ (Just i))
-  = IL.ILBop IL.Eq (IL.EInt i) (IL.EVar (varToIL x))
-eqPred (AInt _ (Just i)) (AInt (Just x) _)
-  = IL.ILBop IL.Eq (IL.EInt i) (IL.EVar (varToIL x))
-eqPred _ _
+opPred :: IL.Op -> AbsVal a -> AbsVal a -> IL.ILPred
+opPred o (AInt (Just x) _) (AInt (Just y) _)
+  = IL.ILBop o (IL.EVar (varToIL x)) (IL.EVar (varToIL y))
+opPred o (AInt (Just x) _) (AInt _ (Just i))
+  = IL.ILBop o (IL.EInt i) (IL.EVar (varToIL x))
+opPred o (AInt _ (Just i)) (AInt (Just x) _)
+  = IL.ILBop o (IL.EInt i) (IL.EVar (varToIL x))
+opPred _ _ _
   = undefined
 
 -------------------------------------------------
-symGt, symLt :: Ord a
-             => SymbEx a
-             -> SymbEx a
+symGt, symLt :: SymbEx Int
+             -> SymbEx Int
              -> SymbEx Boolean
 -------------------------------------------------
-symGt _ _  = arb
-symLt _ _  = arb
+symGt x y
+  = SE $ do xv <- runSE x
+            yv <- runSE y
+            return $ APred Nothing (Just (opPred IL.Gt xv yv))
+symLt x y
+  = SE $ do xv <- runSE x
+            yv <- runSE y
+            return $ APred Nothing (Just (opPred IL.Lt xv yv))
+
 
 -------------------------------------------------
 symNot :: SymbEx Boolean -> SymbEx Boolean
@@ -614,8 +629,20 @@ symAnd, symOr :: SymbEx Boolean
               -> SymbEx Boolean
               -> SymbEx Boolean
 -------------------------------------------------
-symAnd _ _ = arb
-symOr  _ _ = arb
+symAnd p q
+  = SE $ do pp <- runSE p 
+            qq <- runSE q
+            case (pp, qq) of
+              (APred _ (Just e1), APred _ (Just e2)) ->
+                return $ APred Nothing (Just (IL.ILAnd e1 e2))
+              _ -> runSE arb
+symOr  p q
+  = SE $ do pp <- runSE p 
+            qq <- runSE q
+            case (pp, qq) of
+              (APred _ (Just e1), APred _ (Just e2)) ->
+                return $ APred Nothing (Just (IL.ILOr e1 e2))
+              _ -> runSE arb
 
 -------------------------------------------------
 symLam :: (SymbEx a -> SymbEx b) -> SymbEx (a -> b)
@@ -672,6 +699,27 @@ symAssert exp
               APred _ (Just e) -> return $ AProc Nothing (assert e) (AUnit Nothing)
   where
     assert e = IL.SAssert { IL.assertPred = e, IL.annot = () }
+
+-------------------------------------------------
+symReadPtrR :: Typeable a => SymbEx a -> SymbEx (Process SymbEx Int)
+-------------------------------------------------
+symReadPtrR v
+  = SE $ do t <- absToILType <$> runSE v
+            return $ AProc Nothing skip $ AInt (Just $ VPtrR t) Nothing
+
+-------------------------------------------------
+symReadPtrW :: Typeable a => SymbEx a -> SymbEx (Process SymbEx Int)
+-------------------------------------------------
+symReadPtrW v
+  = SE $ do t <- absToILType <$> runSE v
+            return $ AProc Nothing skip $ AInt (Just $ VPtrW t) Nothing
+
+-------------------------------------------------
+symReadIdx :: SymbEx (Process SymbEx Int)
+-------------------------------------------------
+symReadIdx
+  = SE $ do (_, M r) <- gets me
+            return $ AProc Nothing skip $ AInt (Just $ VIdx r) Nothing
 
 -------------------------------------------------
 symReadGhost :: String -> SymbEx (Process SymbEx Int)
@@ -977,8 +1025,6 @@ instance Symantics SymbEx where
 
   lam       = symLam
   app       = symApp
-  readGhost = symReadGhost
-  assert    = symAssert
   self      = symSelf
   bind      = symBind
   fixM      = symFixM
@@ -1005,3 +1051,9 @@ instance Symantics SymbEx where
 
   match = symMatch
   matchList = symMatchList
+
+  readGhost = symReadGhost
+  assert    = symAssert
+  readPtrR  = symReadPtrR
+  readPtrW  = symReadPtrW
+  readMyIdx = symReadIdx
