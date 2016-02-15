@@ -434,6 +434,7 @@ instance Pretty MConstr where
 
 instance Pretty ILExpr where
   pretty EUnit     = text "()"
+  pretty EString   = text "<str>"
   pretty (EInt i)  = int i
   pretty (EVar v)  = pretty v
   pretty (EPid p)  = pretty p
@@ -486,9 +487,10 @@ instance Pretty (Stmt a) where
     = text "recv" <+> parens (pretty x <+> text "::" <+> pretty t)
 
   pretty (SIter x xs s _)
-    = text "for" <+> parens (int 0 <+> text "≤" <+> pretty x <+> langle <+> pretty xs) <+> lbrace $$
-      (indent 2 $ pretty s) $$
-      rbrace
+    = text "for" <+> parens (int 0 <+> text "≤"
+                                   <+> pretty x
+                                   <+> langle <+> text "|" <> pretty xs <> text "|")
+                 <+> lbrace $$ (indent 2 $ pretty s) $$ rbrace
 
   pretty (SVar (LV v) _)
     = text "goto" <+> pretty v

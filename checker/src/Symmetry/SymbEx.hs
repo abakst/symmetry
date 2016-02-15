@@ -182,6 +182,7 @@ instance Show (AbsVal t) where
 
 setVar :: Var t -> AbsVal t -> AbsVal t                
 setVar v (AUnit _)       = AUnit (Just v)
+setVar v (AString _)     = AString (Just v)
 setVar v (AInt _ i)      = AInt  (Just v) i
 setVar v (ASum _ l r)    = ASum  (Just v) l r
 setVar v (APid _ p)      = APid  (Just v) p
@@ -396,10 +397,12 @@ absToIL (AProd _ a b) = do x <- absToIL a
                            y <- absToIL b
                            return $ IL.EPair x y
 
+absToIL (APred _ _) = error "absToIL APred"
 -------------------------------------------------
 -- | Generate IL from primitive Processes
 -------------------------------------------------
-absPidToExp :: AbsVal (Pid RSing) -> IL.ILExpr
+absPidToExp :: (?callStack :: CallStack)
+            => AbsVal (Pid RSing) -> IL.ILExpr
 absPidToExp p = let [e] = absToIL p in e
 
 sendToIL :: (?callStack :: CallStack)
@@ -754,11 +757,10 @@ symDoN :: String
        -> SymbEx (Process SymbEx [a])
 -------------------------------------------------
 symDoN s n f
-  = SE $ do -- v <- freshVar
-            let v = V s
+  = SE $ do let v = V s
             AInt x nv <- runSE n
             AArrow _ g <- runSE f
-            AProc _ s _ <- runSE (g (AInt Nothing Nothing))
+            AProc _ s _ <- runSE (g (AInt (Just v) Nothing))
             return $ AProc Nothing (iter v x nv s) (error "TBD: symDoN")
     where
       incrVar v = (`seqStmt` IL.SIncr (varToIL v) ())

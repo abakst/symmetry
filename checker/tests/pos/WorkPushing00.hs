@@ -38,8 +38,8 @@ master :: (DSL repr) => repr (RMulti -> Int -> Process repr [Int])
 master = lam $ \r -> lam $ \n ->
    do myPid <- self
       ps <- spawnMany r n (app slave myPid)      
-      doMany ps (lam $ \p -> send p (int 4))
-      doMany ps (lam $ \p -> do recv)
+      doMany "l0" ps (lam $ \p -> send p (int 4))
+      doMany "l1" ps (lam $ \p -> do recv)
     
       --app sumIntegers n
 

@@ -29,9 +29,9 @@ master :: (DSL repr) => repr (RMulti -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do ps <- spawnMany r n pingServer
       myPid <- self
-      doMany ps (lam $ \p -> send p (ping myPid))
-      doMany ps (lam $ \_ -> do (_ :: Message repr)  <- recv
-                                return tt)
+      doMany "l0" ps (lam $ \p -> send p (ping myPid))
+      doMany "l1" ps (lam $ \_ -> do (_ :: Message repr)  <- recv
+                                     return tt)
       return tt
 
 mainProc :: (DSL repr) => repr (Int -> ())

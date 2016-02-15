@@ -23,7 +23,7 @@ mainProc = lam $ \n -> exec $ do r <- newRMulti
                                  workers <- spawnMany r n worker
                                  let p = workers `lookup` int 0
                                  send p (m1 (int 0))
-                                 doMany workers (lam $ \p -> send p m2)
+                                 doMany "l0" workers (lam $ \p -> send p m2)
                                  return tt
   where
     workerLoop = lam $ \f -> lam $ \_ -> do m <- recv

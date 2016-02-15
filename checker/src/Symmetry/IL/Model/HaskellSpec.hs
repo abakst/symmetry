@@ -64,7 +64,7 @@ eEqZero :: F.Expr -> F.Expr
 eEqZero e = eEq e eZero
 
 eApp :: Symbolic a => a -> [F.Expr] -> F.Expr            
-eApp f = EApp (dummyLoc $ symbol f)
+eApp f = eApps (F.eVar f)
 
 eImp p q
   = F.PImp p q

@@ -22,10 +22,10 @@ master = lam $ \r -> lam $ \n ->
    do ps <- spawnMany r n pingServer
       myPid <- self
       -- ifte arb
-      (doMany ps (lam $ \p -> send p myPid))
+      (doMany "l0" ps (lam $ \p -> send p myPid))
         -- (return nil)
-      (doMany ps (lam $ \_ -> do (_ :: repr (Pid RSing))  <- recv
-                                 return tt))
+      (doMany "l1" ps (lam $ \_ -> do (_ :: repr (Pid RSing))  <- recv
+                                      return tt))
       return tt
 
 mainProc :: (DSL repr) => repr (Int -> ())

@@ -26,7 +26,7 @@ slave =  lam $ \masterPid -> lam $ \workQueuePid ->
 
 -- wait for requests from n slaves and allot them work
 workQueueProcess :: (DSL repr) => repr (Int -> Process repr ())
-workQueueProcess = lam $ \n -> do doN n body
+workQueueProcess = lam $ \n -> do doN "lq" n body
                                   return tt
   where body = lam $ \i -> do nextWorker <- recv
                               send nextWorker i
@@ -43,7 +43,7 @@ master = lam $ \slaveRole  -> lam $ \n ->
                   slaves <- spawnMany slaveRole n (app (app slave myPid) workQueuePid)
       
                   -- wait for results from slaves
-                  doMany slaves (lam $ \p -> do recv)
+                  doMany "l0" slaves (lam $ \p -> do recv)
 
 mainProc :: (DSL repr) => repr (Int -> ())
 mainProc = lam $ \n -> exec $ do r <- newRMulti

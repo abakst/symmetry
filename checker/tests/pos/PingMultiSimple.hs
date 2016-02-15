@@ -12,12 +12,13 @@ import Symmetry.Language
 import Symmetry.Verify
 
 pingServer :: (DSL repr) => repr (Process repr ())
-pingServer = do (_ :: repr ()) <- recv -- 'recv a tt'
+pingServer = do (_ :: repr ()) <- recv
                 return tt
 
 master :: (DSL repr) => repr (RMulti -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do ps <- spawnMany r n pingServer
+      -- yield (G:T, R:T)
       doMany "l0" ps body
 
       -- One of the invariants...
@@ -26,6 +27,7 @@ master = lam $ \r -> lam $ \n ->
       assert (not (c `eq` n))
 
       return tt
+      -- yield (G:\forall 0 <= i < n. PtrW[i] = 1; R: T)
   where
     body = lam $ \p -> do send p tt
 

@@ -12,38 +12,28 @@ import Prelude hiding ((>>=), (>>), fail, return, id, mod)
 import Data.Typeable
 import GHC.Stack
 
-class ( Symantics repr
-      , ArbPat repr ()
-      , ArbPat repr Int
-      , ArbPat repr String
-      , ArbPat repr (Pid RSing)
-      , ArbPat repr [Int]
-      ) => HelperSym repr
-
-instance HelperSym SymbEx
-
-id :: Symantics repr => repr (a-> Process repr a)
+id :: DSL repr => repr (a-> Process repr a)
 id  = lam $ \x -> ret x
 
-reject :: Symantics repr => repr (a-> Process repr b)
+reject :: DSL repr => repr (a-> Process repr b)
 reject  = lam $ \_ -> fail
 
-app2 :: Symantics repr => repr (a->b->c) -> repr a -> repr b -> repr c
+app2 :: DSL repr => repr (a->b->c) -> repr a -> repr b -> repr c
 app2 f a1 a2 = app (app f a1) a2
 
-app3 :: Symantics repr => repr (a->b->c->d) -> repr a -> repr b -> repr c -> repr d
+app3 :: DSL repr => repr (a->b->c->d) -> repr a -> repr b -> repr c -> repr d
 app3 f a1 a2 a3 = app (app (app f a1) a2) a3
 
-app4 :: Symantics repr => repr (a->b->c->d->e) -> repr a -> repr b -> repr c -> repr d -> repr e
+app4 :: DSL repr => repr (a->b->c->d->e) -> repr a -> repr b -> repr c -> repr d -> repr e
 app4 f a1 a2 a3 a4 = app (app (app (app f a1) a2) a3) a4
 
-app5 :: Symantics repr
+app5 :: DSL repr
      => repr (a->b->c->d->e->f)
      -> repr a -> repr b -> repr c -> repr d -> repr e -> repr f
 app5 f a1 a2 a3 a4 a5 = app (app (app (app (app f a1) a2) a3) a4) a5
 
 ifte      :: ( ?callStack :: CallStack
-             , Symantics repr
+             , DSL repr
              , ArbPat repr ()
              )
           => repr Boolean -> repr a -> repr a -> repr a
@@ -83,7 +73,7 @@ lookup  = lam $ \k -> lam $ \m ->
             do r <- app (fixM f_lookup) (pair3 k m (inl tt))
                ret $ proj2 $ proj2 r
 
-print :: Symantics repr => repr (a -> Process repr ())
+print :: DSL repr => repr (a -> Process repr ())
 print  = lam $ \_ -> ret tt
 
 mod :: ( ?callStack :: CallStack
@@ -141,17 +131,17 @@ compare :: ( ?callStack :: CallStack
 compare  = lam $ \x -> lam $ \y -> ifte (lt x y) (inl tt)
                                      (ifte (eq x y) (inr $ inl tt) (inr $ inr tt))
 
-pair3 :: ( Symantics repr
+pair3 :: ( DSL repr
          )
       => repr a -> repr b -> repr c -> repr (a,(b,c))
 pair3 a1 a2 a3 = pair a1 (pair a2 a3)
 
-pair4 :: ( Symantics repr
+pair4 :: ( DSL repr
          )
       => repr a -> repr b -> repr c -> repr d -> repr (a,(b,(c,d)))
 pair4 a1 a2 a3 a4 = pair a1 $ pair a2 $ pair a3 a4
 
-pair5 :: ( Symantics repr
+pair5 :: ( DSL repr
          )
       => repr a -> repr b -> repr c -> repr d -> repr e -> repr (a,(b,(c,(d,e))))
 pair5 a1 a2 a3 a4 a5 = pair a1 $ pair a2 $ pair a3 $ pair a4 a5

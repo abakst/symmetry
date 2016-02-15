@@ -16,14 +16,14 @@ recvUnit = recv
 
 pingServer :: forall repr. (DSL repr) => repr (Int -> Pid RSing -> Process repr ())
 pingServer = lam $ \n -> lam $ \p ->
-               do doN n (lam $ const (recvUnit >> send p tt))
+               do doN "l1" n (lam $ const (recvUnit >> send p tt))
                   return tt
 
 master :: forall repr. (DSL repr) => repr (RSing -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do me <- self
       p <- spawn r (app (app pingServer n) me)
-      doN n (lam $ const (send p tt >> recvUnit))
+      doN "l0" n (lam $ const (send p tt >> recvUnit))
       return tt
 
 mainProc :: (DSL repr) => repr (Int -> ())

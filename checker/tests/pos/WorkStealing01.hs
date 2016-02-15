@@ -47,17 +47,20 @@ slave =  lam $ \masterPid -> lam $ \workQueuePid -> app (fixM (app (app fix_f ma
 -- todo: add infinite loop. type errors
 -- this workqueue process will NOT terminate. We are only checking for termination of master and slave nodes.
 
-workQueueProcess :: (DSL repr) => repr (Int -> Process repr ())
+workQueueProcess :: forall repr.
+                    DSL repr
+                 => repr (Int -> Process repr ())
 workQueueProcess =   
-                     lam $ \n -> do doN n allotWork
-                                    ret tt
-                                    --app (fixM fix_loopInf) tt
+                     lam $ \n -> do doN "l1" n allotWork
+                                    -- app (fixM fix_loopInf) tt
 
                                     forever $ do slavePid <- recv
                                                  send slavePid mkTerm
                        
-                       where allotWork = lam $ \x -> do slavePid <- recv
-                                                        send slavePid (mkWork x)
+                       where
+                         allotWork :: repr (Int -> Process repr ())
+                         allotWork = lam $ \x -> do slavePid <- recv
+                                                    send slavePid (mkWork x)
                              {-fix_loopInf = lam $ \f -> lam $ \_ -> do (slavePid :: repr (Pid RSing)) <- recv
                                                                       send slavePid (inr tt)
                                                                       app f tt-}
@@ -78,7 +81,7 @@ master = lam $ \slaveRole  -> lam $ \k -> lam $ \n ->
                   slaves <- spawnMany slaveRole k (app (app slave myPid) workQueuePid)
       
                   -- wait for n results.
-                  doN n (lam $ \p -> do recv)
+                  doN "l0" n (lam $ \p -> do recv)
 
 
 mainProc :: (DSL repr) => repr (Int -> Int -> ())

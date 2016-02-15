@@ -38,7 +38,7 @@ mapperProcess =  lam $ \masterPid -> lam $ \workQueuePid -> app (fixM (app (app 
 
 workQueueProcess :: (DSL repr) => repr (Int -> Process repr ())
 workQueueProcess =   
-                     lam $ \n -> do doN n allotWork
+                     lam $ \n -> do doN "l0" n allotWork
                                     forever $ do mapperPid <- recv
                                                  send mapperPid mkTerm
                        
@@ -53,7 +53,7 @@ master = lam $ \mapperRole  -> lam $ \k -> lam $ \n ->
                   workQueuePid <- spawn workQueueRole (app workQueueProcess n)                                        
                   mappers <- spawnMany mapperRole k (app (app mapperProcess myPid) workQueuePid)
       
-                  doN n (lam $ \p -> do recv)
+                  doN "l1" n (lam $ \p -> do recv)
 
 
 mainProc :: (DSL repr) => repr (Int -> Int -> ())
