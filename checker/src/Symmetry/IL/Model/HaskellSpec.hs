@@ -211,20 +211,27 @@ stateRecord :: [([Name], Type)] -> QualConDecl
 stateRecord fs
   = QualConDecl noLoc [] [] (RecDecl (name stateRecordCons) fs)
   
+removeDerives                           :: Decl -> Decl
+removeDerives (DataDecl s d c n ts qs _) = DataDecl s d c n ts qs []
+removeDerives _                          = undefined
+
 stateDecl :: ConfigInfo Int
           -> ([Decl], String)
 stateDecl ci
   = ([dataDecl], specStrings)
   where
-    dataDecl     = DataDecl noLoc DataType [] (name stateRecordCons) [] [stateRecord fs] []
+    derivin      = [(UnQual $ name "Show", [])]
+    dataDecl     = DataDecl noLoc DataType [] (name stateRecordCons) [] [stateRecord fs] derivin
     specStrings  = unlines [ dataReft
                            , ""
                            , recQuals
                            , ""
                            ]
 
-    dataReft     = printf "{-@ %s @-}" (pp dataDecl)
-    fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs ++ glSets
+    -- remove deriving classes (lh fails with them)
+    dataReft     = printf "{-@ %s @-}" (pp (removeDerives dataDecl))
+    fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
+
     absFs    = concat [ [mkBound p, mkCounter p, mkUnfold p] | p <- pids ci, isAbs p ]
     pcFs     = [ mkPC p (pc p) | p <- pids ci ]
     ptrFs    = [ mkInt p (ptrR ci p t) | p <- pids ci, t <- fst <$> tyMap ci] ++
@@ -262,7 +269,7 @@ pidPreApp ci
 pidDecl :: ConfigInfo Int
         -> [Decl]
 pidDecl ci
-  = [ DataDecl noLoc DataType [] (name pidPre) tvbinds cons []
+  = [ DataDecl noLoc DataType [] (name pidPre) tvbinds cons [(UnQual $ name "Show",[])]
     , TypeDecl noLoc (name pidType) [] (pidPreApp ci)
     ] ++
     (pidFn <$> pids ci)
@@ -294,7 +301,7 @@ boundPred (Known (S s) n)
 boundPred (Unknown (S s) (V x))
   = eEq (eReadState "v" x) (eReadState "v" s)
 
-initSpecOfConfig :: ConfigInfo Int -> String               
+initSpecOfConfig :: ConfigInfo Int -> String
 initSpecOfConfig ci
   = unlines [ initStateReft concExpr
             , initSchedReft schedExprs
