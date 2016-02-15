@@ -192,6 +192,8 @@ hExpr ci p (EVar (VPtrW t))
   = readPtrW ci p p t
 hExpr ci p (EVar (V v))
   = hReadState ci p v
+hExpr ci _ (EVar (VRef q v))
+  = hReadState ci q v
 hExpr ci p (ELeft e)
   = ExpM $ App (con leftCons) (unExp $ hExpr ci p e)
 hExpr ci p (ERight e)
@@ -199,6 +201,11 @@ hExpr ci p (ERight e)
 hExpr ci p (EPair e1 e2)
   = ExpM $ App (App (con pairCons) (unExp $ hExpr ci p e1))
                (unExp $ hExpr ci p e2)
+hExpr ci p (EPlus e1 e2)
+  = ExpM $ infixApp e1' opPlus e2'
+  where
+    e1' = unExp $ hExpr ci p e1
+    e2' = unExp $ hExpr ci p e2
 
 hExpr ci p e
   = error (printf "hExpr: TBD(%s)" (show e))

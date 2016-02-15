@@ -11,9 +11,10 @@ import Prelude hiding ((>>=), (>>), fail, return, not, or)
 import Symmetry.Language
 import Symmetry.Verify
 
-pingServer :: forall repr. DSL repr => repr (Process repr ())
-pingServer = do ptrr  <- readPtrR (arb :: repr ())
-                l0    <- readGhost "l0"
+pingServer :: forall r repr. DSL repr => repr (Pid r -> Process repr ())
+pingServer = lam $ \p ->
+             do ptrr  <- readPtrR (arb :: repr ())
+                l0    <- readGhost p "l0"
                 myIdx <- readMyIdx
                 assert (not (myIdx `lt` l0) `or` (ptrr `eq` int 1))
                 (_ :: repr ()) <- recv
@@ -21,11 +22,12 @@ pingServer = do ptrr  <- readPtrR (arb :: repr ())
 
 master :: (DSL repr) => repr (RMulti -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
-   do ps <- spawnMany r n pingServer
+   do me <- self
+      ps <- spawnMany r n (app pingServer me)
       doMany "l0" ps body
 
       -- One of the invariants...
-      c    <- readGhost "l0"
+      c    <- readGhost me "l0"
       -- assert (c `eq` n)
       assert (c `lt` n)
 

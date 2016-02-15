@@ -220,7 +220,7 @@ stateDecl :: ConfigInfo Int
 stateDecl ci
   = ([dataDecl], specStrings)
   where
-    derivin      = [(UnQual $ name "Show", [])]
+    derivin      = [(UnQual $ name "Show", []) | isQC ci] 
     dataDecl     = DataDecl noLoc DataType [] (name stateRecordCons) [] [stateRecord fs] derivin
     specStrings  = unlines [ dataReft
                            , ""

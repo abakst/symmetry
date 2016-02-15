@@ -30,6 +30,7 @@ data Var = V String  -- Local Var
          | GV String -- Global Var
          | VPtrR ILType -- Special Variable (read ptr for type)
          | VPtrW ILType -- Special Variable (read ptr for type)
+         | VRef Pid String -- Reference another process's variable (for ghost state)
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data LVar = LV { unlv :: String }
@@ -193,10 +194,11 @@ data Stmt a = SSkip { annot :: a }
                       , annot      :: a
                       }
 
-            | SIncr { incrVar :: Var
-                    , annot :: a
+            | SAssign { assignLhs :: Var
+                      , assignRhs :: ILExpr
+                      , annot :: a
+                      }
 
-                    }
             | SDie { annot :: a }
             {- These do not appear in the source: -}
             | SNull { annot :: a }
@@ -308,8 +310,8 @@ instance Traversable Stmt where
       mkCase a l r = SCase v pl pr l r a
   traverse f (SNonDet ss a)
     = flip SNonDet <$> f a <*> traverse (traverse f) ss
-  traverse f (SIncr v a)
-    = SIncr v <$> f a
+  traverse f (SAssign v e a)
+    = SAssign v e <$> f a
   traverse f (SAssert p a)
     = SAssert p <$> f a
   traverse _ _
@@ -402,8 +404,11 @@ freshIds (c @ Config { cProcs = ps })
   = c { cProcs = evalState (mapM (mapM freshId) ps) 1 }
 
 instance Pretty Var where
-  pretty (V x) = text x
-  pretty (GV x) = text x
+  pretty (V x)     = text x
+  pretty (GV x)    = text x
+  pretty (VPtrR t) = text "Rd[" <> pretty t <> text "]"
+  pretty (VPtrW t) = text "Wr[" <> pretty t <> text "]"
+  pretty (VRef p v) = pretty v <> text "@" <> pretty p
 
 instance Pretty Set where
   pretty (S x)   = text x
@@ -412,13 +417,13 @@ instance Pretty Set where
 
 instance Pretty Pid where
   pretty (PConc x)
-    = text "pid@" <> int x
+    = text "pid" <> parens (int x)
   pretty (PAbs v vs)
-    = text "pid@" <> pretty vs <> brackets (pretty v)
+    = text "pid" <> parens (pretty vs <> brackets (pretty v))
   pretty (PVar v)
-    = pretty v
+    = text "pid" <> parens (pretty v)
   pretty (PUnfold _ s i)
-    = text "pid@" <> pretty s <> brackets (int i)
+    = text "pid" <> parens (pretty s <> brackets (int i))
 
 x $$ y  = (x <> line <> y)
 
@@ -443,6 +448,7 @@ instance Pretty ILExpr where
   pretty (ELeft  e) = text "inl" <> parens (pretty e)
   pretty (ERight e) = text "inr" <> parens (pretty e)
   pretty (EPair e1 e2) = tupled [pretty e1, pretty e2]
+  pretty (EPlus e1 e2) = pretty e1 <+> text "+" <+> pretty e2
 
 instance Pretty ILPat where
   pretty (PUnit )      = text "()"
@@ -479,8 +485,8 @@ instance Pretty (Stmt a) where
   pretty (SAssert e _)
     = text "assert" <+> pretty e
 
-  pretty (SIncr v _)
-    = pretty v <> text "++"
+  pretty (SAssign v e _)
+    = pretty v <+> text ":=" <+> pretty e
 
   pretty (SSend p (t,e) _)
     = text "send" <+> pretty p <+> parens (pretty e <+> text "::" <+> pretty t)

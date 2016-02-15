@@ -470,6 +470,9 @@ recvToIL m x = do
 skip :: IL.Stmt ()
 skip = IL.SSkip ()
 
+assign :: Var a -> IL.ILExpr -> IL.Stmt ()
+assign v e
+  = IL.SAssign (varToIL v) e ()
 -------------------------------------------------
 -- | Sequence Statements
 -------------------------------------------------
@@ -588,12 +591,14 @@ symEq a b  = SE $ do av <- runSE a
                      return $ APred Nothing (Just (opPred IL.Eq av bv))
 
 opPred :: IL.Op -> AbsVal a -> AbsVal a -> IL.ILPred
-opPred o (AInt (Just x) _) (AInt (Just y) _)
-  = IL.ILBop o (IL.EVar (varToIL x)) (IL.EVar (varToIL y))
+opPred o (AInt _ (Just i)) (AInt _ (Just j))
+  = IL.ILBop o (IL.EInt i) (IL.EInt j)
 opPred o (AInt (Just x) _) (AInt _ (Just i))
   = IL.ILBop o (IL.EInt i) (IL.EVar (varToIL x))
 opPred o (AInt _ (Just i)) (AInt (Just x) _)
   = IL.ILBop o (IL.EInt i) (IL.EVar (varToIL x))
+opPred o (AInt (Just x) _) (AInt (Just y) _)
+  = IL.ILBop o (IL.EVar (varToIL x)) (IL.EVar (varToIL y))
 opPred _ _ _
   = undefined
 
@@ -613,7 +618,8 @@ symLt x y
 
 
 -------------------------------------------------
-symNot :: SymbEx Boolean -> SymbEx Boolean
+symNot :: SymbEx Boolean
+       -> SymbEx Boolean
 -------------------------------------------------
 symNot b   = SE $ do v <- runSE b
                      return $ case v of
@@ -704,15 +710,17 @@ symAssert exp
 symReadPtrR :: Typeable a => SymbEx a -> SymbEx (Process SymbEx Int)
 -------------------------------------------------
 symReadPtrR v
-  = SE $ do t <- absToILType <$> runSE v
-            return $ AProc Nothing skip $ AInt (Just $ VPtrR t) Nothing
+  = SE $ do t  <- absToILType <$> runSE v
+            v' <- freshVar
+            return $ AProc Nothing (assign v' (IL.EVar $ IL.VPtrR t)) $ AInt (Just v') Nothing
 
 -------------------------------------------------
 symReadPtrW :: Typeable a => SymbEx a -> SymbEx (Process SymbEx Int)
 -------------------------------------------------
 symReadPtrW v
-  = SE $ do t <- absToILType <$> runSE v
-            return $ AProc Nothing skip $ AInt (Just $ VPtrW t) Nothing
+  = SE $ do t  <- absToILType <$> runSE v
+            v' <- freshVar
+            return $ AProc Nothing (assign v' (IL.EVar $ IL.VPtrW t)) $ AInt (Just v') Nothing
 
 -------------------------------------------------
 symReadIdx :: SymbEx (Process SymbEx Int)
@@ -722,10 +730,13 @@ symReadIdx
             return $ AProc Nothing skip $ AInt (Just $ VIdx r) Nothing
 
 -------------------------------------------------
-symReadGhost :: String -> SymbEx (Process SymbEx Int)
+symReadGhost :: SymbEx (Pid r) -> String -> SymbEx (Process SymbEx Int)
 -------------------------------------------------
-symReadGhost s
-  = SE . return $ AProc Nothing skip $ AInt (Just $ V s) Nothing
+symReadGhost p s
+  = SE $ do v <- freshVar
+            [IL.EPid pid] <- absToIL <$> runSE p
+            return $ AProc Nothing (assign v (IL.EVar (IL.VRef pid ("x_" ++ s))))
+                   $ AInt (Just v) Nothing
 
 -------------------------------------------------
 symSelf :: SymbEx (Process SymbEx (Pid RSing))
@@ -811,13 +822,15 @@ symDoN s n f
             AProc _ s _ <- runSE (g (AInt (Just v) Nothing))
             return $ AProc Nothing (iter v x nv s) (error "TBD: symDoN")
     where
-      incrVar v = (`seqStmt` IL.SIncr (varToIL v) ())
+      incrVar v = (`seqStmt` incr v)
       iter v _ (Just n) s = IL.SIter (varToIL v) (IL.SInts n) (incrVar v s) ()
       iter v (Just x) _ s = IL.SIter (varToIL v) (varToILSet x) (incrVar v s) ()
       iter (V x) _ _ s    =
                   let v = IL.LV $ "L" ++ show x
                       sv = IL.SVar v  ()
                   in IL.SLoop v ((s `seqStmt` sv) `joinStmt` skip) ()
+
+incr x = IL.SAssign (varToIL x) (IL.EPlus (IL.EVar (varToIL x)) (IL.EInt 1)) ()
 
 -------------------------------------------------
 symLookup :: SymbEx (Pid RMulti)
@@ -849,7 +862,7 @@ symDoMany s p f
                 AProc _ s _  <- runSE (g (APidElem (Just x) (Just v) (Pid Nothing)))
                 return $ AProc Nothing (iterVar v x s) (error "TBD: symDoMany")
     where
-      incrVar v = (`seqStmt` IL.SIncr (varToIL v) ())
+      incrVar v = (`seqStmt` incr v)
       iter v r s    = IL.SIter (varToIL v) (roleToSet r) (incrVar v s) ()
       iterVar v x s = IL.SIter (varToIL v) (varToILSetVar x) (incrVar v s) ()
 

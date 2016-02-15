@@ -32,12 +32,13 @@ mkCState c = CState { valVars  = vs
                     }
   where
     vs   = [ (p, v) | (p,s)  <- cProcs c, V v <- recvVars s ++ patVars s ]
-    is   = [ (p, i) | (p, s) <- cProcs c, V i <- everything (++) (mkQ [] intVar) s ]
+    is   = nub $ [ (p, i) | (p, s) <- cProcs c, V i <- everything (++) (mkQ [] intVar) s ]
     gs   = [ v | (V v, _) <- cGlobals c ]
     gsets = cGlobalSets c
 
     intVar :: Stmt Int -> [Var]
     intVar (SIter { iterVar = i }) = [i]
+    intVar (SAssign {assignLhs = i}) = [i]
     -- intVar (SLoop { loopVar = (LV i) }) = [V i]
     intVar (SChoose { chooseVar = v }) = [v]
     intVar _                       = []

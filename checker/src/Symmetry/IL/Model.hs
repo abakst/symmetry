@@ -233,11 +233,11 @@ ruleOfStmt ci p s@SNonDet{}
 -------------------------
 -- for (i < n) ...
 -------------------------
-ruleOfStmt ci p s@SIncr { incrVar = V v }
+ruleOfStmt ci p s@SAssign { assignLhs = V v, assignRhs = e }
   = [ mkRule ci p b (seqUpdates ci p upds) ]
   where
     b    = pcGuard ci p s
-    upds = [ setState ci p [(v, incr (readState ci p v))]
+    upds = [ setState ci p [(v, expr ci p e)]
            , nextPC ci p s
            ]
     

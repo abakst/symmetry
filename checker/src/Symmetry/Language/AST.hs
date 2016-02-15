@@ -105,7 +105,7 @@ class Symantics repr where
 
   -- Verification Primitives:        
   assert     :: repr Boolean -> repr (Process repr ())
-  readGhost  :: String -> repr (Process repr Int)
+  readGhost  :: repr (Pid r) -> String -> repr (Process repr Int)
   readPtrR   :: Typeable a => repr a -> repr (Process repr Int)
   readPtrW   :: Typeable a => repr a -> repr (Process repr Int)
   readMyIdx  :: repr (Process repr Int)
