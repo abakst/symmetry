@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module SymBoilerPlate where
 
+import SymMap
 import Control.Monad
 import Data.Aeson
 import Data.HashMap.Strict as H
@@ -12,6 +13,12 @@ nonDet = undefined
 {-@ nonDetRange :: x:Int -> y:Int -> {v:Int | x <= v && v < y} @-}  
 nonDetRange :: Int -> Int -> Int
 nonDetRange = undefined
+
+instance DefaultMap Int where
+  def = 0
+
+instance DefaultMap (Val p) where
+  def = VUnInit
 
 {-@
  data Val p = VUnit {}

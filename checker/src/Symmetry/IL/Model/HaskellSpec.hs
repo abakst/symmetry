@@ -215,6 +215,19 @@ removeDerives                           :: Decl -> Decl
 removeDerives (DataDecl s d c n ts qs _) = DataDecl s d c n ts qs []
 removeDerives _                          = undefined
 
+---------------
+-- State Fields
+---------------
+
+withStateFields ci f absF pcF ptrF valF intF globF globIntF
+  = f ([ absF p (pidBound p) (pidUnfold p) (pcCounter p) | p <- pids ci, isAbs p ] ++
+       [ pcF p  (pc p)        | p <- pids ci ] ++
+       [ ptrF p (ptrR ci p t) (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci ] ++
+       [ valF p v | (p, v) <- valVars (stateVars ci) ]  ++
+       [ intF p v | (p, v) <- intVars (stateVars ci) ]  ++
+       [ globF v | v <- globVals (stateVars ci) ] ++
+       [ globIntF v | V v <- setBoundVars ci ])
+
 stateDecl :: ConfigInfo Int
           -> ([Decl], String)
 stateDecl ci
@@ -230,21 +243,15 @@ stateDecl ci
 
     -- remove deriving classes (lh fails with them)
     dataReft     = printf "{-@ %s @-}" (pp (removeDerives dataDecl))
-    fs = pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
+    fs = withStateFields ci concat absF mkPC mkPtrs mkVal mkInt mkGlob mkGlobInt 
+    absF _ b unf pcv = [mkBound b, mkCounter pcv, mkUnfold unf]
+    mkPtrs p rd wr  = mkInt p rd ++ mkInt p wr
+    mkGlob v        = [([name v], valHType ci)]
+    mkGlobInt v     = [([name v], intType)]
 
-    absFs    = concat [ [mkBound p, mkCounter p, mkUnfold p] | p <- pids ci, isAbs p ]
-    pcFs     = [ mkPC p (pc p) | p <- pids ci ]
-    ptrFs    = [ mkInt p (ptrR ci p t) | p <- pids ci, t <- fst <$> tyMap ci] ++
-               [ mkInt p (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci]
-    valVarFs = [ mkVal p v | (p, v) <- valVars (stateVars ci) ]
-    intVarFs = [ mkInt p v | (p, v) <- intVars (stateVars ci) ]
-    globFs   = [ ([name v], valHType ci) | v <- globVals (stateVars ci) ] ++
-               [ ([name v], intType)     | V v <- setBoundVars ci ]
-    glSets   = [ ([name v], intType)     | S v <- globSets (stateVars ci) ]
-
-    mkUnfold p  = ([name $ pidUnfold p], intType)
-    mkBound p   = ([name $ pidBound p], intType)
-    mkCounter p = ([name $ pcCounter p], mapType intType intType)
+    mkUnfold p  = ([name p], intType)
+    mkBound p   = ([name p], intType)
+    mkCounter p = ([name p], mapType intType intType)
     recQuals = unlines [ mkDeref f t ++ "\n" ++ mkEq f | ([f], t) <- fs ]
 
     mkDeref f t = printf "{-@ qualif Deref_%s(v:%s, w:%s): v = %s w @-}"
@@ -254,7 +261,7 @@ stateDecl ci
     mkPC  = liftMap intType
     mkVal = liftMap (valHType ci)
     mkInt = liftMap intType
-    liftMap t p v = ([name v], if isAbs p then mapType intType t else t)
+    liftMap t p v = [([name v], if isAbs p then mapType intType t else t)]
 
 valHType :: ConfigInfo Int -> Type
 valHType ci = TyApp (TyCon (UnQual (name valType)))

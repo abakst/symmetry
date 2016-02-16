@@ -11,7 +11,7 @@ module Symmetry.SymbEx where
 import           Prelude hiding (error, undefined)
 import           Data.Generics
 import           Data.Maybe
-import           Data.List (nub, (\\))
+import           Data.List (nub, (\\), lookup)
 import           Text.PrettyPrint.Leijen (pretty)
 
 import           GHC.Stack (CallStack)
@@ -53,21 +53,26 @@ stateToConfigs state
   = map mk1Config (renvs state)
     where
       types = tyenv state
-      mkVars vs = map (IL.PVar . IL.V . ("x_"++) . show) [1..length vs]
+      mkVars vs = map (IL.PVar . IL.V . ("x"++) . show) [1..length vs]
       mk1Config renv
-                = IL.boundAbs $ IL.Config { IL.cTypes = types
-                                          , IL.cSets  = setBounds
-                                          , IL.cProcs = procs
-                                          , IL.cUnfold = []
-                                          , IL.cGlobals = globals
-                                          , IL.cGlobalSets = (globalSets \\ sets)
-                                          }
+                = IL.boundAbs $
+                    IL.Config { IL.cTypes = types
+                              , IL.cSets  = setBounds
+                              , IL.cProcs = bigSubst $ procs
+                              , IL.cUnfold = []
+                              , IL.cGlobals = globals
+                              , IL.cGlobalSets = (globalSets \\ sets)
+                              }
         where
+          bigSubst :: [IL.Process ()] -> [IL.Process ()]
+          bigSubst c = everywhere (mkT goSub) c
+          goSub :: IL.Set -> IL.Set
+          goSub s  = maybe s (\(IL.V v) -> IL.S v) $ Data.List.lookup s setParams
           kvs   = M.toList renv
           concProcs = [ (IL.PConc n, s) | (S (RS n), (_, s)) <- kvs ]
           absProcs  = [ (roleToPid r, s) | (M r, (_, s)) <- kvs ]
-          setBounds = [ IL.Known   (roleToSet r) x | (M r, (AInt _ (Just x), _)) <- kvs ] ++
-                      [ IL.Unknown (roleToSet r) (varToIL x) | (M r, (AInt (Just x) _, _)) <- kvs ]
+          setBounds = [ IL.Known   (roleToSet r) x | (M r, (AInt _ (Just x), _)) <- kvs ]
+          setParams = [ (roleToSet r, varToIL x) | (M r, (AInt (Just x) _, _)) <- kvs ]
           sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
           procs = concProcs ++ absProcs
           globals = mapMaybe lookupType
@@ -342,16 +347,16 @@ joinStmt s1 s2
   = IL.SNonDet [s1, s2] ()
 
 varToIL :: Var a -> IL.Var
-varToIL (V x)     = IL.V ("x_" ++ x)
+varToIL (V x)     = IL.V ("x" ++ x)
 varToIL (VPtrR x) = IL.VPtrR x
 varToIL (VPtrW x) = IL.VPtrW x
 varToIL (VIdx r)  = roleIdxVar r
 
 varToILSet :: Var a -> IL.Set
-varToILSet (V x) = IL.S ("x_" ++ x)
+varToILSet (V x) = IL.S ("x" ++ x)
 
 varToILSetVar :: Var a -> IL.Set
-varToILSetVar (V x) = IL.SV ("x_" ++ x)
+varToILSetVar (V x) = IL.SV ("x" ++ x)
 
 pidAbsValToIL :: (?callStack :: CallStack)
               => AbsVal (Pid RSing) -> IL.ILExpr
@@ -735,7 +740,7 @@ symReadGhost :: SymbEx (Pid r) -> String -> SymbEx (Process SymbEx Int)
 symReadGhost p s
   = SE $ do v <- freshVar
             [IL.EPid pid] <- absToIL <$> runSE p
-            return $ AProc Nothing (assign v (IL.EVar (IL.VRef pid ("x_" ++ s))))
+            return $ AProc Nothing (assign v (IL.EVar (IL.VRef pid ("x" ++ s))))
                    $ AInt (Just v) Nothing
 
 -------------------------------------------------

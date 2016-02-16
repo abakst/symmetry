@@ -13,11 +13,11 @@ data Map_t k v = M (Map k v)
 {-@ measure Map_store :: Map_t k v -> k -> v -> Map_t k v @-}
  
 {-@ get :: m:Map_t k v -> k:k -> {v:v | v = Map_select m k} @-}
-get :: (Ord k) => Map_t k v -> k -> v
-get (M m) k = let v = Map.lookup k m
-              in if isJust v
-                    then fromJust v
-                    else error "No key found in map"
+get :: (Ord k, DefaultMap v) => Map_t k v -> k -> v
+get (M m) k = Map.findWithDefault def k m
+
+class DefaultMap v where
+  def :: v
 
 {-@ put :: m:Map_t k v -> k:k -> v:v -> {vv:Map_t k v | vv = Map_store m k v } @-}
 put :: (Ord k) => Map_t k v -> k -> v -> Map_t k v

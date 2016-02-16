@@ -20,6 +20,7 @@ import           Symmetry.IL.Model.HaskellSpec ( initSpecOfConfig
                                                , valHType
                                                , intType
                                                , mapType
+                                               , withStateFields
                                                )
   
 ---------------------------------
@@ -536,7 +537,7 @@ printQCFile ci _
              ]
     spec =  qcDefsStr
             : qcMainStr
-            : (prettyPrint  $  run_testDecl ci) : ""
+            : (prettyPrint  $  runTestDecl ci) : ""
             : arbValStr : ""
             : arbVecStr : ""
             : sep (prettyPrint <$> arbitraryDecls ci)
@@ -563,7 +564,7 @@ jsonDecls ci = ($ ci) <$> [ stateFromJSONDecl
 
 -- ### QuickCheck helpers ##################################################
 
--- run_test (s,plist)
+-- runTest (s,plist)
 --   = let l = runState s emptyVec emptyVec plist []
 --     in (reverse l, plist)
 
@@ -574,23 +575,38 @@ jsonDecls ci = ($ ci) <$> [ stateFromJSONDecl
 --         then return ()
 --         else run (log_states l)
 --   assert True
-run_testDecl    :: ConfigInfo Int -> Decl
-run_testDecl ci =
-  FunBind [ Match noLoc (name "run_test") args Nothing (UnGuardedRhs rhs) Nothing ]
+runTestDecl    :: ConfigInfo Int -> Decl
+runTestDecl ci =
+  FunBind [ Match noLoc (name "runTest") args Nothing (UnGuardedRhs rhs) Nothing ]
   where pvarn n    = pvar $ name n
         varn n     = Var $ UnQual $ name n
-        args       = [PTuple Boxed [pvarn "s", pvarn "plist"]]
+        args       = [PTuple Boxed [pvarn "s"]]
         emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
         -- turn buffers into empty vectors
         bufs       = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
         -- runState s ... plist []
         rs_app     = appFun (varn runState)
-                            ((varn "s") : bufs ++ [varn "plist", emptyListCon])
+                            ((varn "s") : bufs ++ [varn "sched", emptyListCon])
         -- let l = runState ... in ...
-        rhs        = Let (BDecls [PatBind noLoc (pvarn "l") (UnGuardedRhs rs_app) Nothing])
-                         ret_exp
-        -- (reverse l, plist)
-        ret_exp    = Tuple Boxed [app (varn "reverse") (varn "l"), (varn "plist")]
+        rhs = Do [ Generator noLoc (pvarn "sched") schedGen
+                 , LetStmt lets
+                 , Qualifier (metaFunction "return" [retExp])
+                 ]
+        schedGen = metaFunction "generate"
+                   [ metaFunction "listOf1"
+                     [ metaFunction "oneof" [listE [ mkPid p | p <- pids ci ]] ]
+                   ]
+        mkPid p = if isAbs p then 
+                    fmap_syn (pidCons p)
+                             (arbRange (intE 0) (pidChoose p))
+                  else
+                    metaFunction "return" [pidCons p]
+        pidChoose p = metaFunction (pidBound p) [vExp "s"]
+        pidCons p   = Con . UnQual $ name (pidConstructor p) 
+        lets        = BDecls [PatBind noLoc (pvarn "l") (UnGuardedRhs rs_app) Nothing]
+                         -- ret_exp
+        -- (reverse l, sched)
+        retExp    = Tuple Boxed [app (varn "reverse") (varn "l"), (varn "sched")]
 
 
 -- ### Arbitrary instances ##################################################
@@ -598,17 +614,53 @@ run_testDecl ci =
 -- instance Arbitrary State where
 --         arbitrary
 --           = State <$> .. <*> ...
+
+arbFn :: String
+arbFn  = "arbitrary"
+
+arbPos :: Exp    
+arbPos = fmap_syn (vExp "getPositive") (vExp arbFn)
+
+arbZero :: Exp
+arbZero = metaFunction "return" [intE 0]
+
+arbRange :: Exp -> Exp -> Exp
+arbRange e1 e2 = metaFunction "choose"
+                 [App (App (tuple_con Boxed 1) e1) (infixApp e2 opMinus (intE 1))]
+
+arbNull :: Exp
+arbNull = metaFunction "return" [vExp nullCons]
+
+arbEmptyMap :: Exp
+arbEmptyMap = metaFunction "return" [vExp "emptyMap"]
+
 arbitraryStateDecl    :: ConfigInfo Int -> Decl
 arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
-                         where tc_name   = UnQual $ name "Arbitrary"
-                               tv_name   = TyVar $ name stateRecordCons
-                               var' s    = var $ name s
-                               vh:vt     = stateVarArbs ci
-                               gen_exp   = foldl' (\e v -> fapp_syn e v)
-                                                  (fmap_syn (Con $ UnQual $ name stateRecordCons) vh)
-                                                  vt
-                               arb_rhs   = UnGuardedRhs $ gen_exp
-                               arb       = Match noLoc (name "arbitrary") [] Nothing arb_rhs Nothing
+  where tc_name   = UnQual $ name "Arbitrary"
+        tv_name   = TyVar $ name stateRecordCons
+        var' s    = var $ name s
+        vh:vt     = stateVarArbs ci
+        arb       = Match noLoc (name "arbitrary") [] Nothing genExp Nothing
+        genExp    = UnGuardedRhs $ Do (bs ++ [retState])
+        retState  = Qualifier (metaFunction "return" [recExp])
+        recExp    = RecConstr (UnQual (name stateRecordCons)) [FieldWildcard]
+        bs        = withStateFields ci concat absArb arbPC arbPtr arbVal arbInt arbGlob arbGlobVal 
+        bind v e  = Generator noLoc (pvar (name v)) e
+        absArb _ b u pc = [ bind b arbPos
+                          , bind u (arbRange (intE 0) (vExp b))
+                          , bind pc arbEmptyMap
+                          ]
+        arbPC p v      = arbInt p v
+        arbPtr p rd wr = concat [arbInt p rd, arbInt p wr]
+        arbInt p v     = [bind v $ if isAbs p then arbEmptyMap else arbZero]
+        arbVal p v     = [bind v $ if isAbs p then arbEmptyMap else arbNull]
+        arbGlob v      = [bind v arbZero]
+        arbGlobVal v   = [bind v arbNull]
+        -- abs
+        -- gen_exp   = foldl' (\e v -> fapp_syn e v)
+        --                    (fmap_syn (Con $ UnQual $ name stateRecordCons) vh)
+        --                    vt
+        -- arb_rhs   = UnGuardedRhs $ genExp
 
 -- instance Arbitrary p1 => Arbitrary (Pid_pre p1) where
 --         arbitrary = oneof [return PIDR0, PIDR2 <$> arbitrary, ...]
@@ -700,7 +752,14 @@ stateFromJSONDecl ci =
         -- parser for each variable
         varParser n = infix_syn ".:" (var $ name "s") (Lit $ String n)
         -- the names of the arguments in the state
-        n':ns' = map (varParser . fst) (stateVarsNTList ci)
+        -- n':ns' = map (varParser . fst) (stateVarsNTList ci)
+        n':ns' = withStateFields ci concat absFs pcFs ptrFs field field glob glob
+        absFs _ x y z = [varParser x, varParser y, varParser z]
+        pcFs _ f      = [varParser f]
+        ptrFs _ f1 f2 = [varParser f1, varParser f2]
+        field _ f     = [varParser f]
+        glob          = return . varParser
+
 
         -- parseJSON _ = mzero
         fr_err  = Match noLoc (name "parseJSON") [PWildCard] Nothing rhs_err Nothing
@@ -727,8 +786,15 @@ stateToJSONDecl ci =
         rhs = app (var $ name "object") (listE exps)
 
         -- ["<var 1>" .= <var 1>, ..., "<var n>" .= <var n>]
-        exps = map (\(n,_) -> infix_syn ".=" (Lit $ String n) (var $ name n))
-                   (stateVarsNTList ci)
+        -- exps = map (\(n,_) -> infix_syn ".=" (Lit $ String n) (var $ name n))
+        --            (stateVarsNTList ci)
+        enc v = infix_syn ".=" (Lit $ String v) (var $ name v)
+        exps = withStateFields ci concat absFs pcFs ptrFs field field glob glob
+        absFs _ x y z = [enc x, enc y, enc z]
+        pcFs _ f      = [enc f]
+        ptrFs _ f1 f2 = [enc f1, enc f2]
+        field _ f     = [enc f]
+        glob          = return . enc
 
         -- parseJSON _ = mzero
         fr_err  = Match noLoc (name "parseJSON") [PWildCard] Nothing rhs_err Nothing
@@ -837,9 +903,9 @@ qcMainStr="main :: IO () \n\
 \main = do b <- doesFileExist fn \n\
 \          when b (removeFile fn) \n\
 \\n\
-\          inputs  <- generate $ vector sample_size :: IO [(State,[Pid])] \n\
-\          let results  = map run_test inputs \n\
-\              results' = filter (not . null . fst) results \n\
+\          inputs  <- generate $ vector sample_size :: IO [State] \n\
+\          results <- mapM runTest inputs \n\
+\          let results' = filter (not . null . fst) results \n\
 \          C.writeFile fn (encodePretty $ toJSON results') \n\
 \\n\
 \          bs <- C.readFile fn \n\
