@@ -17,20 +17,20 @@ A configuration is deadlocked if
 -- Collect blocked states
 -- /\_p (blocked-or-done p) /\ (\/_p' blocked p')
 
-blockedLocsOfProc :: Process Int -> (Pid, [(ILType, Int)])
+blockedLocsOfProc :: Process Int -> (Pid, [(Type, Int)])
 blockedLocsOfProc (p, s)
   = (p, everything (++) (mkQ [] go) s)
   where
-    go :: Stmt Int -> [(ILType, Int)]
-    go (SRecv (t,_) i) = [(t, i)]
+    go :: Stmt Int -> [(Type, Int)]
+    go (Recv (t,_) i) = [(t, i)]
     go _               = []
 
 
-blockedLocs :: Config Int -> [(Pid, [(ILType, Int)])]
+blockedLocs :: Config Int -> [(Pid, [(Type, Int)])]
 blockedLocs Config{ cProcs = ps }
   = blockedLocsOfProc <$> ps
 
-procAtRecv :: ILModel e => ConfigInfo Int -> Pid -> [(ILType, Int)] -> e
+procAtRecv :: ILModel e => ConfigInfo Int -> Pid -> [(Type, Int)] -> e
 procAtRecv ci p tis
   = ors [ readPC ci p `eq` int i | (_, i) <- tis ]
 
@@ -38,7 +38,7 @@ procDone :: ILModel e => ConfigInfo Int -> Pid -> e
 procDone ci p
   = readPC ci p `eq` int (-1)
 
-procBlocked :: ILModel e => ConfigInfo Int -> Pid -> [(ILType, Int)] -> e
+procBlocked :: ILModel e => ConfigInfo Int -> Pid -> [(Type, Int)] -> e
 procBlocked ci p@(PAbs _ _) tis
   = ors [ ands [ readPC ci p `eq` int i, blocked t ] | (t, i) <- tis ]
   where

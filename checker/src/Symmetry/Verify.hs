@@ -170,12 +170,12 @@ spinTrailCmd f = shell ("spin -p -t " ++ f ++
 type IdStmtMap = M.Map Int (Stmt Int)
 
 flattenStmt                     :: Stmt a -> [Stmt a]
-flattenStmt s@(SBlock l _)       = s : (concatMap flattenStmt l)
-flattenStmt s@(SIter _ _ s' _)   = s : (flattenStmt s')
-flattenStmt s@(SLoop _ s' _)     = s : (flattenStmt s')
-flattenStmt s@(SChoose _ _ s' _) = s : (flattenStmt s')
-flattenStmt s@(SCase _ _ _ sl sr _)  = s : (concatMap flattenStmt [sl,sr])
-flattenStmt s@(SNonDet l _)      = s : (concatMap flattenStmt l)
+flattenStmt s@(Block l _)       = s : (concatMap flattenStmt l)
+flattenStmt s@(Iter _ _ s' _)   = s : (flattenStmt s')
+flattenStmt s@(Loop _ s' _)     = s : (flattenStmt s')
+flattenStmt s@(Choose _ _ s' _) = s : (flattenStmt s')
+flattenStmt s@(Case _ _ _ sl sr _)  = s : (concatMap flattenStmt [sl,sr])
+flattenStmt s@(NonDet l _)      = s : (concatMap flattenStmt l)
 flattenStmt s                    = [s]
 
 buildIdStmtMap                         :: Config Int -> IdStmtMap

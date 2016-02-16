@@ -8,7 +8,7 @@ import Data.Generics
 
 import Symmetry.IL.AST  
 
-type TyMap = [(ILType, Integer)]                 
+type TyMap = [(Type, Integer)]                 
 
 data ConfigState = CState { intVars     :: [(Pid, String)]
                           , valVars     :: [(Pid, String)]
@@ -37,10 +37,10 @@ mkCState c = CState { valVars  = vs
     gsets = cGlobalSets c
 
     intVar :: Stmt Int -> [Var]
-    intVar (SIter { iterVar = i }) = [i]
-    intVar (SAssign {assignLhs = i}) = [i]
-    -- intVar (SLoop { loopVar = (LV i) }) = [V i]
-    intVar (SChoose { chooseVar = v }) = [v]
+    intVar (Iter { iterVar = i }) = [i]
+    intVar (Assign {assignLhs = i}) = [i]
+    -- intVar (Loop { loopVar = (LV i) }) = [V i]
+    intVar (Choose { chooseVar = v }) = [v]
     intVar _                       = []
 
 vars :: ConfigInfo a -> [String]                                     
@@ -64,12 +64,12 @@ mkCInfo c = CInfo { config    = c
     mkCfg (p, s) = (p, buildStmtCfg s)
     types = nub $ everything (++) (mkQ [] go) (cProcs c)
     tyMap = zip types [0..] 
-    go :: Stmt Int -> [ILType]
-    go s@SRecv{} = [fst (rcvMsg s)]
-    go s@SSend{} = [fst (sndMsg s)]
+    go :: Stmt Int -> [Type]
+    go s@Recv{} = [fst (rcvMsg s)]
+    go s@Send{} = [fst (sndMsg s)]
     go _         = []
 
-lookupTy :: ConfigInfo a -> ILType -> Integer
+lookupTy :: ConfigInfo a -> Type -> Integer
 lookupTy ci t = fromJust . List.lookup t $ tyMap ci
 
 setBound :: ConfigInfo Int -> Set -> Maybe SetBound

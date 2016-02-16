@@ -53,16 +53,16 @@ unfold1Loop :: (Eq a, Data a, Typeable a)
             -> [SetBound]
             -> Stmt a
             -> Stmt a
-unfold1Loop _ _ s@(SIter _ (SInts _) _ _)
+unfold1Loop _ _ s@(Iter _ (SInts _) _ _)
   = s
-unfold1Loop _ bs s@(SIter _ r _ _)
+unfold1Loop _ bs s@(Iter _ r _ _)
   | r `elem` [ r' | Bounded r' _ <- bs ] = s
-unfold1Loop ps _ (SIter v@(V x) set body i)
+unfold1Loop ps _ (Iter v@(V x) set body i)
   = case abss of
       [] ->
         let lv = LV ("L" ++  x) in
-        SLoop lv (SNonDet [ SBlock [body, SVar lv i] i
-                          , SSkip i
+        Loop lv (NonDet [ Block [body, Goto lv i] i
+                          , Skip i
                           ] i) i
       [p] ->
         -- For each unfolded process, generate a block that
@@ -70,15 +70,15 @@ unfold1Loop ps _ (SIter v@(V x) set body i)
         -- 2. executes the body where an unfolded proc has been subbed
         --    for the abs proc
         -- 3. loops for a while on the abs proc
-        SBlock (foldr (\(s,us) ss -> s:us:ss) [absLoop p lvout] inter) i
+        Block (foldr (\(s,us) ss -> s:us:ss) [absLoop p lvout] inter) i
         where
           inter = zip (map (absLoop p . lvin) [0..]) ufStmts
       _ -> error "unexpected case in unfold1Loop"
   where
     lvin i = LV ("L" ++ x ++ "_in_" ++ show i)
     lvout = LV ("L" ++ x ++ "_out")
-    absLoop p v = SLoop v (SNonDet [SBlock [doSub p, SVar v i] i
-                                   ,SSkip i] i) i-- SIter v set (doSub p) i
+    absLoop p v = Loop v (NonDet [Block [doSub p, Goto v i] i
+                                   ,Skip i] i) i-- Iter v set (doSub p) i
     doSub p = subst (sub1Pid v p) body
     abss = [ p | p@(PAbs _ set') <- ps, set' == set ]
     ufs = [ p | p@(PUnfold _ set' _) <- ps, set' == set ]

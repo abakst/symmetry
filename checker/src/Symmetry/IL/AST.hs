@@ -28,8 +28,8 @@ data Set = S String
 
 data Var = V String  -- Local Var
          | GV String -- Global Var
-         | VPtrR ILType -- Special Variable (read ptr for type)
-         | VPtrW ILType -- Special Variable (read ptr for type)
+         | VPtrR Type -- Special Variable (read ptr for type)
+         | VPtrW Type -- Special Variable (read ptr for type)
          | VRef Pid String -- Reference another process's variable (for ghost state)
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
@@ -64,22 +64,22 @@ isBounded _ _           = False
 data Label = LL | RL | VL Var
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data ILType = TUnit | TInt | TString | TPid | TProd ILType ILType | TSum ILType ILType                      
+data Type = TUnit | TInt | TString | TPid | TProd Type Type | TSum Type Type                      
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data ILPat = PUnit
+data Pat = PUnit
            | PInt Var
            | PPid Var
-           | PProd ILPat ILPat
-           | PSum  ILPat ILPat
+           | PProd Pat Pat
+           | PSum  Pat Pat
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data ILPred = ILBop Op ILExpr ILExpr                      
-            | ILAnd ILPred ILPred
-            | ILOr ILPred ILPred
-            | ILNot ILPred 
-            | ILPTrue
-             deriving (Ord, Eq, Read, Show, Typeable, Data)
+data Pred = ILBop Op ILExpr ILExpr                      
+          | ILAnd Pred Pred
+          | ILOr Pred Pred
+          | ILNot Pred 
+          | ILPTrue
+            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data Op = Eq | Lt | Le | Gt | Ge
              deriving (Ord, Eq, Read, Show, Typeable, Data)
@@ -134,55 +134,55 @@ type MValMap = M.Map MConstr VId -- No variables
 
 type MTypeEnv = M.Map TId MType
 
-data Stmt a = SSkip { annot :: a }
+data Stmt a = Skip { annot :: a }
 
-            | SBlock { blkBody :: [Stmt a]
+            | Block { blkBody :: [Stmt a]
                      , annot :: a
                      }
 
-            | SSend  { sndPid :: ILExpr-- Pid
-                     , sndMsg :: (ILType, ILExpr)
+            | Send  { sndPid :: ILExpr -- Pid
+                     , sndMsg :: (Type, ILExpr)
                      , annot  :: a
                      }
 
-            | SRecv  { rcvMsg :: (ILType, Var)
+            | Recv  { rcvMsg :: (Type, Var)
                      , annot  :: a
                      }
 
-            | SIter { iterVar  :: Var
+            | Iter { iterVar  :: Var
                     , iterSet  :: Set
                     , iterBody :: Stmt a
                     , annot    :: a
                     }
 
             {-used to create a loop with the given label-}
-            | SLoop { loopVar  :: LVar
+            | Loop { loopVar  :: LVar
                     , loopBody :: Stmt a
                     , annot    :: a
                     }
 
-            | SChoose { chooseVar :: Var
+            | Choose { chooseVar :: Var
                       , chooseSet :: Set
                       , chooseBody :: Stmt a
                       , annot      :: a
                       }
 
-            | SVar { varVar :: LVar
+            | Goto { varVar :: LVar
                    , annot  :: a
                    }
 
-            | SAssert { assertPred :: ILPred
+            | Assert { assertPred :: Pred
                       , annot :: a
                       }
 
              -- x := p1 == p2;
-            | SCompare { compareVar :: Var
+            | Compare { compareVar :: Var
                        , compareLhs :: Pid
                        , compareRhs :: Pid
                        , annot      :: a
                        }
 
-            | SCase { caseVar   :: Var
+            | Case { caseVar   :: Var
                     , caseLPat   :: Var
                     , caseRPat   :: Var
                     , caseLeft  :: Stmt a
@@ -190,19 +190,19 @@ data Stmt a = SSkip { annot :: a }
                     , annot     :: a
                     }
 
-            | SNonDet { nonDetBody :: [Stmt a]
+            | NonDet { nonDetBody :: [Stmt a]
                       , annot      :: a
                       }
 
-            | SAssign { assignLhs :: Var
+            | Assign { assignLhs :: Var
                       , assignRhs :: ILExpr
                       , annot :: a
                       }
 
-            | SDie { annot :: a }
+            | Die { annot :: a }
             {- These do not appear in the source: -}
-            | SNull { annot :: a }
-            -- | SVarDecl Var a
+            | Null { annot :: a }
+            -- | GotoDecl Var a
             -- | STest Var a
          deriving (Ord, Eq, Read, Show, Functor, Foldable, Data, Typeable)
 
@@ -214,7 +214,7 @@ data Unfold = Conc Set Int deriving (Eq, Read, Show, Data, Typeable)
 
 data Config a = Config {
     cTypes      :: MTypeEnv
-  , cGlobals    :: [(Var, ILType)]
+  , cGlobals    :: [(Var, Type)]
   , cGlobalSets :: [Set]
   , cSets       :: [SetBound]
   , cUnfold     :: [Unfold]
@@ -229,10 +229,10 @@ unboundVars s
     bound   = nub $ everything (++) (mkQ [] go) s
     absIdx  = nub $ everything (++) (mkQ [] goAbs) s
     go :: Data a => Stmt a -> [Var]
-    go (SRecv (_,x) _) = [x]
-    go (i@SIter {})    = [iterVar i]
-    go (i@SChoose {})  = [chooseVar i]
-    go (i@SCase {})    = [caseLPat i, caseRPat i]
+    go (Recv (_,x) _) = [x]
+    go (i@Iter {})    = [iterVar i]
+    go (i@Choose {})  = [chooseVar i]
+    go (i@Case {})    = [caseLPat i, caseRPat i]
     go _               = []
     goAbs :: Pid -> [Var]
     goAbs (PAbs v _) = [v]
@@ -248,7 +248,7 @@ unboundSets s
     isSetVar _           = False
     boundSetVars         = nub $ everything (++) (mkQ [] go) s
     go :: Data a => Stmt a -> [Set]
-    go (SRecv (_, V x) _)= [S x] -- TODO
+    go (Recv (_, V x) _)= [S x] -- TODO
     go _                 = []
 
 endLabels :: (Data a, Typeable a) => Stmt a -> [LVar]
@@ -264,7 +264,7 @@ boundAbs c@(Config {cProcs = ps, cSets = bs})
   where
     us = [ Conc s n | (PAbs _ s, _) <- ps , Known s' n <- bs , s == s']
 
-vars :: ILPat -> [Var]
+vars :: Pat -> [Var]
 vars = nub . listify (const True)
 
 -- pvars :: MConstr -> [Var]
@@ -284,36 +284,36 @@ vars = nub . listify (const True)
 
 -- | Typeclass tomfoolery
 instance Traversable Stmt where
-  traverse f (SSkip a)
-    = SSkip <$> f a
-  traverse f (SSend p ms a)
-    = SSend p ms <$> f a
-  traverse f (SRecv ms a)
-    = SRecv ms <$> f a
-  traverse f (SIter v s ss a)
-    = flip (SIter v s) <$> f a <*> traverse f ss
-  traverse f (SLoop v ss a)
-    = flip (SLoop v) <$> f a <*> traverse f ss
-  traverse f (SChoose v s ss a)
-    = flip (SChoose v s) <$> f a <*> traverse f ss
-  traverse f (SVar v a)
-    = SVar v <$> f a
-  traverse f (SCompare v p1 p2 a)
-    = SCompare v p1 p2 <$> f a
-  traverse f (SDie a)
-    = SDie <$> f a
-  traverse f (SBlock ss a)
-    = flip SBlock <$> f a <*> traverse (traverse f) ss
-  traverse f (SCase v pl pr sl sr a)
+  traverse f (Skip a)
+    = Skip <$> f a
+  traverse f (Send p ms a)
+    = Send p ms <$> f a
+  traverse f (Recv ms a)
+    = Recv ms <$> f a
+  traverse f (Iter v s ss a)
+    = flip (Iter v s) <$> f a <*> traverse f ss
+  traverse f (Loop v ss a)
+    = flip (Loop v) <$> f a <*> traverse f ss
+  traverse f (Choose v s ss a)
+    = flip (Choose v s) <$> f a <*> traverse f ss
+  traverse f (Goto v a)
+    = Goto v <$> f a
+  traverse f (Compare v p1 p2 a)
+    = Compare v p1 p2 <$> f a
+  traverse f (Die a)
+    = Die <$> f a
+  traverse f (Block ss a)
+    = flip Block <$> f a <*> traverse (traverse f) ss
+  traverse f (Case v pl pr sl sr a)
     = mkCase <$> f a <*> traverse f sl <*> traverse f sr
     where
-      mkCase a l r = SCase v pl pr l r a
-  traverse f (SNonDet ss a)
-    = flip SNonDet <$> f a <*> traverse (traverse f) ss
-  traverse f (SAssign v e a)
-    = SAssign v e <$> f a
-  traverse f (SAssert p a)
-    = SAssert p <$> f a
+      mkCase a l r = Case v pl pr l r a
+  traverse f (NonDet ss a)
+    = flip NonDet <$> f a <*> traverse (traverse f) ss
+  traverse f (Assign v e a)
+    = Assign v e <$> f a
+  traverse f (Assert p a)
+    = Assert p <$> f a
   traverse _ _
     = error "traverse undefined for non-source stmts"
 
@@ -327,18 +327,18 @@ stmt :: (TId, [(CId, MConstr)], Stmt a) -> Stmt a
 stmt (_,_,s) = s
 
 lastStmts :: Stmt a -> [Stmt a]
-lastStmts s@(SSkip _)       = [s]
-lastStmts s@(SVar _ _)      = [s]
-lastStmts s@(SCompare _ _ _ _) = [s]
-lastStmts (SBlock ss _)     = [last ss]
-lastStmts s@(SSend _ _ _)    = [s]
-lastStmts s@(SRecv _ _)      = [s]
-lastStmts s@(SNonDet ss _)   = concatMap lastStmts ss
-lastStmts (SChoose _ _ s _) = lastStmts s
-lastStmts s@(SIter _ _ _ _) = [s]
-lastStmts (SLoop _ s _)     = lastStmts s
-lastStmts (SCase _ _ _ sl sr _) = lastStmts sl ++ lastStmts sr
-lastStmts s@(SDie a)        = [s]
+lastStmts s@(Skip _)       = [s]
+lastStmts s@(Goto _ _)      = [s]
+lastStmts s@(Compare _ _ _ _) = [s]
+lastStmts (Block ss _)     = [last ss]
+lastStmts s@(Send _ _ _)    = [s]
+lastStmts s@(Recv _ _)      = [s]
+lastStmts s@(NonDet ss _)   = concatMap lastStmts ss
+lastStmts (Choose _ _ s _) = lastStmts s
+lastStmts s@(Iter _ _ _ _) = [s]
+lastStmts (Loop _ s _)     = lastStmts s
+lastStmts (Case _ _ _ sl sr _) = lastStmts sl ++ lastStmts sr
+lastStmts s@(Die a)        = [s]
 
 buildCfg :: Stmt Int -> I.IntMap [Int]                              
 buildCfg s = I.map (fmap annot) $ buildStmtCfg s
@@ -352,37 +352,37 @@ singleton i j
   | otherwise    = I.fromList [(i, [j])]
 
 nextStmts :: Int -> Stmt Int -> I.IntMap [Stmt Int]
-nextStmts toMe s@(SNonDet ss i)
+nextStmts toMe s@(NonDet ss i)
   = foldl' (\m -> joinMaps m . nextStmts i)
            (I.fromList [(toMe, [s])])
            ss
 
 -- Blocks shouldn't be nested
-nextStmts toMe s@SBlock { blkBody = ss }
+nextStmts toMe s@Block { blkBody = ss }
   = singleton toMe s `joinMaps` snd nexts
   where
     nexts = foldl' go ([annot s], I.empty) ss
     -- go (ins, m) s = (annots s, foldl' go m `joinMaps` nextStmts ins s)
     go (ins, m) s = (annots s, foldl' joinMaps m (doMaps s <$> ins))
     doMaps s i    = nextStmts i s
-    annots (SNonDet ts _) = annot <$> ts
+    annots (NonDet ts _) = annot <$> ts
     annots s              = [annot s]
                       
-nextStmts toMe s@(SIter _ _ t i)
+nextStmts toMe s@(Iter _ _ t i)
   = singleton toMe s `joinMaps`
     I.fromList [(annot j, [s]) | j <- lastStmts t]  `joinMaps`
     nextStmts i t
 
-nextStmts toMe me@(SLoop v s i)
+nextStmts toMe me@(Loop v s i)
   = singleton toMe me `joinMaps`
     I.fromList [(j, [me]) | j <- js ] `joinMaps`
     nextStmts i s
   where
-    js = [ j | SVar v' j <- listify (const True) s, v' == v]
+    js = [ j | Goto v' j <- listify (const True) s, v' == v]
 
-nextStmts toMe me@(SChoose _ _ s i)
+nextStmts toMe me@(Choose _ _ s i)
   = addNext toMe [me] $ nextStmts i s
-nextStmts toMe me@(SCase _ _ _ sl sr i)
+nextStmts toMe me@(Case _ _ _ sl sr i)
   = singleton toMe me `joinMaps` nextStmts i sl `joinMaps` nextStmts i sr
 nextStmts toMe s
   = singleton toMe s
@@ -450,14 +450,14 @@ instance Pretty ILExpr where
   pretty (EPair e1 e2) = tupled [pretty e1, pretty e2]
   pretty (EPlus e1 e2) = pretty e1 <+> text "+" <+> pretty e2
 
-instance Pretty ILPat where
+instance Pretty Pat where
   pretty (PUnit )      = text "()"
   pretty (PInt v)      = text "int" <+> pretty v
   pretty (PPid v)      = text "pid" <+> pretty v
   pretty (PSum p1 p2)  = parens (pretty p1 <+> text "+" <+> pretty p2)
   pretty (PProd p1 p2) = parens (pretty p1 <+> text "*" <+> pretty p2)
 
-instance Pretty ILType where
+instance Pretty Type where
   pretty TUnit     = text "()"
   pretty TInt      = text "int"
   pretty TString   = text "string"
@@ -472,64 +472,64 @@ instance Pretty Op where
   pretty Gt = text ">"
   pretty Ge = text "≥"
 
-instance Pretty ILPred where
+instance Pretty Pred where
   pretty (ILBop o e1 e2) = parens (pretty e1 <+> pretty o <+> pretty e2)
   pretty (ILAnd p1 p2)   = parens (pretty p1 <+> text "&&" <+> pretty p2)
   pretty (ILOr p1 p2)    = parens (pretty p1 <+> text "||" <+> pretty p2)
   pretty (ILNot p)       = parens (text "~" <> pretty p)
 
 instance Pretty (Stmt a) where
-  pretty (SSkip _)
+  pretty (Skip _)
     = text "<skip>"
 
-  pretty (SAssert e _)
+  pretty (Assert e _)
     = text "assert" <+> pretty e
 
-  pretty (SAssign v e _)
+  pretty (Assign v e _)
     = pretty v <+> text ":=" <+> pretty e
 
-  pretty (SSend p (t,e) _)
+  pretty (Send p (t,e) _)
     = text "send" <+> pretty p <+> parens (pretty e <+> text "::" <+> pretty t)
 
-  pretty (SRecv (t,x) _)
+  pretty (Recv (t,x) _)
     = text "recv" <+> parens (pretty x <+> text "::" <+> pretty t)
 
-  pretty (SIter x xs s _)
+  pretty (Iter x xs s _)
     = text "for" <+> parens (int 0 <+> text "≤"
                                    <+> pretty x
                                    <+> langle <+> text "|" <> pretty xs <> text "|")
                  <+> lbrace $$ (indent 2 $ pretty s) $$ rbrace
 
-  pretty (SVar (LV v) _)
+  pretty (Goto (LV v) _)
     = text "goto" <+> pretty v
 
-  pretty (SLoop (LV v) s _)
+  pretty (Loop (LV v) s _)
     = pretty v <> colon <+> parens (pretty s)
 
-  pretty (SCase l pl pr sl sr _)
+  pretty (Case l pl pr sl sr _)
     = text "match" <+> pretty l <+> text "with" $$
       indent 2
         (align (vcat [text "| InL" <+> pretty pl <+> text "->" <+> pretty sl,
                      text "| InR" <+> pretty pr <+> text "->"  <+> pretty sr]))
 
-  pretty (SChoose v r s _)
+  pretty (Choose v r s _)
     = text "select" <+> pretty v <+>
       text "from" <+> pretty r <+>
       text "in" $$ indent 2 (align (pretty s))
 
-  pretty (SDie _)
+  pretty (Die _)
     = text "CRASH"
 
-  pretty (SBlock ss _)
+  pretty (Block ss _)
     = braces (line <> indent 2 (vcat $ punctuate semi (map pretty ss)) <> line)
 
-  pretty (SCompare v p1 p2 _)
+  pretty (Compare v p1 p2 _)
     = pretty v <+> colon <> equals <+> pretty p1 <+> equals <> equals <+> pretty p2
 
-  pretty (SNonDet ss _)
+  pretty (NonDet ss _)
     = pretty ss
 
-  pretty (SNull _)
+  pretty (Null _)
     = text "<null>"
 
 prettyMsg :: (TId, CId, MConstr) -> Doc
@@ -556,7 +556,7 @@ recvVars s
   = everything (++) (mkQ [] go) s
   where
     go :: Stmt a -> [Var]
-    go (SRecv t _) = listify (const True) t
+    go (Recv t _) = listify (const True) t
     go _           = []
 
 patVars :: forall a. (Data a, Typeable a) => Stmt a -> [Var]
@@ -564,5 +564,5 @@ patVars s
   = nub $ everything (++) (mkQ [] go) s
   where
     go :: Stmt a -> [Var]
-    go (SCase _ x y _ _ _) = [x, y]
+    go (Case _ x y _ _ _) = [x, y]
     go _                   = []

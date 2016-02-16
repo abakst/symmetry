@@ -24,8 +24,8 @@ import qualified Symmetry.IL.AST       as IL
 
 data Var a = V String
            | VIdx RMulti
-           | VPtrR IL.ILType
-           | VPtrW IL.ILType
+           | VPtrR IL.Type
+           | VPtrW IL.Type
              deriving (Ord, Eq, Show)
 
 type REnv = M.Map Role (AbsVal Int, IL.Stmt ())
@@ -83,12 +83,12 @@ stateToConfigs state
                      . concatMap IL.unboundSets
                      $ map snd procs
           lookupType v = something (mkQ Nothing (goType v)) procs
-          goType :: IL.Var -> IL.Stmt () -> Maybe (IL.Var, IL.ILType)
-          goType v IL.SSend{IL.sndMsg = (t,e)} = do t <- calcType v e t
-                                                    return (v, t)
+          goType :: IL.Var -> IL.Stmt () -> Maybe (IL.Var, IL.Type)
+          goType v IL.Send{IL.sndMsg = (t,e)} = do t <- calcType v e t
+                                                   return (v, t)
           goType _ _ = Nothing
 
-calcType :: IL.Var -> IL.ILExpr -> IL.ILType -> Maybe IL.ILType
+calcType :: IL.Var -> IL.ILExpr -> IL.Type -> Maybe IL.Type
 calcType v (IL.EVar v') t
   | v == v' = Just t
 calcType v (IL.ELeft e) (IL.TSum l _)
@@ -167,7 +167,7 @@ data AbsVal t where
   APidCompare :: (Maybe (Var (Pid RSing)), L.Pid (Maybe RSing))
               -> (Maybe (Var (Pid RSing)), L.Pid (Maybe RSing))
               -> AbsVal Boolean
-  APred       :: Maybe (Var Boolean) -> Maybe IL.ILPred -> AbsVal Boolean
+  APred       :: Maybe (Var Boolean) -> Maybe IL.Pred -> AbsVal Boolean
   --
   AUnit      :: Maybe (Var ()) -> AbsVal ()
   AInt       :: Maybe (Var Int) -> Maybe Int -> AbsVal Int
@@ -207,10 +207,10 @@ getVar (ASum v _ _)  = v
 getVar (AProd v _ _) = v
 getVar (APid v _)    = v
 
-absToILType :: Typeable t => AbsVal t -> IL.ILType
-absToILType x = go (typeRep x)
+absToType :: Typeable t => AbsVal t -> IL.Type
+absToType x = go (typeRep x)
   where
-    go :: TypeRep -> IL.ILType
+    go :: TypeRep -> IL.Type
     go a
       | tyConName (typeRepTyCon a) == "()"
         = IL.TUnit
@@ -232,7 +232,7 @@ absToILType x = go (typeRep x)
       | tyConName (typeRepTyCon a) == "Int"
         = IL.TInt
       | otherwise
-        = error "TBD: absToILType" 
+        = error "TBD: absToType" 
       where
         as = typeRepArgs a
 
@@ -337,14 +337,14 @@ maybeJoin _  y              = y
 -- | Helpers for generating IL from AbsValtractions
 -------------------------------------------------
 joinStmt :: IL.Stmt () -> IL.Stmt () -> IL.Stmt ()
-joinStmt (IL.SNonDet ss1 _) (IL.SNonDet ss2 _)
-  = IL.SNonDet (ss1 ++ ss2) ()
-joinStmt (IL.SNonDet ss _) s
-  = IL.SNonDet (s : ss) ()
-joinStmt s (IL.SNonDet ss _)
-  = IL.SNonDet (s : ss) ()
+joinStmt (IL.NonDet ss1 _) (IL.NonDet ss2 _)
+  = IL.NonDet (ss1 ++ ss2) ()
+joinStmt (IL.NonDet ss _) s
+  = IL.NonDet (s : ss) ()
+joinStmt s (IL.NonDet ss _)
+  = IL.NonDet (s : ss) ()
 joinStmt s1 s2
-  = IL.SNonDet [s1, s2] ()
+  = IL.NonDet [s1, s2] ()
 
 varToIL :: Var a -> IL.Var
 varToIL (V x)     = IL.V ("x" ++ x)
@@ -422,12 +422,12 @@ absPidToExp p = let [e] = absToIL p in e
 sendToIL :: (?callStack :: CallStack)
          => (Typeable a) => AbsVal (Pid RSing) -> AbsVal a -> SymbExM (IL.Stmt ())
 sendToIL p m = do
-  let t     = absToILType m
+  let t     = absToType m
   case [ (t, e) | e <- absToIL m ] of
     [s] -> choosePid p $ mkSend s
-    ss  -> choosePid p (\p -> IL.SNonDet (map (`mkSend` p) ss) ())
+    ss  -> choosePid p (\p -> IL.NonDet (map (`mkSend` p) ss) ())
   where
-    mkSend msg p         = IL.SSend p msg ()
+    mkSend msg p         = IL.Send p msg ()
   -- case IL.lookupType g t of
   --   Just i  -> nonDetSends i g cs p
   --   Nothing -> do i <- freshTId
@@ -439,14 +439,14 @@ sendToIL p m = do
   --   sends i g cs       = map (mkSend . lkupMsg i g) cs
   --   nonDetSends i g cs p = case sends i g cs of
   --                            [s] -> choosePid p s
-  --                            ss  -> choosePid p (\p -> IL.SNonDet (map ($ p) ss) ())
+  --                            ss  -> choosePid p (\p -> IL.NonDet (map ($ p) ss) ())
 
 choosePid :: (?callStack :: CallStack)
           => AbsVal (Pid RSing) -> (IL.ILExpr -> IL.Stmt ()) -> SymbExM (IL.Stmt ())
 choosePid p@(APid _ (Pid (Just (RElem r)))) f
   = do v <- freshVar
        let pv = IL.EPid (IL.PAbs (varToIL v) (roleToSet r))-- IL.EVar (varToIL v)
-       return $ IL.SChoose (varToIL v) (roleToSet r) (f pv) ()
+       return $ IL.Choose (varToIL v) (roleToSet r) (f pv) ()
 choosePid p s
   = return (s (absPidToExp p))
           
@@ -454,8 +454,8 @@ choosePid p s
 recvToIL :: (?callStack :: CallStack)
          => (Typeable a) => AbsVal a -> Var a -> SymbExM (IL.Stmt ())
 recvToIL m x = do
-  let t   = absToILType m
-  return (IL.SRecv (t, varToIL x) ())
+  let t   = absToType m
+  return (IL.Recv (t, varToIL x) ())
 --   case IL.lookupType g t of
 --     Just i  -> return $ nonDetRecvs i g cs
 --     Nothing -> do i <- freshTId
@@ -463,35 +463,35 @@ recvToIL m x = do
 --                   modify $ \s -> s { tyenv = g' }
 --                   return $ nonDetRecvs i g' cs
 --   where
---     recvs i g cs       = map (flip IL.SRecv () . lkupMsg i g) cs
+--     recvs i g cs       = map (flip IL.Recv () . lkupMsg i g) cs
 --     nonDetRecvs i g cs = case recvs i g cs of
 --                            [r] -> r
---                            rs  -> IL.SNonDet rs ()
+--                            rs  -> IL.NonDet rs ()
                    
 -- lkupMsg i g c  = (i, lkup i g c, c)
 --   where
 --     lkup i g c   = fromMaybe (error ("recv:" ++ show c)) $ IL.lookupConstr (g M.! i) c
 
 skip :: IL.Stmt ()
-skip = IL.SSkip ()
+skip = IL.Skip ()
 
 assign :: Var a -> IL.ILExpr -> IL.Stmt ()
 assign v e
-  = IL.SAssign (varToIL v) e ()
+  = IL.Assign (varToIL v) e ()
 -------------------------------------------------
 -- | Sequence Statements
 -------------------------------------------------
 seqStmt :: IL.Stmt () -> IL.Stmt () -> IL.Stmt ()
 
-seqStmt (IL.SSkip _) s = s
-seqStmt s (IL.SSkip _) = s
+seqStmt (IL.Skip _) s = s
+seqStmt s (IL.Skip _) = s
 
-seqStmt (IL.SBlock ss _) (IL.SBlock ss' _) = IL.SBlock (ss ++ ss') ()
+seqStmt (IL.Block ss _) (IL.Block ss' _) = IL.Block (ss ++ ss') ()
 
-seqStmt s (IL.SBlock ss _) = IL.SBlock (s : ss) ()
-seqStmt (IL.SBlock ss _) s = IL.SBlock (ss ++ [s]) ()
+seqStmt s (IL.Block ss _) = IL.Block (s : ss) ()
+seqStmt (IL.Block ss _) s = IL.Block (ss ++ [s]) ()
 
-seqStmt s1 s2 = IL.SBlock [s1, s2] ()
+seqStmt s1 s2 = IL.Block [s1, s2] ()
 
 -------------------------------------------------
 -- | Updates to roles
@@ -595,7 +595,7 @@ symEq a b  = SE $ do av <- runSE a
                      bv <- runSE b
                      return $ APred Nothing (Just (opPred IL.Eq av bv))
 
-opPred :: IL.Op -> AbsVal a -> AbsVal a -> IL.ILPred
+opPred :: IL.Op -> AbsVal a -> AbsVal a -> IL.Pred
 opPred o (AInt _ (Just i)) (AInt _ (Just j))
   = IL.ILBop o (IL.EInt i) (IL.EInt j)
 opPred o (AInt (Just x) _) (AInt _ (Just i))
@@ -709,13 +709,13 @@ symAssert exp
             case bool of
               APred _ (Just e) -> return $ AProc Nothing (assert e) (AUnit Nothing)
   where
-    assert e = IL.SAssert { IL.assertPred = e, IL.annot = () }
+    assert e = IL.Assert { IL.assertPred = e, IL.annot = () }
 
 -------------------------------------------------
 symReadPtrR :: Typeable a => SymbEx a -> SymbEx (Process SymbEx Int)
 -------------------------------------------------
 symReadPtrR v
-  = SE $ do t  <- absToILType <$> runSE v
+  = SE $ do t  <- absToType <$> runSE v
             v' <- freshVar
             return $ AProc Nothing (assign v' (IL.EVar $ IL.VPtrR t)) $ AInt (Just v') Nothing
 
@@ -723,7 +723,7 @@ symReadPtrR v
 symReadPtrW :: Typeable a => SymbEx a -> SymbEx (Process SymbEx Int)
 -------------------------------------------------
 symReadPtrW v
-  = SE $ do t  <- absToILType <$> runSE v
+  = SE $ do t  <- absToType <$> runSE v
             v' <- freshVar
             return $ AProc Nothing (assign v' (IL.EVar $ IL.VPtrW t)) $ AInt (Just v') Nothing
 
@@ -773,9 +773,9 @@ symForever :: (?callStack :: CallStack)
 symForever p
   = SE $ do n <- freshInt
             let v  = IL.LV $ "endL" ++ show n
-                sv = IL.SVar v ()
+                sv = IL.Goto v ()
             AProc b s r <- prohibitSpawn (runSE p)
-            return $ AProc b (IL.SLoop v (s `seqStmt` sv) ()) r
+            return $ AProc b (IL.Loop v (s `seqStmt` sv) ()) r
 
 -------------------------------------------------
 symFixM :: (?callStack :: CallStack)
@@ -786,11 +786,11 @@ symFixM f
   = SE . return . AArrow Nothing $ \a ->
           SE $ do n <- freshInt
                   let v = IL.LV $ "L" ++ show n
-                      sv = IL.SVar v  ()
+                      sv = IL.Goto v  ()
                       g = SE . return . AArrow Nothing $ \a -> SE $ return (AProc Nothing sv a)
                   AArrow _ h  <- runSE (app f g)
                   AProc b s r <- prohibitSpawn $ runSE (h a)
-                  return $ AProc b (IL.SLoop v s ()) r
+                  return $ AProc b (IL.Loop v s ()) r
 
 prohibitSpawn m
   = do env <- gets renv
@@ -828,14 +828,14 @@ symDoN s n f
             return $ AProc Nothing (iter v x nv s) (error "TBD: symDoN")
     where
       incrVar v = (`seqStmt` incr v)
-      iter v _ (Just n) s = IL.SIter (varToIL v) (IL.SInts n) (incrVar v s) ()
-      iter v (Just x) _ s = IL.SIter (varToIL v) (varToILSet x) (incrVar v s) ()
+      iter v _ (Just n) s = IL.Iter (varToIL v) (IL.SInts n) (incrVar v s) ()
+      iter v (Just x) _ s = IL.Iter (varToIL v) (varToILSet x) (incrVar v s) ()
       iter (V x) _ _ s    =
                   let v = IL.LV $ "L" ++ show x
-                      sv = IL.SVar v  ()
-                  in IL.SLoop v ((s `seqStmt` sv) `joinStmt` skip) ()
+                      sv = IL.Goto v  ()
+                  in IL.Loop v ((s `seqStmt` sv) `joinStmt` skip) ()
 
-incr x = IL.SAssign (varToIL x) (IL.EPlus (IL.EVar (varToIL x)) (IL.EInt 1)) ()
+incr x = IL.Assign (varToIL x) (IL.EPlus (IL.EVar (varToIL x)) (IL.EInt 1)) ()
 
 -------------------------------------------------
 symLookup :: SymbEx (Pid RMulti)
@@ -868,8 +868,8 @@ symDoMany s p f
                 return $ AProc Nothing (iterVar v x s) (error "TBD: symDoMany")
     where
       incrVar v = (`seqStmt` incr v)
-      iter v r s    = IL.SIter (varToIL v) (roleToSet r) (incrVar v s) ()
-      iterVar v x s = IL.SIter (varToIL v) (varToILSetVar x) (incrVar v s) ()
+      iter v r s    = IL.Iter (varToIL v) (roleToSet r) (incrVar v s) ()
+      iterVar v x s = IL.Iter (varToIL v) (varToILSetVar x) (incrVar v s) ()
 
 roleToSet :: RMulti -> IL.Set
 roleToSet r = IL.S $ roleToString r
@@ -918,7 +918,7 @@ symDie :: SymbEx (Process SymbEx a)
 symDie 
   = SE $ return (AProc Nothing s ABot)
     where
-      s = IL.SDie ()
+      s = IL.Die ()
 
 symInL :: SymbEx a
        -> SymbEx (a :+: b)
@@ -956,7 +956,7 @@ symMatch s l r
 --          AProc px s a -> do
 --            let p1 = pidAbsValToIL $ APid x p
 --            let p2 = pidAbsValToIL $ APid y q
---            return $ AProc px (IL.SCompare (varToIL v) p1 p2 () `seqStmt` s) a
+--            return $ AProc px (IL.Compare (varToIL v) p1 p2 () `seqStmt` s) a
 --          _ -> error "TBD: matchcompare"
 
 symMatchSum :: forall a b c.
@@ -992,7 +992,7 @@ joinProcs :: forall a b x y.
              (?callStack :: CallStack)
           => Maybe (Var b) -> Maybe (Var x) -> Maybe (Var y) -> AbsVal a -> AbsVal a -> AbsVal a
 joinProcs (Just x) (Just x1) (Just x2) (AProc _ s1 v1) (AProc _ s2 v2)
-  = AProc Nothing (IL.SCase (varToIL x) (varToIL x1) (varToIL x2) s1 s2 ()) (v1 `join` v2)
+  = AProc Nothing (IL.Case (varToIL x) (varToIL x1) (varToIL x2) s1 s2 ()) (v1 `join` v2)
 joinProcs _ _ _ t1 t2
   = t1 `join` t2
 

@@ -2,10 +2,10 @@
 module Symmetry.IL.Model.HaskellDefs where
 
 import           Data.Char
-import           Symmetry.IL.AST
+import           Symmetry.IL.AST as IL
 import           Symmetry.IL.Model 
 import           Language.Haskell.Exts.Build
-import           Language.Haskell.Exts.Syntax hiding (Rule)
+import           Language.Haskell.Exts.Syntax as H hiding (Rule)
 
 ---------------------
 -- Functions
@@ -20,7 +20,7 @@ pidType         = "Pid"
 stateRecordCons = "State"
 valType         = "Val"
 
-schedType :: Type
+schedType :: H.Type
 schedType       = TyList (TyCon (UnQual (name pidType)))
 schedTycon      = list_tycon
 
@@ -44,7 +44,7 @@ pidBound (PAbs _ (S s)) = s
 pidConstructor :: Pid -> String
 pidConstructor = (toUpper <$>) . pid
 
-pidPattern :: Pid -> Pat
+pidPattern :: Pid -> H.Pat
 pidPattern p@(PConc _)
   = PApp (UnQual (name (pidConstructor p))) []
 pidPattern p@(PAbs (GV v) _)

@@ -121,33 +121,33 @@ restrict x s
       }
 
 subst :: Eq a => Subst -> Stmt a -> Stmt a
-subst s (SNonDet ss a)
-  = SNonDet (nub $ map (subst s) ss) a
+subst s (NonDet ss a)
+  = NonDet (nub $ map (subst s) ss) a
 
-subst s (SBlock ss a)
-  = SBlock (map (subst s) ss) a
+subst s (Block ss a)
+  = Block (map (subst s) ss) a
 
-subst s (SSend p ms a)
-  = SSend (substPid s p) (substMS s ms) a
+subst s (Send p ms a)
+  = Send (substPid s p) (substMS s ms) a
 
-subst s (SRecv ms a)
-  = SRecv (substMS s ms) a
+subst s (Recv ms a)
+  = Recv (substMS s ms) a
 
-subst s (SIter v xs t a)
-  = SIter v (substSet s xs) (subst s' t) a
+subst s (Iter v xs t a)
+  = Iter v (substSet s xs) (subst s' t) a
   where s' = restrict v s
 
-subst s (SLoop v t a)
-  = SLoop v (subst s t) a
+subst s (Loop v t a)
+  = Loop v (subst s t) a
 
-subst s (SCompare v p1 p2 a)
-  = SCompare v (substPid s p1) (substPid s p2) a
+subst s (Compare v p1 p2 a)
+  = Compare v (substPid s p1) (substPid s p2) a
 
-subst s (SCase v l r a)
+subst s (Case v l r a)
   = case lookup v (cLabSub s) of
       Just LL -> subst s l
       Just RL -> subst s r
-      _       -> SCase v (subst s l) (subst s r) a
+      _       -> Case v (subst s l) (subst s r) a
 
 subst _ s = s
 

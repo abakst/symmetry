@@ -9,13 +9,13 @@ import Render
 --        , cSets  = []
 
 --        , cProcs = [(PConc 0,
---                    [ SChoose (V "pi") (S "ps")
---                        [SSend (PVar (V "pi")) [(MTApp (MTyCon "PING") [PConc 0],
---                                                         [SRecv [(MTApp (MTyCon "PONG") [PVar (V "x")], [])] ()])] ()] ()]),
+--                    [ Choose (V "pi") (S "ps")
+--                        [Send (PVar (V "pi")) [(MTApp (MTyCon "PING") [PConc 0],
+--                                                         [Recv [(MTApp (MTyCon "PONG") [PVar (V "x")], [])] ()])] ()] ()]),
 --             (PAbs (V "p") (S "ps"),
---              [SLoop (V "X")
---                       [SRecv [(MTApp (MTyCon "PING") [PVar (V "x")],
---                               [SSend (PVar (V "x")) [(MTApp (MTyCon "PONG") [PVar (V "x")], [SVar (V "X") ()])] ()])] ()] ()])]
+--              [Loop (V "X")
+--                       [Recv [(MTApp (MTyCon "PING") [PVar (V "x")],
+--                               [Send (PVar (V "x")) [(MTApp (MTyCon "PONG") [PVar (V "x")], [Goto (V "X") ()])] ()])] ()] ()])]
 -- }
 
 -- ---
@@ -40,8 +40,8 @@ test0 = Config {
         , cSets   = []
         , cUnfold = []
         , cProcs  = [
-         (tpid0, SSend tpid1 [(mPing tpid0, SRecv [(mPong (pvar "x"), SSkip ())] ())] ())
-        ,(tpid1, SRecv [(mPing (pvar "x"), SSend (pvar "x") [(mPong tpid1, SSkip ())] ())] ())
+         (tpid0, Send tpid1 [(mPing tpid0, Recv [(mPong (pvar "x"), Skip ())] ())] ())
+        ,(tpid1, Recv [(mPing (pvar "x"), Send (pvar "x") [(mPong tpid1, Skip ())] ())] ())
                     ]
         } :: Config ()
 
@@ -49,11 +49,11 @@ test0 = Config {
 --   cTypes = [mPing (pvar "x"), mPong (pvar "x"), MTApp (MTyCon "Unit") []]
 --   , cSets  = []
 --   , cProcs = [(tpid0,
---                     [SLoop (V "X")
---                       [SSend tpid1 [(mPing tpid0, [SRecv [(mPong (pvar "x"), [SVar (V "X") ()])] ()])] ()] ()])
+--                     [Loop (V "X")
+--                       [Send tpid1 [(mPing tpid0, [Recv [(mPong (pvar "x"), [Goto (V "X") ()])] ()])] ()] ()])
 --              ,(tpid1,
---                     [SLoop (V "Y")
---                       [SRecv [(mPing (pvar "x"), [SSend (pvar "x") [(mPong tpid1, [SVar (V "Y") ()])] ()])] ()] ()])]
+--                     [Loop (V "Y")
+--                       [Recv [(mPing (pvar "x"), [Send (pvar "x") [(mPong tpid1, [Goto (V "Y") ()])] ()])] ()] ()])]
 -- }
 
 test1 :: Config ()
@@ -62,9 +62,9 @@ test1= Config {
        , cSets  = []
        , cUnfold = []
   , cProcs = [(tpid0,
-                SIter (V "pi") (S "ps")
-                  (SBlock [SSend (PVar (V "pi")) [(mPing tpid0, SRecv [(mPong (pvar "x"), SSkip ())] ())] ()] ()) ())
-             ,(tpid2, SRecv [(mPing (pvar "x"), SSend (pvar "x") [(mPong tpid2, SSkip ())] ())] ())]
+                Iter (V "pi") (S "ps")
+                  (Block [Send (PVar (V "pi")) [(mPing tpid0, Recv [(mPong (pvar "x"), Skip ())] ())] ()] ()) ())
+             ,(tpid2, Recv [(mPing (pvar "x"), Send (pvar "x") [(mPong tpid2, Skip ())] ())] ())]
 }
 
 test1unfold :: Config ()
@@ -73,9 +73,9 @@ test1unfold = Config {
               , cSets  = []
               , cUnfold = [Conc (S "ps") 1]
               , cProcs = [(tpid0,
-                                SIter (V "pi") (S "ps")
-                                        (SSend (PVar (V "pi")) [(mPing tpid0, SRecv [(mPong (pvar "x"), SSkip ())] ())] ()) ())
-                         ,(tpid2, SRecv [(mPing (pvar "x"), SSend (pvar "x") [(mPong tpid2, SSkip ())] ())] ())]
+                                Iter (V "pi") (S "ps")
+                                        (Send (PVar (V "pi")) [(mPing tpid0, Recv [(mPong (pvar "x"), Skip ())] ())] ()) ())
+                         ,(tpid2, Recv [(mPing (pvar "x"), Send (pvar "x") [(mPong tpid2, Skip ())] ())] ())]
 }
 
 -- ---
@@ -85,12 +85,12 @@ pingMany = Config {
            , cSets = []
            , cUnfold = [Conc (S "ps") 1]
            , cProcs = [( tpid0
-                       , SBlock [ SIter (V "pi") (S "ps")
-                                          (SSend (pvar "pi") [(mPing tpid0, SSkip ())] ()) ()
-                                , SIter (V "pii") (S "ps")
-                                          (SRecv [(mPong (pvar "x"), SSkip ())] ()) ()] ())
+                       , Block [ Iter (V "pi") (S "ps")
+                                          (Send (pvar "pi") [(mPing tpid0, Skip ())] ()) ()
+                                , Iter (V "pii") (S "ps")
+                                          (Recv [(mPong (pvar "x"), Skip ())] ()) ()] ())
                       ,( tpid2
-                       , SRecv [(mPing (pvar "x"), SSend (pvar "x") [(mPong (pvar "p"), SSkip ())] ())] ())
+                       , Recv [(mPing (pvar "x"), Send (pvar "x") [(mPong (pvar "p"), Skip ())] ())] ())
                       ]
            }
 
@@ -101,12 +101,12 @@ pingManyBad = Config {
            , cSets = []
            , cUnfold = [Conc (S "ps") 1]
            , cProcs = [( tpid0
-                       , SBlock [ SIter (V "pi") (S "ps")
-                                          (SSend (pvar "pi") [(mPing tpid0, SSkip ())] ()) ()
-                                , SIter (V "pii") (S "ps")
-                                          (SRecv [(mPong (pvar "x"), SSkip ())] ()) ()] ())
+                       , Block [ Iter (V "pi") (S "ps")
+                                          (Send (pvar "pi") [(mPing tpid0, Skip ())] ()) ()
+                                , Iter (V "pii") (S "ps")
+                                          (Recv [(mPong (pvar "x"), Skip ())] ()) ()] ())
                       ,( tpid2
-                       , SRecv [(mPing (pvar "x"), SSkip ())] ())
+                       , Recv [(mPing (pvar "x"), Skip ())] ())
                       ]
            }
 
@@ -117,9 +117,9 @@ masterSlave = Config {
                 cTypes = [mInt]
               , cSets  = []
               , cUnfold = [Conc (S "ps") 1]
-              , cProcs = [(tpid0, SIter (V "pi") (S "ps")
-                                  (SRecv [(mInt, SSkip ())] ()) ())
-                         ,(tpid2, SSend tpid0 [(mInt, SSkip ())] ())]
+              , cProcs = [(tpid0, Iter (V "pi") (S "ps")
+                                  (Recv [(mInt, Skip ())] ()) ())
+                         ,(tpid2, Send tpid0 [(mInt, Skip ())] ())]
               }
 -- ---
 mPid :: Pid -> MType
@@ -133,18 +133,18 @@ mOK = MTApp (MTyCon "OK") []
 
 proc_0, proc_1, proc_2 :: Stmt ()
 
-proc_0 = SBlock [ SIter (V "pi") (S "ps")
-                          (SRecv [(mPid (pvar "x"), SSend (pvar "x") [(mInt, SSkip ())] ())] ()) ()
-                , SLoop (LV "end_X")
-                          (SRecv [(mPid (pvar "y"), SSend (pvar "y") [(mTT, SVar (LV "end_X") ())] ())] ()) ()
+proc_0 = Block [ Iter (V "pi") (S "ps")
+                          (Recv [(mPid (pvar "x"), Send (pvar "x") [(mInt, Skip ())] ())] ()) ()
+                , Loop (LV "end_X")
+                          (Recv [(mPid (pvar "y"), Send (pvar "y") [(mTT, Goto (LV "end_X") ())] ())] ()) ()
                 ]
          ()
 
-proc_2 = SLoop (LV "Y")
-             (SSend tpid0 [(mPid tpid2, SRecv [(mInt, SSend tpid1 [(mInt, SVar (LV "Y") ())] ())
-                                              ,(mTT, SSkip ())] ())] ()) ()
-proc_1 = SIter (V "pi") (S "ps")
-             (SRecv [(mInt, SSkip ())] ()) ()
+proc_2 = Loop (LV "Y")
+             (Send tpid0 [(mPid tpid2, Recv [(mInt, Send tpid1 [(mInt, Goto (LV "Y") ())] ())
+                                              ,(mTT, Skip ())] ())] ()) ()
+proc_1 = Iter (V "pi") (S "ps")
+             (Recv [(mInt, Skip ())] ()) ()
 
 workStealing :: Config ()
 workStealing = Config {
@@ -157,22 +157,22 @@ workStealing = Config {
                }
 -- ----
 
-ssend p m r = SSend p [(m, r)] ()
-srecv m r   = SRecv [(m, r)] ()
-sloop x y   = SLoop x y ()
-siter x y z = SIter x y z ()
-schoice x y z = SChoose x y z ()
+ssend p m r = Send p [(m, r)] ()
+srecv m r   = Recv [(m, r)] ()
+sloop x y   = Loop x y ()
+siter x y z = Iter x y z ()
+schoice x y z = Choose x y z ()
 
 workPushing = Config {
                 cTypes = [mInt]
               , cSets  = []
               , cUnfold = [Conc (S "ps") 1]
-              , cProcs = [  (tpid0, SBlock [ siter (V "p") (S "ps")
-                                                     (schoice (V "x") (S "ps") (ssend (pvar "x") mInt (SSkip ())))
+              , cProcs = [  (tpid0, Block [ siter (V "p") (S "ps")
+                                                     (schoice (V "x") (S "ps") (ssend (pvar "x") mInt (Skip ())))
                                            , siter (V "pp") (S "ps")
-                                                     (srecv mInt (SSkip ()))
+                                                     (srecv mInt (Skip ()))
                                            ] ())
-                          , (tpid2, sloop (LV "end_X") (srecv mInt (ssend tpid0 mInt (SVar (LV "end_X") ()))))
+                          , (tpid2, sloop (LV "end_X") (srecv mInt (ssend tpid0 mInt (Goto (LV "end_X") ()))))
                           ]
               }
 
@@ -191,13 +191,13 @@ mutex = Config
     mutexPs      = (tpid2, mutexPS)
     -- Master Process
     mutexMasterS :: Stmt ()
-    mutexMasterS = SLoop (LV "end_loop")
-                   (SRecv [(mPid (pvar "x"),
-                                 SSend (pvar "x") [(mTT,
-                                                       SRecv [(mOK, SVar (LV "end_loop") ())] ())] ())] ()) ()
+    mutexMasterS = Loop (LV "end_loop")
+                   (Recv [(mPid (pvar "x"),
+                                 Send (pvar "x") [(mTT,
+                                                       Recv [(mOK, Goto (LV "end_loop") ())] ())] ())] ()) ()
     -- Slave Processes
     mutexPS :: Stmt ()
-    mutexPS = SSend tpid0 [(mPid tpid2, SRecv [(mTT, SSend tpid0 [(mOK, SSkip ())] ())] ())] ()
+    mutexPS = Send tpid0 [(mPid tpid2, Recv [(mTT, Send tpid0 [(mOK, Skip ())] ())] ())] ()
 
 mRelease :: Pid -> MType
 mRelease v = MTApp (MTyCon "Rel") [v]
@@ -215,12 +215,12 @@ mutexBad = Config
     mutexPs      = (tpid2, mutexPS)
     -- Master Process
     mutexMasterS :: Stmt ()
-    mutexMasterS = SLoop (LV "X")
-                   (SRecv [(mPid (pvar "x"),
-                                 SSend (pvar "x") [(mTT, SSkip ())] ())] ()) ()
+    mutexMasterS = Loop (LV "X")
+                   (Recv [(mPid (pvar "x"),
+                                 Send (pvar "x") [(mTT, Skip ())] ())] ()) ()
     -- Slave Processes
     mutexPS :: Stmt ()
-    mutexPS = SSend tpid0 [(mPid tpid2, SRecv [(mTT, SSkip ())] ())] ()
+    mutexPS = Send tpid0 [(mPid tpid2, Recv [(mTT, Skip ())] ())] ()
 
 ---
 choiceBad :: Config ()
@@ -233,15 +233,15 @@ choiceBad
                       ]
            }
     where
-      choiceMaster = SSend tpid1 [ (mTT, SSend tpid1 [ (mTT, SSkip ())
-                                                     , (mOK, SSkip ())
+      choiceMaster = Send tpid1 [ (mTT, Send tpid1 [ (mTT, Skip ())
+                                                     , (mOK, Skip ())
                                                      ] ())
-                                 , (mOK, SSend tpid1 [ (mTT, SSkip ())
-                                                     , (mOK, SSkip ())
+                                 , (mOK, Send tpid1 [ (mTT, Skip ())
+                                                     , (mOK, Skip ())
                                                      ] ())
                                    ] ()
-      choiceSlave = SRecv [ (mTT, SRecv [ (mTT, SSkip ()) ] ())
-                          , (mOK, SRecv [ (mOK, SSkip ()) ] ())
+      choiceSlave = Recv [ (mTT, Recv [ (mTT, Skip ()) ] ())
+                          , (mOK, Recv [ (mOK, Skip ()) ] ())
                           ] ()
 
 ---
@@ -266,21 +266,21 @@ database = Config {
     makeType1 t = MTApp (MTyCon t) [PVar (V "x")]
     val1 t v    = MTApp (MTyCon t) [v]
 
-    psProc = SLoop (LV "endX")
-               (SRecv [ (makeType0 "Set", SVar (LV "endX") ())
-                      , (makeType1 "Get", SSend (PVar (V "x")) [(makeType0 "Value", SVar (LV "endX") ())] ())
+    psProc = Loop (LV "endX")
+               (Recv [ (makeType0 "Set", Goto (LV "endX") ())
+                      , (makeType1 "Get", Send (PVar (V "x")) [(makeType0 "Value", Goto (LV "endX") ())] ())
                       ] ())
                ()
 
-    dbProc = SLoop (LV "endX")
-               (SRecv [ (makeType0 "Set", SChoose (V "y") (S "ps") (SSend (PVar (V "y")) [(makeType0 "Set", SVar (LV "endX") ())] ()) ())
-                      , (makeType1 "Get", SChoose (V "y") (S "ps") (SSend (PVar (V "y")) [(makeType1 "Get", SVar (LV "endX") ())] ()) ())
+    dbProc = Loop (LV "endX")
+               (Recv [ (makeType0 "Set", Choose (V "y") (S "ps") (Send (PVar (V "y")) [(makeType0 "Set", Goto (LV "endX") ())] ()) ())
+                      , (makeType1 "Get", Choose (V "y") (S "ps") (Send (PVar (V "y")) [(makeType1 "Get", Goto (LV "endX") ())] ()) ())
                       ] ())
                ()
 
-    meProc = SLoop (LV "endX")
-               (SSend db [ (makeType0 "Set", SVar (LV "endX") ())
-                         , (val1 "Get" me, SRecv [ (makeType0 "Value", SVar (LV "endX") ()) ] ())
+    meProc = Loop (LV "endX")
+               (Send db [ (makeType0 "Set", Goto (LV "endX") ())
+                         , (val1 "Get" me, Recv [ (makeType0 "Value", Goto (LV "endX") ()) ] ())
                          ] ())
                ()
 

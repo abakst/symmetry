@@ -102,30 +102,30 @@ s_procP = s_arrP $ s_tupP s_pidP s_stmtP
 
 s_stmtP = s_skipP <|> s_blockP <|> s_sendP <|> s_recvP <|> s_loopP <|> s_svarP
 
-s_skipP  = reserved "skip" *> return (SSkip ())
+s_skipP  = reserved "skip" *> return (Skip ())
 
 s_blockP = braces $ do ss <- semiSep s_stmtP
-                       return (SBlock ss ())
+                       return (Block ss ())
 
 s_sendP = do reserved "send"
              pid   <- s_pidP
              pairs <- braces (semiSep pp)
-             return (SSend pid pairs ())
+             return (Send pid pairs ())
           where pp = (,) <$> s_msgP <* reservedOp "=>" <*> s_stmtP
 
 s_recvP = do reserved "receive"
              pairs <- braces (semiSep pp)
-             return (SRecv pairs ())
+             return (Recv pairs ())
           where pp = (,) <$> s_msgP <* reservedOp "=>" <*> s_stmtP
 
 s_loopP = do reserved "loop"
              lv <- s_lvarP
              s  <- braces s_stmtP
-             return (SLoop lv s ())
+             return (Loop lv s ())
 
 s_svarP = do reserved "jump"
              lv <- s_lvarP
-             return (SVar lv ())
+             return (Goto lv ())
 
 s_msgP  = try s_msgP1 <|> try s_msgPN
 

@@ -46,15 +46,15 @@ stutter_config =  Config {
   cTypes  = [],
   cSets   = [],
   cUnfold = [],
-  cProcs  = [(pid0, SLoop (LV "X")
-                          (SSend pid1 [(msg_t0
-                                       ,SSend pid1 [(msg_t0
-                                                    ,SVar (LV "X") ())] () )] ()) ())
-            ,(pid1, SLoop (LV "Y")
-                          (SRecv [(msg_t1
-                                  ,SRecv [(msg_t1
-                                          ,SNonDet [SSkip () {-failure case ?-}
-                                                   ,SVar (LV "Y") ()])] ())] ()) ())]
+  cProcs  = [(pid0, Loop (LV "X")
+                          (Send pid1 [(msg_t0
+                                       ,Send pid1 [(msg_t0
+                                                    ,Goto (LV "X") ())] () )] ()) ())
+            ,(pid1, Loop (LV "Y")
+                          (Recv [(msg_t1
+                                  ,Recv [(msg_t1
+                                          ,NonDet [Skip () {-failure case ?-}
+                                                   ,Goto (LV "Y") ()])] ())] ()) ())]
   } where pid0    = PConc 0
           pid1    = PConc 1
           msg_t v = MTApp (MTyCon "msg") [v]

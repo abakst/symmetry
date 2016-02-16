@@ -23,8 +23,8 @@
 - state before action : c  = (Q_{1},  X_{1},  S_{1},  LV_{1},  ..., Q_{n},  X_{n},  S_{n},  LV_{n})
 - state after action  : c' = (Q_{1}', X_{1}', S_{1}', LV_{1}', ..., Q_{n}', X_{n}', S_{n}', LV_{n}')
 
-** SSend Pid [(TId, [(CId, MConstr)], Stmt a)] a
-S_{j} = SSend p [..., (t_{k}, [..., (con_{kl}, v_{kl}), ...], S_{jk}), ...]
+** Send Pid [(TId, [(CId, MConstr)], Stmt a)] a
+S_{j} = Send p [..., (t_{k}, [..., (con_{kl}, v_{kl}), ...], S_{jk}), ...]
 
 IF ∃k,l such that
 - Q_{p}' = Q_{p} . (j, (t_{k}, con_{kl}, v_{kl}))
@@ -35,8 +35,8 @@ IF ∃k,l such that
 
 THEN c →(S_{j})→ c'
 
-** SRecv [(TId, [(CId, MConstr)], Stmt a)] a
-S_{j} = SRecv [..., (t_{k}, [..., (con_{kl}, var_{kl}), ...], S_{jk}), ...]
+** Recv [(TId, [(CId, MConstr)], Stmt a)] a
+S_{j} = Recv [..., (t_{k}, [..., (con_{kl}, var_{kl}), ...], S_{jk}), ...]
 
 IF ∃p,k,l such that
 - ∃ val ∈ Value, θ ∈ X such that
@@ -76,8 +76,8 @@ IF
 
 THEN c →(S_{j})→ c'
 
-** SLoop LVar (Stmt a) a
-S_{j} = SLoop lv s
+** Loop LVar (Stmt a) a
+S_{j} = Loop lv s
 
 IF
 - S_{j}' = s
@@ -89,8 +89,8 @@ IF
 
 THEN c →(S_{j})→ c'
 
-** SVar LVar a
-S_{j} = SVar lv
+** Goto LVar a
+S_{j} = Goto lv
 
 IF ∃s such that
 - {lv ↦ s} ∈ LV_{j}
@@ -102,8 +102,8 @@ IF ∃s such that
 
 THEN c →(S_{j})→ c'
 
-** TODO SCase Var (Stmt a) (Stmt a) a
-S_{j} = SCase var s_{1} s_{2}
+** TODO Case Var (Stmt a) (Stmt a) a
+S_{j} = Case var s_{1} s_{2}
 
 IF ∃ val_{1} such that
 - X_{j}(var) = L val_{1}
@@ -123,12 +123,12 @@ IF ∃ val_{2} such that
 - ∀i   : Q_{i}'  = Q_{i}
 THEN c →(S_{j})→ c'
 
-** TODO SIter Var Set (Stmt a) a
+** TODO Iter Var Set (Stmt a) a
 *** Case 1
-S_{j} = SIter var set s
+S_{j} = Iter var set s
 
 IF ∃ v ∈ set such that
-- S_{j}' = SBlock [s, SIter var (set∖{v}) s]
+- S_{j}' = SBlock [s, Iter var (set∖{v}) s]
 - X_{j}' = Update(X_{j}, {var ↦ v})
 - ∀i≠j : S_{i}'  = S_{i}
 - ∀i≠j : X_{i}'  = X_{i}
@@ -138,14 +138,14 @@ IF ∃ v ∈ set such that
 THEN c →(S_{j})→ c'
 
 *** Case 2
-S_{j} = SIter var ∅ s
+S_{j} = Iter var ∅ s
 
 IF c →(SSkip)→ c'
 
 THEN c →(S_{j})→ c'
 
-** TODO SChoose Var Set (Stmt a) a
-** TODO SDie a
+** TODO Choose Var Set (Stmt a) a
+** TODO Die a
 ** SSkip a
 S_{j} = SSkip
 
@@ -153,10 +153,10 @@ IF c' = c
 
 THEN c →(S_{j})→ c'
 
-** TODO SNull
-** TODO SVarDecl Var a
+** TODO Null
+** TODO GotoDecl Var a
 ** TODO STest Var a
-** TODO SNonDet [Stmt a]
+** TODO NonDet [Stmt a]
 * Questions [0/3]
 - [ ] Unbounded number of processes
 - [ ] How to determine whether a process is dead or alive?

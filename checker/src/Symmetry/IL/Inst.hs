@@ -36,7 +36,7 @@ inst1Abs d (p, s)
                    [ s1 `joinSubst` sub1Label v RL | s1 <- ss ]
 
     instLabels st =
-      fromMaybe err $ filterCoherent (SNonDet (subLabels st) (annot st))
+      fromMaybe err $ filterCoherent (NonDet (subLabels st) (annot st))
 
     err = error "inst1Abs: no labels are coherent"
 
@@ -44,15 +44,15 @@ inst1Abs d (p, s)
 inst1Abs _ p                 = p
 
 flattenNonDet :: Eq a => Stmt a -> Stmt a
-flattenNonDet (SNonDet ss a)
-  = SNonDet (nub $ foldl' flatten [] ss) a
+flattenNonDet (NonDet ss a)
+  = NonDet (nub $ foldl' flatten [] ss) a
   where
-    flatten ss' (SNonDet ss'' _)
+    flatten ss' (NonDet ss'' _)
       = ss' ++ map flattenNonDet ss''
     flatten ss' s'
       = ss' ++ [s']
-flattenNonDet (SBlock ss a)
-  = SBlock (map flattenNonDet ss) a
+flattenNonDet (Block ss a)
+  = Block (map flattenNonDet ss) a
 flattenNonDet s
   = s
 
@@ -64,37 +64,37 @@ coherent (MTProd c1 c2)= coherent c1 && coherent c2
 coherent _             = False
 
 filterCoherent :: (Eq a) => Stmt a -> Maybe (Stmt a)
-filterCoherent s@(SDie _)
+filterCoherent s@(Die _)
   = Just s
 
-filterCoherent (SNonDet ss a)
+filterCoherent (NonDet ss a)
   = case mapMaybe filterCoherent ss of
       []   -> Nothing
       [s'] -> Just s'
-      ss'  -> Just $ SNonDet (nub ss') a
+      ss'  -> Just $ NonDet (nub ss') a
 
-filterCoherent s@(SBlock [] _)
+filterCoherent s@(Block [] _)
   = Just s
 
-filterCoherent (SBlock ss a)
+filterCoherent (Block ss a)
   = if any isNothing ss' then
       Nothing
     else
-      Just (SBlock (catMaybes ss') a)
+      Just (Block (catMaybes ss') a)
   where
     ss' = map filterCoherent ss
 
-filterCoherent s@(SSend _ (_,_,v) _)
+filterCoherent s@(Send _ (_,_,v) _)
   = if coherent v then Just s else Nothing
 
-filterCoherent s@(SRecv (_,_,v) _)
+filterCoherent s@(Recv (_,_,v) _)
   = if coherent v then Just s else Nothing
 
-filterCoherent s@(SIter {})
+filterCoherent s@(Iter {})
   = do s' <- filterCoherent (iterBody s)
        return s { iterBody = s' }
 
-filterCoherent s@(SLoop {})
+filterCoherent s@(Loop {})
   = do s' <- filterCoherent (loopBody s)
        return s { loopBody = s' }
 
@@ -114,23 +114,23 @@ instConstr dom (MTProd c1 c2)
 instStmt  :: (Show a, Eq a)
           => [Pid] -> Stmt a -> Stmt a
 instStmt dom s
-  = SNonDet (nub [ s' | (_, s') <- instStmt' dom s ]) (annot s)
+  = NonDet (nub [ s' | (_, s') <- instStmt' dom s ]) (annot s)
 
 instStmt' :: Eq a => [Pid] -> Stmt a -> [(Subst, Stmt a)]
-instStmt' dom (SNonDet (s:ss) a)
+instStmt' dom (NonDet (s:ss) a)
   = do (sub, s')             <- instStmt' dom s
-       (sub', SNonDet ss' _) <- instStmt' dom (subst sub (SNonDet ss a))
-       return (sub `joinSubst` sub', SNonDet (s' : ss') a)
+       (sub', NonDet ss' _) <- instStmt' dom (subst sub (NonDet ss a))
+       return (sub `joinSubst` sub', NonDet (s' : ss') a)
 
-instStmt' dom (SBlock (s:ss) a)
+instStmt' dom (Block (s:ss) a)
   = do (sub, s')    <- ts
-       (sub', SBlock ss' _)  <- instStmt' dom (subst sub (SBlock ss a))
-       return (sub `joinSubst` sub', SBlock (s' : ss') a)
+       (sub', Block ss' _)  <- instStmt' dom (subst sub (Block ss a))
+       return (sub `joinSubst` sub', Block (s' : ss') a)
   where
     ts = instStmt' dom s
 
-instStmt' dom (SRecv (t,c,v) a)
-  = [ (sub, SRecv (t, c, substCstr sub v) a)
+instStmt' dom (Recv (t,c,v) a)
+  = [ (sub, Recv (t, c, substCstr sub v) a)
     | sub <- psubs
     -- , coherent (substCstr sub v)
     ]
@@ -143,6 +143,6 @@ instStmt' dom (SRecv (t,c,v) a)
     --             map (joinSubst (sub1Label v RL)) subs
     -- subs      = map (joinSubst lsub) psubs
 
-  -- = [ (sub, SRecv (t,c, substCstr sub v) a) | sub <- allSubs dom (pvars v)
+  -- = [ (sub, Recv (t,c, substCstr sub v) a) | sub <- allSubs dom (pvars v)
   --                                           , ]
 instStmt' _ s = [(emptySubst, s)]

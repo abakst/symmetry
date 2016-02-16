@@ -56,8 +56,8 @@ forM       :: xs:[a]
 
 
 {-
-SRecv [ (mPing (pvar "x"), SSend (pvar "x") [(mPong me, SSkip ())] ())
-      , (mPong (pvar "x"), SSkip ())
+Recv [ (mPing (pvar "x"), Send (pvar "x") [(mPong me, Skip ())] ())
+      , (mPong (pvar "x"), Skip ())
       ] ()
 -}
 
@@ -96,10 +96,10 @@ pingServer =
 remotable ['pingServer]
 
 {-
-SBlock [ SIter (V "pi") (S "ps")
-           (SSend (pvar "pi") [(mPing tpid0, SSkip ())] ()) ()
-       , SIter (V "pii") (S "ps")
-           (SRecv [(mPong (pvar "x"), SSkip ())] ()) ()] ()
+Block [ Iter (V "pi") (S "ps")
+           (Send (pvar "pi") [(mPing tpid0, Skip ())] ()) ()
+       , Iter (V "pii") (S "ps")
+           (Recv [(mPong (pvar "x"), Skip ())] ()) ()] ()
 -}
 master :: [NodeId] -> Process ()
 master peers = do

@@ -8,10 +8,10 @@ import           Data.Maybe
 import           Data.Function
 import           Text.Printf
 import           Language.Haskell.Exts.SrcLoc
-import           Language.Haskell.Exts.Syntax hiding (Rule, EVar)
+import           Language.Haskell.Exts.Syntax as H hiding (Rule, EVar)
 import           Language.Haskell.Exts.Build
 import           Language.Haskell.Exts.Pretty
-import           Symmetry.IL.AST
+import           Symmetry.IL.AST as IL
 import           Symmetry.IL.Model
 import           Symmetry.IL.ConfigInfo
 import           Symmetry.IL.Model.HaskellDefs
@@ -27,8 +27,8 @@ import           Symmetry.IL.Model.HaskellSpec ( initSpecOfConfig
 -- Wrapper type for Haskell code
 ---------------------------------
 data HaskellModel = ExpM { unExp :: Exp }
-                  | PatM { unPat :: Pat }
-                  | StateUpM [(String, Exp)] [((Pid, ILType), Exp)]
+                  | PatM { unPat :: H.Pat }
+                  | StateUpM [(String, Exp)] [((Pid, IL.Type), Exp)]
                   | GuardedUpM Exp [(ILExpr, HaskellModel)]
                     deriving Show
 
@@ -211,7 +211,7 @@ hExpr ci p (EPlus e1 e2)
 hExpr ci p e
   = error (printf "hExpr: TBD(%s)" (show e))
 
-hPred :: ConfigInfo Int -> Pid -> ILPred -> HaskellModel
+hPred :: ConfigInfo Int -> Pid -> Pred -> HaskellModel
 hPred ci _ ILPTrue
   = ExpM $ vExp "True"
 hPred ci p (ILNot b)
@@ -344,7 +344,7 @@ instance ILModel HaskellModel where
   printCheck = printQCFile
 
 
-ilExpPat :: ILExpr -> Pat
+ilExpPat :: ILExpr -> H.Pat
 ilExpPat (EPid q)
   = PApp (UnQual (name pidCons)) [pidPattern q]
 ilExpPat (ELeft (EVar v))
@@ -354,7 +354,7 @@ ilExpPat (ERight (EVar v))
 ilExpPat e
   = error (printf "ilExpPath TODO(%s)" (show e))
 
-varPat :: Var -> Pat    
+varPat :: Var -> H.Pat    
 varPat (V v)  = pvar $ name v
 varPat (GV v) = pvar $ name v
 
@@ -366,7 +366,7 @@ printRules ci rs dl = prettyPrint $ FunBind matches
     mkGuardedRhss rules
       = GuardedRhss [ mkRhs p grd a up | Rule p (ExpM grd) a up <- rules ]
     mkRhs p grd a (GuardedUpM f cases)
-      = GuardedRhs noLoc [Qualifier grd] (Case f (mkAlt p a <$> cases))
+      = GuardedRhs noLoc [Qualifier grd] (H.Case f (mkAlt p a <$> cases))
     mkRhs p grd a (StateUpM fups bufups)
       = GuardedRhs noLoc [Qualifier grd] (mkCall p a fups bufups)
     -- mkRhs p ms grd fups bufups
@@ -419,7 +419,7 @@ printRules ci rs dl = prettyPrint $ FunBind matches
 mkAssert e k
   = infixApp (metaFunction "liquidAssert" [e]) (op . sym $ "$") k
 
-updateBuf :: ConfigInfo Int -> Pid -> ILType -> Exp -> Exp
+updateBuf :: ConfigInfo Int -> Pid -> IL.Type -> Exp -> Exp
 updateBuf ci p@(PAbs _ _) t e
   = putVec2D v i j e 
     where
@@ -433,7 +433,7 @@ updateBuf ci p t e
     i = vExp $ ptrW ci p t
           
 
-findUpdate :: Pid -> ILType -> [((Pid, ILType), Exp)] -> Maybe (Pid, Exp)
+findUpdate :: Pid -> IL.Type -> [((Pid, IL.Type), Exp)] -> Maybe (Pid, Exp)
 findUpdate (PAbs _ (S s)) t bufups
   = case [ (p, e) | ((p@(PAbs _ (S s')), t'), e) <- bufups, s == s', t == t' ] of
       []  -> Nothing
@@ -638,8 +638,6 @@ arbitraryStateDecl    :: ConfigInfo Int -> Decl
 arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
   where tc_name   = UnQual $ name "Arbitrary"
         tv_name   = TyVar $ name stateRecordCons
-        var' s    = var $ name s
-        vh:vt     = stateVarArbs ci
         arb       = Match noLoc (name "arbitrary") [] Nothing genExp Nothing
         genExp    = UnGuardedRhs $ Do (bs ++ [retState])
         retState  = Qualifier (metaFunction "return" [recExp])
@@ -677,8 +675,8 @@ arbitraryPidPreDecl ci =
         arb_rhs = UnGuardedRhs (app (var' "oneof") (listE pid_ts))
         pid_ts  = Prelude.map pidGen ts
 
-        pidName p = Con $ UnQual $ name (pidConstructor p)
-        pidGen (p, t) = if isAbs p
+        pidName p = Con . UnQual $ name (pidConstructor p)
+        pidGen (p, _) = if isAbs p
                           then fmap_syn (pidName p) (var' "arbitrary")
                           else app (var' "return") (pidName p)
 
@@ -686,52 +684,6 @@ arbitraryPidPreDecl ci =
         pid_vars = [ t | (p, t) <- ts, isAbs p  ]
         ts       = [ (p, mkTy t) | p <- pids ci | t <- [0..] ]
         mkTy     = name . ("p" ++) . show
-
-
--- Returns the name and type of each variable in the State
-stateVarsNTList    :: ConfigInfo Int -> [(String,Type)]
-stateVarsNTList ci =
-  pcFs ++ ptrFs ++ valVarFs ++ intVarFs ++ absFs ++ globFs
-  where -- program counters
-        pcFs     = [ mkPC p (pc p) | p <- pids ci ]
-        -- read & write pointers (of type integer)
-        ptrFs    = [ mkInt p (ptrR ci p t) | p <- pids ci, t <- fst <$> tyMap ci] ++
-                   [ mkInt p (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci]
-        -- value variables
-        valVarFs = [ mkVal p v | (p, v) <- valVars (stateVars ci) ]
-        -- integer variables
-        intVarFs = [ mkInt p v | (p, v) <- intVars (stateVars ci) ]
-        -- ???
-        absFs    = concat [ [mkBound p, mkCounter p, mkUnfold p] | p <- pids ci, isAbs p ]
-        -- global variables ???
-        globFs = [ (v, valHType ci) | v <- globVals (stateVars ci) ] ++
-                 [ (v, intType)     | V v <- setBoundVars ci ]
-
-        -- helper functions
-        mkUnfold p  = (pidUnfold p, intType)
-        mkBound p   = (pidBound p,  intType)
-        mkCounter p = (pcCounter p, mapType intType intType)
-        mkPC  = liftMap intType
-        mkVal = liftMap (valHType ci)
-        mkInt = liftMap intType
-        liftMap t p v = (v, if isAbs p then mapType intType t else t)
-
-
--- for each field of the state record, use "return 0" for the integers and
--- "arbitrary" for the rest of the generators
-stateVarArbs    :: ConfigInfo Int -> [Exp]
-stateVarArbs ci = map getArb (stateVarsNTList ci)
-                    where getArb (_, TyCon (UnQual (Ident n)))
-                            | n == "Int" = ret0
-                            | otherwise  = vararb
-                          getArb (_, TyApp (TyCon (UnQual (Ident "Val"))) _) = vararb
-                          getArb (_, TyApp (TyApp (TyCon (UnQual (Ident "Map_t"))) _ ) _ ) = retMap
-                          getArb x = error ("Unimplemented generator: " ++ (show x))
-
-                          vararb   = var $ name $ "arbitrary"
-                          ret0     = app (var $ name "return") (Lit $ Int 0)
-                          retMap   = app (var $ name "return") (var $ name "emptyMap")
-
 -- ### Aeson (FromJSON, ToJSON) instances ##################################################
 
 -- instance FromJSON State where
@@ -749,13 +701,9 @@ stateFromJSONDecl ci =
         -- rhs = foldl' (\e s -> fapp_syn e s) rhs' ns'
         rhs = Do (bs ++ [Qualifier ret])
         ret = metaFunction "return" [RecConstr (qname stateRecordCons) [FieldWildcard]]
-        -- State <$> s .: <first var>
-        -- rhs' = fmap_syn (Con $ qname stateRecordCons) n'
-        -- parser for each variable
         varParser n = Generator noLoc (pvarn n)
                       (infix_syn ".:" (var $ name "s") (Lit $ String n))
         -- the names of the arguments in the state
-        -- n':ns' = map (varParser . fst) (stateVarsNTList ci)
         bs = withStateFields ci concat absFs pcFs ptrFs field field glob glob
         absFs _ x y z = [varParser x, varParser y, varParser z]
         pcFs _ f      = [varParser f]
@@ -766,12 +714,12 @@ stateFromJSONDecl ci =
 
         -- parseJSON _ = mzero
         fr_err  = Match noLoc (name "parseJSON") [PWildCard] Nothing rhs_err Nothing
-        rhs_err = UnGuardedRhs $ var $ name $ "mzero"
+        rhs_err = UnGuardedRhs . vExp $ "mzero"
 
         tc_name = UnQual $ name "FromJSON"
         tv_name = TyVar $ name stateRecordCons
         qname n = UnQual $ name n
-        pvarn n = Language.Haskell.Exts.Syntax.PVar $ name n
+        pvarn n = H.PVar $ name n
         fr_arg = [PApp (qname "Object") [pvarn "s"]]
 
 
@@ -800,12 +748,9 @@ stateToJSONDecl ci =
         glob          = return . enc
 
         -- parseJSON _ = mzero
-        fr_err  = Match noLoc (name "parseJSON") [PWildCard] Nothing rhs_err Nothing
-        rhs_err = UnGuardedRhs $ var $ name $ "mzero"
         tc_name = UnQual $ name "ToJSON"
         tv_name = TyVar $ name stateRecordCons
         qname n = UnQual $ name n
-        pvarn n = Language.Haskell.Exts.Syntax.PVar $ name n
         -- State{..}
         to_arg = [PRec (qname "State") [PFieldWildcard]]
 
@@ -822,7 +767,7 @@ pidFromJSONDecl ci =
         fr_arg = [PApp (qname "Object") [pvarn "o"]]
 
         -- case H.toList o of ...
-        rhs = Case (app (qvar (ModuleName "H") (name "toList")) (var' "o")) alts
+        rhs = H.Case (app (qvar (ModuleName "H") (name "toList")) (var' "o")) alts
 
         -- [(key,value)]
         alts     = [Alt noLoc case_pat case_rhs Nothing]
@@ -853,7 +798,7 @@ pidFromJSONDecl ci =
         var' s  = var $ name s
         pvar' s = pvar $ name s
         qname n = UnQual $ name n
-        pvarn n = Language.Haskell.Exts.Syntax.PVar $ name n
+        pvarn n = H.PVar $ name n
 
         pid_vars = [ t | (p, t) <- ts, isAbs p  ]
         ts       = [ (p, mkTy t) | p <- pids ci | t <- [0..] ]
@@ -892,7 +837,7 @@ pidToJSONDecl ci =
 
         var' s  = var $ name s
         qname n = UnQual $ name n
-        pvarn n = Language.Haskell.Exts.Syntax.PVar $ name n
+        pvarn n = H.PVar $ name n
 
         pid_vars = [ t | (p, t) <- ts, isAbs p  ]
         ts       = [ (p, mkTy t) | p <- pids ci | t <- [0..] ]
