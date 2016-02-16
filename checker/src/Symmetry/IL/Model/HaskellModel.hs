@@ -746,14 +746,17 @@ stateFromJSONDecl ci =
   where
         fr = Match noLoc (name "parseJSON") fr_arg Nothing (UnGuardedRhs rhs) Nothing
         -- State <$> s .: <first var> <*> s .: <second var> <*> ...
-        rhs = foldl' (\e s -> fapp_syn e s) rhs' ns'
+        -- rhs = foldl' (\e s -> fapp_syn e s) rhs' ns'
+        rhs = Do (bs ++ [Qualifier ret])
+        ret = metaFunction "return" [RecConstr (qname stateRecordCons) [FieldWildcard]]
         -- State <$> s .: <first var>
-        rhs' = fmap_syn (Con $ qname stateRecordCons) n'
+        -- rhs' = fmap_syn (Con $ qname stateRecordCons) n'
         -- parser for each variable
-        varParser n = infix_syn ".:" (var $ name "s") (Lit $ String n)
+        varParser n = Generator noLoc (pvarn n)
+                      (infix_syn ".:" (var $ name "s") (Lit $ String n))
         -- the names of the arguments in the state
         -- n':ns' = map (varParser . fst) (stateVarsNTList ci)
-        n':ns' = withStateFields ci concat absFs pcFs ptrFs field field glob glob
+        bs = withStateFields ci concat absFs pcFs ptrFs field field glob glob
         absFs _ x y z = [varParser x, varParser y, varParser z]
         pcFs _ f      = [varParser f]
         ptrFs _ f1 f2 = [varParser f1, varParser f2]
