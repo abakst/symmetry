@@ -9,6 +9,7 @@ import           Data.Traversable
 import           Data.Foldable
 import           Control.Monad.State hiding (mapM)
 import           Data.Typeable
+import           Text.Printf
 import           Data.Generics
 import           Data.List (nub, isPrefixOf, (\\))
 import qualified Data.Map.Strict as M
@@ -64,7 +65,7 @@ isBounded _ _           = False
 data Label = LL | RL | VL Var
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data Type = TUnit | TInt | TString | TPid | TProd Type Type | TSum Type Type                      
+data Type = TUnit | TInt | TString | TPid | TProd Type Type | TSum Type Type
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data Pat = PUnit
@@ -74,15 +75,34 @@ data Pat = PUnit
            | PSum  Pat Pat
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data Pred = ILBop Op ILExpr ILExpr                      
+data Pred = ILBop Op ILExpr ILExpr
           | ILAnd Pred Pred
           | ILOr Pred Pred
-          | ILNot Pred 
+          | ILNot Pred
           | ILPTrue
             deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data Op = Eq | Lt | Le | Gt | Ge
              deriving (Ord, Eq, Read, Show, Typeable, Data)
+
+-- Predicates (Can we move to fixpoint refts? Or paramaterize over these?)
+pTrue :: Pred
+pTrue = ILPTrue
+
+pFalse :: Pred
+pFalse = ILBop Eq (EInt 0) (EInt 1)
+
+pAnd :: Pred -> Pred -> Pred
+pAnd p1 p2 = pSimplify (ILAnd p1 p2)
+
+pSimplify :: Pred -> Pred        
+pSimplify (ILAnd ILPTrue p) = pSimplify p
+pSimplify (ILAnd p ILPTrue) = pSimplify p
+pSimplify (ILOr ILPTrue _)  = pTrue
+pSimplify (ILOr _ ILPTrue)  = pTrue
+pSimplify (ILNot p)         = ILNot (pSimplify p)
+pSimplify p                 = p
+
 
 data ILExpr = EUnit
             | EInt Int
@@ -95,7 +115,7 @@ data ILExpr = EUnit
             | EPlus ILExpr ILExpr
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
--- send(p, EPid p)                      
+-- send(p, EPid p)
 
 data MConstr = MTApp  { tycon :: MTyCon, tyargs :: [Pid] }
              | MCaseL Label MConstr
@@ -134,26 +154,41 @@ type MValMap = M.Map MConstr VId -- No variables
 
 type MTypeEnv = M.Map TId MType
 
+class Identable a where
+  ident :: a -> Int
+
+instance Identable Int where
+  ident = id
+
+instance Identable a => Identable (Stmt a) where
+  ident = ident . annot
+
+data PredAnnot a = PredAnnot { annotPred :: Pred, annotId :: a }
+                 deriving (Ord, Eq, Read, Show, Data, Typeable)
+
+instance Identable a => Identable (PredAnnot a) where
+  ident = ident . annotId
+
 data Stmt a = Skip { annot :: a }
 
             | Block { blkBody :: [Stmt a]
-                     , annot :: a
-                     }
+                    , annot :: a
+                    }
 
             | Send  { sndPid :: ILExpr -- Pid
-                     , sndMsg :: (Type, ILExpr)
-                     , annot  :: a
-                     }
+                    , sndMsg :: (Type, ILExpr)
+                    , annot  :: a
+                    }
 
             | Recv  { rcvMsg :: (Type, Var)
-                     , annot  :: a
-                     }
+                    , annot  :: a
+                    }
 
             | Iter { iterVar  :: Var
-                    , iterSet  :: Set
-                    , iterBody :: Stmt a
-                    , annot    :: a
-                    }
+                   , iterSet  :: Set
+                   , iterBody :: Stmt a
+                   , annot    :: a
+                   }
 
             {-used to create a loop with the given label-}
             | Loop { loopVar  :: LVar
@@ -327,33 +362,36 @@ stmt :: (TId, [(CId, MConstr)], Stmt a) -> Stmt a
 stmt (_,_,s) = s
 
 lastStmts :: Stmt a -> [Stmt a]
-lastStmts s@(Skip _)       = [s]
-lastStmts s@(Goto _ _)      = [s]
-lastStmts s@(Compare _ _ _ _) = [s]
-lastStmts (Block ss _)     = [last ss]
-lastStmts s@(Send _ _ _)    = [s]
-lastStmts s@(Recv _ _)      = [s]
-lastStmts s@(NonDet ss _)   = concatMap lastStmts ss
-lastStmts (Choose _ _ s _) = lastStmts s
-lastStmts s@(Iter _ _ _ _) = [s]
-lastStmts (Loop _ s _)     = lastStmts s
+lastStmts s@(Skip _)           = [s]
+lastStmts s@(Goto _ _)         = [s]
+lastStmts s@(Compare _ _ _ _)  = [s]
+lastStmts (Block ss _)         = [last ss]
+lastStmts s@(Send _ _ _)       = [s]
+lastStmts s@(Recv _ _)         = [s]
+lastStmts (NonDet ss _)        = concatMap lastStmts ss
+lastStmts (Choose _ _ s _)     = lastStmts s
+lastStmts s@(Iter _ _ _ _)     = [s]
+lastStmts (Loop _ s _)         = lastStmts s
 lastStmts (Case _ _ _ sl sr _) = lastStmts sl ++ lastStmts sr
-lastStmts s@(Die a)        = [s]
+lastStmts s@(Die _)            = [s]
+lastStmts s@Assert{}           = [s]
+lastStmts _                    = error "lastStmts: TBD"
 
-buildCfg :: Stmt Int -> I.IntMap [Int]                              
-buildCfg s = I.map (fmap annot) $ buildStmtCfg s
-           
-buildStmtCfg :: Stmt Int -> I.IntMap [Stmt Int]                              
+buildCfg :: (Data a, Identable a) => Stmt a -> I.IntMap [Int]
+buildCfg s = I.map (fmap ident) $ buildStmtCfg s
+
+buildStmtCfg :: (Data a, Identable a) => Stmt a -> I.IntMap [Stmt a]
 buildStmtCfg = nextStmts 0
 
-singleton :: Int -> Stmt Int -> I.IntMap [Stmt Int]
+singleton :: Identable a => Int -> Stmt a -> I.IntMap [Stmt a]
 singleton i j
-  | i == annot j = I.empty
+  | i == ident j = I.empty
   | otherwise    = I.fromList [(i, [j])]
 
-nextStmts :: Int -> Stmt Int -> I.IntMap [Stmt Int]
+nextStmts :: (Data a, Identable a)
+          => Int -> Stmt a -> I.IntMap [Stmt a]
 nextStmts toMe s@(NonDet ss i)
-  = foldl' (\m -> joinMaps m . nextStmts i)
+  = foldl' (\m -> joinMaps m . nextStmts (ident i))
            (I.fromList [(toMe, [s])])
            ss
 
@@ -361,47 +399,48 @@ nextStmts toMe s@(NonDet ss i)
 nextStmts toMe s@Block { blkBody = ss }
   = singleton toMe s `joinMaps` snd nexts
   where
-    nexts = foldl' go ([annot s], I.empty) ss
-    -- go (ins, m) s = (annots s, foldl' go m `joinMaps` nextStmts ins s)
-    go (ins, m) s = (annots s, foldl' joinMaps m (doMaps s <$> ins))
-    doMaps s i    = nextStmts i s
-    annots (NonDet ts _) = annot <$> ts
-    annots s              = [annot s]
-                      
-nextStmts toMe s@(Iter _ _ t i)
-  = singleton toMe s `joinMaps`
-    I.fromList [(annot j, [s]) | j <- lastStmts t]  `joinMaps`
-    nextStmts i t
+    nexts = foldl' go ([ident s], I.empty) ss
+    go (ins, m) s' = (annots s', foldl' joinMaps m (doMaps s' <$> ins))
+    doMaps s' i    = nextStmts (ident i) s'
+    annots (NonDet ts _) = ident <$> ts
+    annots s'             = [ident s']
 
-nextStmts toMe me@(Loop v s i)
+nextStmts toMe s@(Iter _ _ t _)
+  = singleton toMe s `joinMaps`
+    I.fromList [(ident j, [s]) | j <- lastStmts t]  `joinMaps`
+    nextStmts (ident s) t
+
+nextStmts toMe me@(Loop v s _)
   = singleton toMe me `joinMaps`
     I.fromList [(j, [me]) | j <- js ] `joinMaps`
-    nextStmts i s
+    nextStmts (ident s) s
   where
     js = [ j | Goto v' j <- listify (const True) s, v' == v]
 
-nextStmts toMe me@(Choose _ _ s i)
-  = addNext toMe [me] $ nextStmts i s
-nextStmts toMe me@(Case _ _ _ sl sr i)
-  = singleton toMe me `joinMaps` nextStmts i sl `joinMaps` nextStmts i sr
+nextStmts toMe me@(Choose _ _ s _)
+  = addNext toMe [me] $ nextStmts (ident me) s
+nextStmts toMe me@(Case _ _ _ sl sr _)
+  = singleton toMe me `joinMaps`
+    nextStmts (ident me) sl `joinMaps`
+    nextStmts (ident me) sr
 nextStmts toMe s
   = singleton toMe s
 
 -- | Operations
-freshId :: Stmt a -> State Int (Stmt Int)
-freshId
-  = mapM (const fr)
+freshId :: (Int -> a -> b) -> Stmt a -> State Int (Stmt b)
+freshId f s
+  = mapM (const fr) s
   where
     fr = do n <- get
             put (n + 1)
-            return n
+            return (f n (annot s))
 
-freshStmtIds :: Stmt a -> Stmt Int                   
-freshStmtIds s = evalState (freshId s) 0
+freshStmtIds :: (Int -> a -> b) -> Stmt a -> Stmt b
+freshStmtIds f s = evalState (freshId f s) 0
 
-freshIds :: Config a -> Config Int
-freshIds (c @ Config { cProcs = ps })
-  = c { cProcs = evalState (mapM (mapM freshId) ps) 1 }
+freshIds :: Config a -> (Int -> a -> b) -> Config b
+freshIds (c @ Config { cProcs = ps }) f
+  = c { cProcs = evalState (mapM (mapM (freshId f)) ps) 1 }
 
 instance Pretty Var where
   pretty (V x)     = text x
@@ -477,67 +516,74 @@ instance Pretty Pred where
   pretty (ILAnd p1 p2)   = parens (pretty p1 <+> text "&&" <+> pretty p2)
   pretty (ILOr p1 p2)    = parens (pretty p1 <+> text "||" <+> pretty p2)
   pretty (ILNot p)       = parens (text "~" <> pretty p)
+  pretty (ILPTrue)       = text "T"
 
-instance Pretty (Stmt a) where
-  pretty (Skip _)
-    = text "<skip>"
+instance Pretty a => Pretty (PredAnnot a) where
+  pretty PredAnnot { annotPred = p } = pretty p
 
-  pretty (Assert e _)
-    = text "assert" <+> pretty e
+ppannot :: Pretty a => a -> Doc
+ppannot a = text "/*" <+> pretty a <+> text "*/"
 
-  pretty (Assign v e _)
-    = pretty v <+> text ":=" <+> pretty e
+instance Pretty a => Pretty (Stmt a) where
+  pretty (Skip a)
+    = text "<skip>" <+> ppannot a
 
-  pretty (Send p (t,e) _)
-    = text "send" <+> pretty p <+> parens (pretty e <+> text "::" <+> pretty t)
+  pretty (Assert e a)
+    = text "assert" <+> pretty e <+> ppannot a
 
-  pretty (Recv (t,x) _)
-    = text "recv" <+> parens (pretty x <+> text "::" <+> pretty t)
+  pretty (Assign v e a)
+    = pretty v <+> text ":=" <+> pretty e <+> ppannot a
 
-  pretty (Iter x xs s _)
+  pretty (Send p (t,e) a)
+    = text "send" <+> pretty p <+> parens (pretty e <+> text "::" <+> pretty t) <+> ppannot a
+
+  pretty (Recv (t,x) a)
+    = text "recv" <+> parens (pretty x <+> text "::" <+> pretty t) <+> ppannot a
+
+  pretty (Iter x xs s a)
     = text "for" <+> parens (int 0 <+> text "≤"
                                    <+> pretty x
                                    <+> langle <+> text "|" <> pretty xs <> text "|")
-                 <+> lbrace $$ (indent 2 $ pretty s) $$ rbrace
+                 <+> lbrace <+> ppannot a $$ (indent 2 $ pretty s) $$ rbrace
 
-  pretty (Goto (LV v) _)
-    = text "goto" <+> pretty v
+  pretty (Goto (LV v) a)
+    = text "goto" <+> pretty v <+> ppannot a
 
-  pretty (Loop (LV v) s _)
-    = pretty v <> colon <+> parens (pretty s)
+  pretty (Loop (LV v) s a)
+    = pretty v <> colon <+> parens (pretty s) <+> ppannot a
 
-  pretty (Case l pl pr sl sr _)
-    = text "match" <+> pretty l <+> text "with" $$
+  pretty (Case l pl pr sl sr a)
+    = text "match" <+> pretty l <+> text "with"  <+> ppannot a $$
       indent 2
         (align (vcat [text "| InL" <+> pretty pl <+> text "->" <+> pretty sl,
                      text "| InR" <+> pretty pr <+> text "->"  <+> pretty sr]))
 
-  pretty (Choose v r s _)
+  pretty (Choose v r s a)
     = text "select" <+> pretty v <+>
       text "from" <+> pretty r <+>
-      text "in" $$ indent 2 (align (pretty s))
+      text "in"  <+> ppannot a $$ indent 2 (align (pretty s))
 
-  pretty (Die _)
-    = text "CRASH"
+  pretty (Die a)
+    = text "CRASH" <+> ppannot a
 
-  pretty (Block ss _)
-    = braces (line <> indent 2 (vcat $ punctuate semi (map pretty ss)) <> line)
+  pretty (Block ss a)
+    = braces (ppannot a <> line <> indent 2 (vcat $ punctuate semi (map pretty ss)) <> line)
 
   pretty (Compare v p1 p2 _)
     = pretty v <+> colon <> equals <+> pretty p1 <+> equals <> equals <+> pretty p2
 
-  pretty (NonDet ss _)
-    = pretty ss
+  pretty (NonDet ss a)
+    = pretty ss <+> ppannot a
 
-  pretty (Null _)
-    = text "<null>"
+  pretty (Null a)
+    = text "<null>" <+> ppannot a
 
 prettyMsg :: (TId, CId, MConstr) -> Doc
 prettyMsg (t, c, v)
   = text "T" <> int t <> text "@" <>
     text "C" <> int c <> parens (pretty v)
 
-instance Pretty (Config a) where
+instance Pretty a => Pretty (Config a) where
   pretty (Config {cProcs = ps, cSets = bs, cGlobals = gs, cGlobalSets = gsets})
     = vsep (map goGlob gs ++
             map goGlobS gsets ++
@@ -566,3 +612,43 @@ patVars s
     go :: Stmt a -> [Var]
     go (Case _ x y _ _ _) = [x, y]
     go _                   = []
+
+------------------------
+-- Remove explicit Assertions
+------------------------
+annotAsserts :: Data a => Config a -> Config (PredAnnot a)
+annotAsserts c
+  = c { cProcs = [ (p, squashAsserts s) | (p, s) <- cProcs c ] }
+
+truePred :: a -> PredAnnot a
+truePred a
+  = PredAnnot { annotPred = ILPTrue
+              , annotId   = a
+              }
+
+meetPred :: PredAnnot a -> PredAnnot a -> PredAnnot a    
+meetPred p1 p2 = p2 { annotPred = pAnd (annotPred p1) (annotPred p2) }
+
+squashAsserts :: forall a. Data a => Stmt a -> Stmt (PredAnnot a)    
+squashAsserts s@Block { blkBody = (a@Assert{}):body }
+  = annotFirst ann $ squashAsserts s { blkBody = body }
+  where
+    ann = PredAnnot { annotPred = assertPred a
+                    , annotId   = annot a
+                    }
+squashAsserts s@Block { blkBody = b:body }
+  = s { blkBody = b' `joinStmts` body'
+      , annot   = truePred (annot s)
+      }
+    where
+      b'        = fmap truePred b
+      body'     = squashAsserts s { blkBody = body }
+      joinStmts s1 s2@Block{} = s1 : blkBody s2
+      joinStmts s1 s2         = [s1, s2]
+squashAsserts s = fmap truePred s
+
+annotFirst :: PredAnnot a -> Stmt (PredAnnot a) -> Stmt (PredAnnot a)
+annotFirst a s@Block{ blkBody = b:body }
+  = s { blkBody = b { annot = meetPred a (annot b) } : body }
+annotFirst a s
+  = s { annot = meetPred a (annot s) }

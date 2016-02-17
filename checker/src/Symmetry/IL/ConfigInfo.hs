@@ -20,11 +20,11 @@ data ConfigInfo a = CInfo { config     :: Config a
                           , stateVars  :: ConfigState
                           , tyMap      :: TyMap
                           , pids       :: [Pid]
-                          , cfg        :: [(Pid, IntMap [Stmt Int])]
+                          , cfg        :: [(Pid, IntMap [Stmt a])]
                           , isQC       :: Bool
                           }
 
-mkCState :: Config Int -> ConfigState 
+mkCState :: Data a => Config a -> ConfigState 
 mkCState c = CState { valVars  = vs
                     , intVars  = is
                     , globVals = gs
@@ -47,12 +47,12 @@ vars :: ConfigInfo a -> [String]
 vars CInfo { stateVars = CState {..} }
   = snd <$> intVars ++ valVars
   
-
-cfgNext :: ConfigInfo Int -> Pid -> Int -> Maybe [Stmt Int]                                     
+cfgNext :: Identable a
+        => ConfigInfo a -> Pid -> Int -> Maybe [Stmt a]                                     
 cfgNext ci p i
   = M.lookup i . fromJust $ List.lookup p (cfg ci)
 
-mkCInfo :: Config Int -> ConfigInfo Int
+mkCInfo :: (Data a, Identable a) => Config a -> ConfigInfo a
 mkCInfo c = CInfo { config    = c
                   , stateVars = mkCState c
                   , tyMap     = tyMap
@@ -72,7 +72,7 @@ mkCInfo c = CInfo { config    = c
 lookupTy :: ConfigInfo a -> Type -> Integer
 lookupTy ci t = fromJust . List.lookup t $ tyMap ci
 
-setBound :: ConfigInfo Int -> Set -> Maybe SetBound
+setBound :: ConfigInfo a -> Set -> Maybe SetBound
 setBound ci s
   | not (List.null known)   = Just $ head known
   | not (List.null unknown) = Just $ head unknown

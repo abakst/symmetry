@@ -3,6 +3,7 @@
 module Symmetry.IL.Model.HaskellModel where
 
 import           Data.Char
+import           Data.Generics
 import           Data.List
 import           Data.Maybe
 import           Data.Function
@@ -118,7 +119,7 @@ hInt x
   where
     mkInt = intE . toInteger 
 
-hReadState :: ConfigInfo Int
+hReadState :: ConfigInfo a
            -> Pid
            -> String
            -> HaskellModel
@@ -127,13 +128,13 @@ hReadState _ (PConc _) f
 hReadState _ p f
   = ExpM $ getMap (vExp f) (vExp (pidIdx p))
 
-hReadPC :: ConfigInfo Int
+hReadPC :: ConfigInfo a
         -> Pid
         -> HaskellModel
 hReadPC ci p
   = hReadState ci p (pc p)
 
-hReadPCCounter :: ConfigInfo Int
+hReadPCCounter :: ConfigInfo a
                -> Pid
                -> HaskellModel
                -> HaskellModel
@@ -142,7 +143,7 @@ hReadPCCounter ci p (ExpM i)
   where
     s = vExp $ pcCounter p
 
-hReadRoleBound :: ConfigInfo Int
+hReadRoleBound :: ConfigInfo a
                -> Pid
                -> HaskellModel
 hReadRoleBound ci p
@@ -160,7 +161,7 @@ hAdd :: HaskellModel -> HaskellModel -> HaskellModel
 hAdd (ExpM e1) (ExpM e2)
   = ExpM $ infixApp e1 opPlus e2
 
-hSetFields :: ConfigInfo Int
+hSetFields :: ConfigInfo a
            -> Pid
            -> [(String, HaskellModel)]
            -> HaskellModel
@@ -175,7 +176,7 @@ hSetPC ci p e
 con :: String -> Exp             
 con = Con . UnQual . name
 
-hExpr :: ConfigInfo Int -> Pid -> ILExpr -> HaskellModel
+hExpr :: ConfigInfo a -> Pid -> ILExpr -> HaskellModel
 hExpr _ _ EUnit    = ExpM $ con unitCons    
 hExpr _ _ EString  = ExpM $ con stringCons
 hExpr _ _ (EInt i) = hInt i
@@ -211,7 +212,7 @@ hExpr ci p (EPlus e1 e2)
 hExpr ci p e
   = error (printf "hExpr: TBD(%s)" (show e))
 
-hPred :: ConfigInfo Int -> Pid -> Pred -> HaskellModel
+hPred :: ConfigInfo a -> Pid -> Pred -> HaskellModel
 hPred ci _ ILPTrue
   = ExpM $ vExp "True"
 hPred ci p (ILNot b)
@@ -262,7 +263,7 @@ hGetMessage ci p@(PAbs (GV i) _) (V v, t)
   where
     ExpM e' = hReadPtrR ci p t
 
-hMatchVal :: ConfigInfo Int
+hMatchVal :: ConfigInfo a
           -> Pid
           -> HaskellModel
           -> [(ILExpr, HaskellModel)]
@@ -279,13 +280,13 @@ hMatchVal ci p (ExpM f) cases
 -- hMatchVal ci p f (ERight (EVar (V v))) (Rule p' ms grd ups)
 --   = Rule p' ((f, PatM $ (PApp (UnQual (name rightCons)) [pvar (name v)])) : ms) grd ups
 
-hNonDet :: ConfigInfo Int
+hNonDet :: ConfigInfo a
         -> Pid
         -> HaskellModel
 hNonDet _ _
   = ExpM $ metaFunction nondet [vExp sched]
 
-hNonDetRange :: ConfigInfo Int
+hNonDetRange :: ConfigInfo a
              -> Pid
              -> Set
              -> HaskellModel
@@ -294,7 +295,7 @@ hNonDetRange ci p (S s)
 hNonDetRange _ _ _
   = error "hNonDetRange (TBD)"
 
-hRule :: ConfigInfo Int
+hRule :: ConfigInfo a
       -> Pid
       -> HaskellModel
       -> Maybe (HaskellModel)
@@ -419,7 +420,7 @@ printRules ci rs dl = prettyPrint $ FunBind matches
 mkAssert e k
   = infixApp (metaFunction "liquidAssert" [e]) (op . sym $ "$") k
 
-updateBuf :: ConfigInfo Int -> Pid -> IL.Type -> Exp -> Exp
+updateBuf :: ConfigInfo a -> Pid -> IL.Type -> Exp -> Exp
 updateBuf ci p@(PAbs _ _) t e
   = putVec2D v i j e 
     where
@@ -444,13 +445,13 @@ findUpdate p t bufups
 undef = "undefined"                               
 undefinedExp = vExp undef
 
-initialState :: ConfigInfo Int -> [Decl]
+initialState :: ConfigInfo a -> [Decl]
 initialState _
   = [ TypeSig noLoc [name initState] (TyCon (UnQual (name stateRecordCons)))
     , nameBind noLoc (name initState) undefinedExp
     ]
 
-initialSched :: ConfigInfo Int -> [Decl]
+initialSched :: ConfigInfo a -> [Decl]
 initialSched _
   = [ TypeSig noLoc [name initSched] fnType
     , simpleFun noLoc (name initSched) (name state) undefinedExp
@@ -466,7 +467,7 @@ initialSched _
     --                       (UnGuardedRhs (Con $ Special UnitCon))
     --                       Nothing
 
-totalCall :: ConfigInfo Int -> Decl
+totalCall :: ConfigInfo a -> Decl
 totalCall ci =
   FunBind [Match noLoc (name runState) args Nothing rhs Nothing]
     where
@@ -474,7 +475,7 @@ totalCall ci =
       args = (wildcard : bufs) ++ [wildcard] ++ (ifQC ci wildcard)
       rhs  = UnGuardedRhs $ if isQC ci then emptyListCon else unitCon
 
-initialCall :: ConfigInfo Int -> Decl
+initialCall :: ConfigInfo a -> Decl
 initialCall ci =
   nameBind noLoc (name "check") call
     where
@@ -484,7 +485,8 @@ initialCall ci =
       emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
       initSchedCall = metaFunction initSched [vExp initState]
           
-printHaskell :: ConfigInfo Int -> [Rule HaskellModel] -> String
+printHaskell :: (Data a, Identable a)
+             => ConfigInfo a -> [Rule HaskellModel] -> String
 printHaskell ci rs = unlines [ header
                              , ""
                              , body
@@ -511,7 +513,8 @@ printHaskell ci rs = unlines [ header
 -- ### QUICK CHECK ######################################################
 -- ######################################################################
 
-printQCFile :: ConfigInfo Int -> [Rule HaskellModel] -> String
+printQCFile :: (Data a, Identable a)
+            => ConfigInfo a -> [Rule HaskellModel] -> String
 printQCFile ci _
   = unlines lhFile
   where
@@ -552,11 +555,11 @@ infix_syn sym f g = InfixApp f (QConOp $ UnQual $ Symbol sym) g
 fmap_syn          = infix_syn "<$>"
 fapp_syn          = infix_syn "<*>"
 
-arbitraryDecls :: ConfigInfo Int -> [Decl]
+arbitraryDecls :: (Identable a, Data a) => ConfigInfo a -> [Decl]
 arbitraryDecls ci = [ arbitraryPidPreDecl ci
                     , arbitraryStateDecl  ci ]
 
-jsonDecls   :: ConfigInfo Int -> [Decl]
+jsonDecls   :: ConfigInfo a -> [Decl]
 jsonDecls ci = ($ ci) <$> [ stateFromJSONDecl
                           , stateToJSONDecl
                           , pidFromJSONDecl
@@ -575,7 +578,7 @@ jsonDecls ci = ($ ci) <$> [ stateFromJSONDecl
 --         then return ()
 --         else run (log_states l)
 --   assert True
-runTestDecl    :: ConfigInfo Int -> Decl
+runTestDecl    :: ConfigInfo a -> Decl
 runTestDecl ci =
   FunBind [ Match noLoc (name "runTest") args Nothing (UnGuardedRhs rhs) Nothing ]
   where pvarn n    = pvar $ name n
@@ -634,7 +637,8 @@ arbNull = metaFunction "return" [vExp nullCons]
 arbEmptyMap :: Exp
 arbEmptyMap = metaFunction "return" [vExp "emptyMap"]
 
-arbitraryStateDecl    :: ConfigInfo Int -> Decl
+arbitraryStateDecl    :: (Data a, Identable a)
+                      => ConfigInfo a -> Decl
 arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [arb])]
   where tc_name   = UnQual $ name "Arbitrary"
         tv_name   = TyVar $ name stateRecordCons
@@ -662,7 +666,7 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
 
 -- instance Arbitrary p1 => Arbitrary (Pid_pre p1) where
 --         arbitrary = oneof [return PIDR0, PIDR2 <$> arbitrary, ...]
-arbitraryPidPreDecl    :: ConfigInfo Int -> Decl
+arbitraryPidPreDecl    :: ConfigInfo a -> Decl
 arbitraryPidPreDecl ci =
   InstDecl noLoc Nothing [] ctx tc_name [tv_name] [InsDecl (FunBind [arb])]
   where
@@ -692,7 +696,7 @@ arbitraryPidPreDecl ci =
 --                          ...
 --                          s .: "x_3"
 --   parseJSON _            = mzero
-stateFromJSONDecl    :: ConfigInfo Int -> Decl
+stateFromJSONDecl    :: ConfigInfo a -> Decl
 stateFromJSONDecl ci =
   InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [fr, fr_err])]
   where
@@ -727,7 +731,7 @@ stateFromJSONDecl ci =
 --   toJSON State{..} = object [ "pidR0Pc"    .= pidR0Pc
 --                             , ...
 --                             , "x_3"        .= x_3        ]
-stateToJSONDecl    :: ConfigInfo Int -> Decl
+stateToJSONDecl    :: ConfigInfo a -> Decl
 stateToJSONDecl ci =
   InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl (FunBind [to])]
   where
@@ -759,7 +763,7 @@ stateToJSONDecl ci =
 --     [(k,v)] | k == "PIDR0" -> return PIDR0
 --             | k == "PIDR2" -> PIDR2 <$> parseJSON v
 --   parseJSON _ = mzero
-pidFromJSONDecl    :: ConfigInfo Int -> Decl
+pidFromJSONDecl    :: ConfigInfo a -> Decl
 pidFromJSONDecl ci =
   InstDecl noLoc Nothing [] ctx tc_name [tv_name] [InsDecl (FunBind [fr, fr_err])]
   where
@@ -807,7 +811,7 @@ pidFromJSONDecl ci =
 -- instance (ToJSON p1) => ToJSON (Pid_pre p1) where
 --   toJSON PIDR0       = object [ "PIDR0" .= Null ]
 --   toJSON (PIDR2 pid) = object [ "PIDR2" .= toJSON pid ]
-pidToJSONDecl    :: ConfigInfo Int -> Decl
+pidToJSONDecl    :: ConfigInfo a -> Decl
 pidToJSONDecl ci =
   InstDecl noLoc Nothing [] ctx tc_name [tv_name] [InsDecl (FunBind tos)]
   where

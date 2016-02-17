@@ -1,3 +1,4 @@
+{-# Language ScopedTypeVariables #-}
 module Symmetry.IL.Model.HaskellDeadlock where
 
 import           Data.List
@@ -17,16 +18,18 @@ A configuration is deadlocked if
 -- Collect blocked states
 -- /\_p (blocked-or-done p) /\ (\/_p' blocked p')
 
-blockedLocsOfProc :: Process Int -> (Pid, [(Type, Int)])
+blockedLocsOfProc :: forall a. (Identable a, Data a)
+                  => Process a -> (Pid, [(Type, Int)])
 blockedLocsOfProc (p, s)
   = (p, everything (++) (mkQ [] go) s)
   where
-    go :: Stmt Int -> [(Type, Int)]
-    go (Recv (t,_) i) = [(t, i)]
+    go :: Stmt a -> [(Type, Int)]
+    go (Recv (t,_) i) = [(t, ident i)]
     go _               = []
 
 
-blockedLocs :: Config Int -> [(Pid, [(Type, Int)])]
+blockedLocs :: (Data a, Identable a)
+            => Config a -> [(Pid, [(Type, Int)])]
 blockedLocs Config{ cProcs = ps }
   = blockedLocsOfProc <$> ps
 
@@ -34,11 +37,11 @@ procAtRecv :: ILModel e => ConfigInfo Int -> Pid -> [(Type, Int)] -> e
 procAtRecv ci p tis
   = ors [ readPC ci p `eq` int i | (_, i) <- tis ]
 
-procDone :: ILModel e => ConfigInfo Int -> Pid -> e
+procDone :: ILModel e => ConfigInfo a -> Pid -> e
 procDone ci p
   = readPC ci p `eq` int (-1)
 
-procBlocked :: ILModel e => ConfigInfo Int -> Pid -> [(Type, Int)] -> e
+procBlocked :: (Identable a, ILModel e) => ConfigInfo a -> Pid -> [(Type, Int)] -> e
 procBlocked ci p@(PAbs _ _) tis
   = ors [ ands [ readPC ci p `eq` int i, blocked t ] | (t, i) <- tis ]
   where
@@ -49,7 +52,7 @@ procBlocked ci p tis
   where
     blocked t = lte (readPtrW ci p p t) (readPtrR ci p t)
 
-deadlockFree :: ILModel e => ConfigInfo Int -> e
+deadlockFree :: (Data a, Identable a, ILModel e) => ConfigInfo a -> e
 deadlockFree ci@CInfo { config = Config { cProcs = ps } }
   = lneg $ ands [ assumption
                 , ors (badConfig <$> locs)

@@ -1,5 +1,6 @@
 {-# Language ParallelListComp #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# Language ViewPatterns #-}
+{-# Language ScopedTypeVariables #-}
 module Symmetry.IL.Model.HaskellSpec where
 
 -- import           Data.Char
@@ -7,6 +8,7 @@ import           Data.Generics
 -- import qualified Data.IntMap.Strict as M
 -- import qualified Data.IntSet as S
 -- import qualified Data.Map.Strict as Map
+import           Data.Foldable as Fold
 import           Data.List
 import           Data.Maybe
 import           Language.Haskell.Exts.Pretty
@@ -17,7 +19,7 @@ import           Language.Fixpoint.Types as F
 import           Text.Printf
 
 import qualified Symmetry.IL.AST as IL hiding (Op(..))
-import           Symmetry.IL.AST (isAbs, Stmt(..), Pid(..), Set(..), Var(..), Config(..))
+import           Symmetry.IL.AST (ident, isAbs, Stmt(..), Pid(..), Set(..), Var(..), Config(..))
 import           Symmetry.IL.ConfigInfo
 import           Symmetry.IL.Model
 import           Symmetry.IL.Model.HaskellDefs
@@ -81,13 +83,15 @@ eReadState s f
 eReadMap e k
   = eApp "Map_select" {- mapGetSpecString -} [e, k]
 
-eRdPtr, eWrPtr :: Symbolic a => ConfigInfo Int -> IL.Pid -> IL.Type -> a -> F.Expr
+eRdPtr, eWrPtr :: (IL.Identable i, Symbolic a)
+               => ConfigInfo i -> IL.Pid -> IL.Type -> a -> F.Expr
 eRdPtr ci p t s
   = eReadState s (ptrR ci p t)
 eWrPtr ci p t s
   = eReadState s (ptrW ci p t)
 
-initOfPid :: ConfigInfo Int -> IL.Process Int -> F.Expr
+initOfPid :: forall a. (Data a, IL.Identable a)
+          => ConfigInfo a -> IL.Process a -> F.Expr
 initOfPid ci (p@(PAbs _ (S s)), stmt)
   = pAnd preds 
   where
@@ -114,7 +118,8 @@ initOfPid ci (p@(PAbs _ (S s)), stmt)
     fixE i     = if i < 0 then ECst (F.expr i) FInt else F.expr i
     stmts :: [Int]
     stmts = everything (++) (mkQ [] go) stmt
-    go s = [annot s]
+    go :: Stmt a -> [Int]
+    go s = [ident s]
 
 initOfPid ci (p@(PConc _), stmt)
   = pAnd (pcEqZero :
@@ -130,10 +135,11 @@ initOfPid ci (p@(PConc _), stmt)
       wrGeZero t  = eLe eZero (eWrPtr ci p t s)
       rdLeWr t    = eLe (eRdPtr ci p t s) (eWrPtr ci p t s)
       initStmt    = firstNonBlock stmt
-      firstNonBlock Block { blkBody = bs } = annot (head bs)
-      firstNonBlock s                      = annot s
+      firstNonBlock Block { blkBody = bs } = ident (head bs)
+      firstNonBlock s                      = ident s
 
-schedExprOfPid :: ConfigInfo Int -> IL.Pid -> Symbol -> F.Expr
+schedExprOfPid :: IL.Identable a
+               => ConfigInfo a -> IL.Pid -> Symbol -> F.Expr
 schedExprOfPid ci p@(IL.PAbs v (IL.S s)) state
   = subst1 (pAnd ([pcEqZero, idxBounds] ++
                   concat [[rdEqZero t, wrEqZero t, wrGtZero t] | t <- fst <$> tyMap ci]))
@@ -145,7 +151,8 @@ schedExprOfPid ci p@(IL.PAbs v (IL.S s)) state
       wrEqZero t = eEqZero (eReadMap (eWrPtr ci p t state) (eILVar v))
       wrGtZero t = eLe eZero (eReadMap (eWrPtr ci p t state) (eILVar v))
 
-schedExprsOfConfig :: ConfigInfo Int -> Symbol -> [F.Expr]
+schedExprsOfConfig :: IL.Identable a
+                   => ConfigInfo a -> Symbol -> [F.Expr]
 schedExprsOfConfig ci s
   = go <$> filter isAbs (fst <$> ps)
   where
@@ -187,7 +194,7 @@ nonDetSpec :: String
 nonDetSpec
   = printf "{-@ %s :: %s -> {v:Int | true} @-}" nondet (pp schedType)
 
-measuresOfConfig :: Config Int -> String
+measuresOfConfig :: Config a -> String
 measuresOfConfig Config { cProcs = ps }
   = unlines [ printf "{-@ measure %s @-}" (pidInj p) | (p, _) <- ps]
 
@@ -229,7 +236,7 @@ withStateFields ci f absF pcF ptrF valF intF globF globIntF
        [ globF v | v <- globVals (stateVars ci) ] ++
        [ globIntF v | V v <- setBoundVars ci ])
 
-stateDecl :: ConfigInfo Int
+stateDecl :: ConfigInfo a
           -> ([Decl], String)
 stateDecl ci
   = ([dataDecl], specStrings)
@@ -264,7 +271,7 @@ stateDecl ci
     mkInt = liftMap intType
     liftMap t p v = [([name v], if isAbs p then mapType intType t else t)]
 
-valHType :: ConfigInfo Int -> Type
+valHType :: ConfigInfo a -> Type
 valHType ci = TyApp (TyCon (UnQual (name valType)))
                     (pidPreApp ci)
 
@@ -274,7 +281,7 @@ pidPreApp ci
     pidPreArgs :: [Type]
     pidPreArgs = const intType <$> filter isAbs (pids ci)
 
-pidDecl :: ConfigInfo Int
+pidDecl :: ConfigInfo a
         -> [Decl]
 pidDecl ci
   = [ DataDecl noLoc DataType [] (name pidPre) tvbinds cons [(UnQual $ name "Show",[])]
@@ -309,7 +316,8 @@ boundPred (IL.Known (S s) n)
 boundPred (IL.Unknown (S s) (V x))
   = eEq (eReadState "v" x) (eReadState "v" s)
 
-initSpecOfConfig :: ConfigInfo Int -> String
+initSpecOfConfig :: (Data a, IL.Identable a)
+                 => ConfigInfo a -> String
 initSpecOfConfig ci
   = unlines [ initStateReft concExpr
             , initSchedReft schedExprs
@@ -360,13 +368,15 @@ mkQual n args e
     argString = intercalate ", " (go <$> args)
     go (a,t) = printf "%s:%s" a t
 
-scrapeQuals :: ConfigInfo Int
+scrapeQuals :: (IL.Identable a, Data a)
+            => ConfigInfo a
             -> [String]
 scrapeQuals ci
   = scrapeIterQuals ci ++
     scrapeAssertQuals ci
 
-scrapeIterQuals :: ConfigInfo Int
+scrapeIterQuals :: (Data a, IL.Identable a)
+                => ConfigInfo a
                 -> [String]
 scrapeIterQuals ci
   = concat [ everything (++) (mkQ [] (go p)) s | (p, s) <- cProcs (config ci) ]
@@ -375,16 +385,17 @@ scrapeIterQuals ci
     go p Iter { iterVar = V v, iterSet = S set, iterBody = b, annot = a }
       = [mkQual "IterInv" [("v", stateRecordCons)]
           (eImp (eReadState "v" (pc p) `eEq` F.expr i)
-                (eReadState "v" v `eEq` eReadState "v" set)) | i <- pcAfter a] ++
+                (eReadState "v" v `eEq` eReadState "v" set)) | i <- pcAfter (ident a)] ++
         iterQuals p v set b
     go _ _
       = []
     pcAfter i = (-1) : [ j | j <- pcVals, j > i ]
     pcVals :: [Int]
-    pcVals = nub $ everything (++) (mkQ [] (return . annot)) (cProcs $ config ci)
+    pcVals = Fold.foldl (\is (_, s) -> ident s : is) [] (cProcs $ config ci)
         
 
-iterQuals :: IL.Pid -> String -> String -> IL.Stmt Int -> [String]
+iterQuals :: (IL.Identable a, Data a)
+          => IL.Pid -> String -> String -> IL.Stmt a -> [String]
 iterQuals p@(PConc _) v set b
   = [mkQual "IterInv" [("v", stateRecordCons)]
             (eReadState "v" v `eLe` eReadState "v" set)] ++
@@ -393,14 +404,13 @@ iterQuals p@(PConc _) v set b
     go :: IL.Stmt Int -> [String]
     go s
        = [mkQual "Iter" [("v", stateRecordCons)]
-                         (pcImpl p (annot s) (eReadState "v" v `eLt` eReadState "v" set))]
+                         (pcImpl p (ident s) (eReadState "v" v `eLt` eReadState "v" set))]
 
 pcImpl :: IL.Pid -> Int -> F.Expr -> F.Expr
 pcImpl p i e
   = eImp (eReadState "v" (pc p) `eEq` (F.expr i)) e
 
-scrapeAssertQuals :: ConfigInfo Int
+scrapeAssertQuals :: ConfigInfo a
                   -> [String]
-scrapeAssertQuals ci
+scrapeAssertQuals _
   = []
-    

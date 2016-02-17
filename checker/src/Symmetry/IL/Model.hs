@@ -78,13 +78,13 @@ pidTyName ci p t s
   where
     tid = lookupTy ci t
 
-buf :: ConfigInfo Int -> Pid -> Type -> String
+buf :: ConfigInfo a -> Pid -> Type -> String
 buf ci p t = pidTyName ci p t "buf"
 
-ptrR :: ConfigInfo Int -> Pid -> Type -> String           
+ptrR :: ConfigInfo a -> Pid -> Type -> String           
 ptrR ci p t = pidTyName ci p t "ptrR"
 
-ptrW :: ConfigInfo Int -> Pid -> Type -> String           
+ptrW :: ConfigInfo a -> Pid -> Type -> String           
 ptrW ci p t = pidTyName ci p t "ptrW"
 
 data Rule e = Rule Pid e (Maybe e) e -- p grd assert body
@@ -93,8 +93,8 @@ data Rule e = Rule Pid e (Maybe e) e -- p grd assert body
 class ILModel e where
   true      :: e
   false     :: e
-  expr      :: ConfigInfo Int -> Pid -> ILExpr -> e
-  pred      :: ConfigInfo Int -> Pid -> Pred -> e
+  expr      :: ConfigInfo a -> Pid -> ILExpr -> e
+  pred      :: ConfigInfo a -> Pid -> Pred -> e
   add       :: e -> e -> e
   incr      :: e -> e
   decr      :: e -> e
@@ -106,31 +106,31 @@ class ILModel e where
   lte       :: e -> e -> e
   int       :: Int -> e
 
-  readPC    :: ConfigInfo Int -> Pid -> e
-  readPCCounter :: ConfigInfo Int -> Pid -> e -> e
-  readPtrR  :: ConfigInfo Int -> Pid -> Type -> e
-  readPtrW  :: ConfigInfo Int -> Pid -> Pid -> Type -> e
-  readRoleBound :: ConfigInfo Int -> Pid -> e
-  readState :: ConfigInfo Int -> Pid -> String -> e
+  readPC    :: ConfigInfo a -> Pid -> e
+  readPCCounter :: ConfigInfo a -> Pid -> e -> e
+  readPtrR  :: ConfigInfo a -> Pid -> Type -> e
+  readPtrW  :: ConfigInfo a -> Pid -> Pid -> Type -> e
+  readRoleBound :: ConfigInfo a -> Pid -> e
+  readState :: ConfigInfo a -> Pid -> String -> e
 
-  nonDet      :: ConfigInfo Int -> Pid -> e
-  nonDetRange :: ConfigInfo Int -> Pid -> Set -> e
-  matchVal    :: ConfigInfo Int -> Pid -> e -> [(ILExpr, e)] -> e
+  nonDet      :: ConfigInfo a -> Pid -> e
+  nonDetRange :: ConfigInfo a -> Pid -> Set -> e
+  matchVal    :: ConfigInfo a -> Pid -> e -> [(ILExpr, e)] -> e
 
   -- updates
-  joinUpdate :: ConfigInfo Int -> Pid -> e -> e -> e
-  setPC      :: ConfigInfo Int -> Pid -> e -> e
-  incrPtrR   :: ConfigInfo Int -> Pid -> Type -> e
-  incrPtrW   :: ConfigInfo Int -> Pid -> Pid -> Type -> e
-  setState   :: ConfigInfo Int -> Pid -> [(String , e)] -> e
-  putMessage :: ConfigInfo Int -> Pid -> Pid -> (ILExpr, Type) -> e
-  getMessage :: ConfigInfo Int -> Pid -> (Var, Type) -> e
+  joinUpdate :: ConfigInfo a -> Pid -> e -> e -> e
+  setPC      :: ConfigInfo a -> Pid -> e -> e
+  incrPtrR   :: ConfigInfo a -> Pid -> Type -> e
+  incrPtrW   :: ConfigInfo a -> Pid -> Pid -> Type -> e
+  setState   :: ConfigInfo a -> Pid -> [(String , e)] -> e
+  putMessage :: ConfigInfo a -> Pid -> Pid -> (ILExpr, Type) -> e
+  getMessage :: ConfigInfo a -> Pid -> (Var, Type) -> e
 
   -- rule
-  rule     :: ConfigInfo Int -> Pid -> e -> Maybe e -> e -> Rule e
+  rule     :: ConfigInfo a -> Pid -> e -> Maybe e -> e -> Rule e
 
-  printModel :: ConfigInfo Int -> [Rule e] -> String
-  printCheck :: ConfigInfo Int -> [Rule e] -> String
+  printModel :: (Identable a, Data a) => ConfigInfo a -> [Rule e] -> String
+  printCheck :: (Identable a, Data a) => ConfigInfo a -> [Rule e] -> String
 
 -------------------------
 -- "Macros"
@@ -145,28 +145,33 @@ ors []     = false
 ors [x]    = x
 ors (x:xs) = foldr or x xs
 
-pcGuard :: ILModel e => ConfigInfo Int -> Pid -> Stmt Int -> e
-pcGuard ci p s = readPC ci p `eq` int (annot s)
+pcGuard :: (Identable a, ILModel e)
+        => ConfigInfo a -> Pid -> Stmt a -> e
+pcGuard ci p s = readPC ci p `eq` int (ident s)
 
-nextPC :: ILModel e => ConfigInfo Int -> Pid -> Stmt Int -> e
-nextPC ci p s = nextPC' ci p $ cfgNext ci p (annot s)
+nextPC :: (Identable a, ILModel e)
+       => ConfigInfo a -> Pid -> Stmt a -> e
+nextPC ci p s = nextPC' ci p $ cfgNext ci p (ident s)
   where
-    nextPC' ci p Nothing
-      = setPC ci p (int (-1))
-    nextPC' ci p (Just [s])
-      = setPC ci p (int (annot s))
-    nextPC' ci p (Just ss)
-      = error (printf "nextPC %s => (%s)" (show s) (show ss))
+    nextPC' ci' p' Nothing
+      = setPC ci' p' (int (-1))
+    nextPC' ci' p' (Just [s])
+      = setPC ci' p' (int (ident s))
+    nextPC' _ _ (Just _)
+      = error "nextPC unexpected"
 
-mkRule :: ILModel e => ConfigInfo Int -> Pid -> e -> e -> Rule e
+mkRule :: (Identable a, ILModel e)
+       => ConfigInfo a -> Pid -> e -> e -> Rule e
 mkRule ci p grd bdy = rule ci p grd Nothing bdy
 -------------------------
 -- Statement "semantics"    
 -------------------------
-seqUpdates :: ILModel e => ConfigInfo Int -> Pid -> [e] -> e
+seqUpdates :: (Identable a, ILModel e)
+           => ConfigInfo a -> Pid -> [e] -> e
 seqUpdates ci p = foldl1 (joinUpdate ci p)
 
-ruleOfStmt :: ILModel e => ConfigInfo Int -> Pid -> Stmt Int -> [Rule e]
+ruleOfStmt :: (Identable a, Data a, ILModel e)
+           => ConfigInfo a -> Pid -> Stmt a -> [Rule e]
 -------------------------
 -- p!e::t
 -------------------------
@@ -215,10 +220,10 @@ ruleOfStmt ci p s@Case{caseLPat = V l, caseRPat = V r}
             , (ERight (mkLocal r), rUpdates)
             ]
     lUpdates = seqUpdates ci p [ setState ci p [(l, expr ci p $ mkLocal l)]
-                               , setPC ci p (int $ annot (caseLeft s))
+                               , setPC ci p (int $ ident (caseLeft s))
                                ]
     rUpdates = seqUpdates ci p [ setState ci p [(r, expr ci p $ mkLocal r)]
-                               , setPC ci p (int $ annot (caseRight s))
+                               , setPC ci p (int $ ident (caseRight s))
                                ]
 -------------------------
 -- nondet choice
@@ -227,8 +232,8 @@ ruleOfStmt ci p s@NonDet{}
   = [ mkRule ci p (grd s') (us s') | s' <- nonDetBody s ]
   where
     grd s' = pcGuard ci p s `and`
-            (nonDet ci p `eq` (int (annot s')))
-    us s'  = setPC ci p (int (annot s'))
+            (nonDet ci p `eq` (int (ident s')))
+    us s'  = setPC ci p (int (ident s'))
 
 -------------------------
 -- for (i < n) ...
@@ -258,7 +263,7 @@ ruleOfStmt ci p s@Iter { iterVar = V v, iterSet = set, annot = a }
                             --   Just (Unknown _ (V x)) -> readState ci p x
                             --   Nothing -> readState ci p ss
                  SInts n -> int n
-    (i, j)   = case (annot <$>) <$> cfgNext ci p a of
+    (i, j)   = case (ident <$>) <$> cfgNext ci p (ident a) of
                  Just [i, j] -> (i, j)
                  Just [i]    -> (i, -1)
 -------------------------
@@ -268,7 +273,7 @@ ruleOfStmt ci p s@Choose { chooseVar = V v, chooseSet = set }
   = [ mkRule ci p grd (seqUpdates ci p ups) ]
   where
     grd = pcGuard ci p s
-    ups = [ setPC ci p (int (annot (chooseBody s)))
+    ups = [ setPC ci p (int (ident (chooseBody s)))
           , setState ci p [(v, nonDetRange ci p set)]
           ]
 
@@ -286,20 +291,24 @@ ruleOfStmt ci p s@Assert{}
 ruleOfStmt ci p s
   = [ mkRule ci p (pcGuard ci p s) (nextPC ci p s) ]
 
-ruleOfProc :: (ILModel e) => ConfigInfo Int -> Process Int -> [Rule e]
+ruleOfProc :: (Data a, Identable a, ILModel e)
+           => ConfigInfo a -> Process a -> [Rule e]
 ruleOfProc c (p, s)
   = concatMap (ruleOfStmt c p) ss
   where
     ss = listify (const True) s
 
-rulesOfConfigInfo :: ILModel e => ConfigInfo Int -> [Rule e]
+rulesOfConfigInfo :: (Data a, Identable a, ILModel e)
+                  => ConfigInfo a -> [Rule e]
 rulesOfConfigInfo c
   = concatMap (ruleOfProc c) ps
   where
     ps = cProcs (config c)
 
-generateModel :: ILModel e => Config () -> (ConfigInfo Int, [Rule e])
+generateModel :: ILModel e => Config () -> (ConfigInfo (PredAnnot Int), [Rule e])
 generateModel c
   = (cinfo, rulesOfConfigInfo cinfo)
   where
-    cinfo = mkCInfo c { cProcs = (freshStmtIds <$>) <$> cProcs c }
+    c'    = annotAsserts c
+    f i a = a { annotId = i }
+    cinfo = mkCInfo c { cProcs = (freshStmtIds f <$>) <$> cProcs c' }

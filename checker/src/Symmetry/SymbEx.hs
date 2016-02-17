@@ -12,7 +12,6 @@ import           Prelude hiding (error, undefined)
 import           Data.Generics
 import           Data.Maybe
 import           Data.List (nub, (\\), lookup)
-import           Text.PrettyPrint.Leijen (pretty)
 
 import           GHC.Stack (CallStack)
 import           GHC.Err.Located
@@ -748,8 +747,7 @@ symSelf :: SymbEx (Process SymbEx (Pid RSing))
 -------------------------------------------------
 symSelf
   = SE $ do (_, r) <- gets me
-            let role = RSelf r
-            return . AProc Nothing skip $ APid Nothing (Pid (Just role))
+            return . AProc Nothing skip $ APid Nothing (Pid (Just (RSelf r)))
 
 -------------------------------------------------
 symRet :: SymbEx a -> SymbEx (Process SymbEx a)
