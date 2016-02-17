@@ -51,14 +51,17 @@ If (2) succeeds, then `Prog` is deadlock-free and no assertion fails at runtime.
 
 `./Proc --verify --qc`:
 
-   * Additionally creates a file `QC.hs` that can be run to *test* the `SymVerify.hs` program and *log* sets of states and schedules.
+   * Additionally creates a file `QC.hs` that can be run to *test* the `SymVerify.hs` program using `QuickCheck`, and *log* sets of states and schedules.
   
 `./Proc --dump-process`:
 
    * Prints a representation of the message-passing protocol from `Prog.hs`.
 
-##
-Plans for future
+`./Proc --dump-model`:
+
+   * Write the files that `Liquid Haskell` or `QuickCheck` would inspect, but do not actually run them.
+
+## Plans for future
 
 - If (2) above fails, produce some counterexample to help understand why the prover was unable
 
