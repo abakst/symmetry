@@ -646,7 +646,7 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
         genExp    = UnGuardedRhs $ Do (bs ++ [retState])
         retState  = Qualifier (metaFunction "return" [recExp])
         recExp    = RecConstr (UnQual (name stateRecordCons)) [FieldWildcard]
-        bs        = withStateFields ci concat absArb arbPC arbPtr arbVal arbInt arbGlob arbGlobVal 
+        bs        = withStateFields ci concat absArb arbPC arbPtr arbVal arbInt arbGlobVal arbGlob
         bind v e  = Generator noLoc (pvar (name v)) e
         absArb _ b u pc = [ bind b arbPos
                           , bind u (arbRange (intE 0) (vExp b))
