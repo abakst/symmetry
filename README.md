@@ -42,26 +42,25 @@ $ ./Prog --verify
 
 ## What's going on
 
-Running `./Prog --verify` as described above
+`./Prog --verify`:
 
-  1. creates a Promela abstraction of the program in `Prog` in `$CWD/.symcheck/out.pml`;
-  2. compiles a verifier `pan` from `out.pml`;
-  3. runs `./pan`.
+  1. creates a first-order abstraction (as a Haskell program) `SymVerify.hs` in `$CWD/.symcheck`;
+  2. TODO: runs `Liquid Haskell` on `SymVerify.hs`
 
-If the verifier (`pan`) finds an error trace, this is dumped in `$CWD/.symcheck/out.pml.trail`.
+If (2) succeeds, then `Prog` is deadlock-free and no assertion fails at runtime.
 
-To replay the error trace, invoke the verifier
+`./Proc --verify --qc`:
 
-~~~~~
-$ ./pan -r [out.pml.trail]
-~~~~~
+   * Additionally creates a file `QC.hs` that can be run to *test* the `SymVerify.hs` program and *log* sets of states and schedules.
+  
+`./Proc --dump-process`:
 
-Or use the "friendlier `iSpin`:
+   * Prints a representation of the message-passing protocol from `Prog.hs`.
 
-~~~~
-$ ispin.tcl out.pml
-~~~~
+##
+Plans for future
 
+- If (2) above fails, produce some counterexample to help understand why the prover was unable
 
 # Useful Model-Checking Papers
 
