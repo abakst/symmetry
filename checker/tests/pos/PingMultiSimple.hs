@@ -16,7 +16,7 @@ pingServer = lam $ \p ->
              do ptrr  <- readPtrR (arb :: repr ())
                 l0    <- readGhost p "l0"
                 myIdx <- readMyIdx
-                --assert (not (myIdx `lt` l0) `or` (ptrr `eq` int 1))
+                assert (not (myIdx `lt` l0) `or` (ptrr `eq` int 1))
                 (_ :: repr ()) <- recv
                 return tt
 

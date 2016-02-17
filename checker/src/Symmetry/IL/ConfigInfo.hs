@@ -7,15 +7,15 @@ import Data.Maybe
 import Data.IntMap.Strict as M
 import Data.Generics
 
-import Symmetry.IL.AST  
+import Symmetry.IL.AST
 
-type TyMap = [(Type, Integer)]                 
+type TyMap = [(Type, Integer)]
 
 data ConfigState = CState { intVars     :: [(Pid, String)]
                           , valVars     :: [(Pid, String)]
                           , globVals    :: [String]
                           , globSets    :: [Set]
-                          } 
+                          }
 
 data ConfigInfo a = CInfo { config     :: Config a
                           , stateVars  :: ConfigState
@@ -25,7 +25,7 @@ data ConfigInfo a = CInfo { config     :: Config a
                           , isQC       :: Bool
                           }
 
-mkCState :: Data a => Config a -> ConfigState 
+mkCState :: forall a. Data a => Config a -> ConfigState
 mkCState c = CState { valVars  = vs
                     , intVars  = is
                     , globVals = gs
@@ -37,19 +37,19 @@ mkCState c = CState { valVars  = vs
     gs   = [ v | (V v, _) <- cGlobals c ]
     gsets = cGlobalSets c
 
-    intVar :: Stmt Int -> [Var]
+    intVar :: Stmt a -> [Var]
     intVar (Iter { iterVar = i }) = [i]
     intVar (Assign {assignLhs = i}) = [i]
     -- intVar (Loop { loopVar = (LV i) }) = [V i]
     intVar (Choose { chooseVar = v }) = [v]
     intVar _                       = []
 
-vars :: ConfigInfo a -> [String]                                     
+vars :: ConfigInfo a -> [String]
 vars CInfo { stateVars = CState {..} }
   = snd <$> intVars ++ valVars
-  
+
 cfgNext :: Identable a
-        => ConfigInfo a -> Pid -> Int -> Maybe [Stmt a]                                     
+        => ConfigInfo a -> Pid -> Int -> Maybe [Stmt a]
 cfgNext ci p i
   = M.lookup i . fromJust $ List.lookup p (cfg ci)
 
@@ -64,7 +64,7 @@ mkCInfo c = CInfo { config    = c
   where
     mkCfg (p, s) = (p, buildStmtCfg s)
     types = nub $ everything (++) (mkQ [] go) (cProcs c)
-    tyMap = zip types [0..] 
+    tyMap = zip types [0..]
     go :: Stmt a -> [Type]
     go s@Recv{} = [fst (rcvMsg s)]
     go s@Send{} = [fst (sndMsg s)]

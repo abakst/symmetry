@@ -9,6 +9,9 @@ import Data.Char
 import Symmetry.IL.AST
 import Symmetry.IL.ConfigInfo
 
+import Text.PrettyPrint.Leijen (pretty)
+import Debug.Trace
+
 -- Values    
 unitCons, nullCons, intCons, stringCons, pidCons, leftCons, rightCons, pairCons :: String
 unitCons   = "VUnit"
@@ -315,6 +318,8 @@ generateModel :: ILModel e => Config () -> (ConfigInfo (PredAnnot Int), [Rule e]
 generateModel c
   = (cinfo, rulesOfConfigInfo cinfo)
   where
-    c'    = annotAsserts c
+    c' :: Config (PredAnnot ())
+    c'    = annotAsserts c 
+    c''   = c' {cProcs = [(p,freshStmtIds f s) | (p,s) <- cProcs c']}
     f i a = a { annotId = i }
-    cinfo = mkCInfo c' { cProcs = (freshStmtIds f <$>) <$> cProcs c' }
+    cinfo = mkCInfo c''

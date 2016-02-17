@@ -427,13 +427,14 @@ nextStmts toMe s
   = singleton toMe s
 
 -- | Operations
-freshId :: (Int -> a -> b) -> Stmt a -> State Int (Stmt b)
+freshId :: forall a b. (Int -> a -> b) -> Stmt a -> State Int (Stmt b)
 freshId f s
-  = mapM (const fr) s
+  = mapM fr s
   where
-    fr = do n <- get
-            put (n + 1)
-            return (f n (annot s))
+    fr :: a -> State Int b
+    fr a = do n <- get
+              put (n + 1)
+              return (f n a)
 
 freshStmtIds :: (Int -> a -> b) -> Stmt a -> Stmt b
 freshStmtIds f s = evalState (freshId f s) 0
@@ -519,41 +520,41 @@ instance Pretty Pred where
   pretty (ILPTrue)       = text "T"
 
 instance Pretty a => Pretty (PredAnnot a) where
-  pretty PredAnnot { annotPred = p } = pretty p
-
-ppannot :: Pretty a => a -> Doc
-ppannot a = text "/*" <+> pretty a <+> text "*/"
+  pretty PredAnnot { annotPred = ILPTrue } =
+    P.empty
+  pretty PredAnnot { annotPred = p } =
+    text "/* {" <> pretty p <> text "} */"
 
 instance Pretty a => Pretty (Stmt a) where
   pretty (Skip a)
-    = text "<skip>" <+> ppannot a
+    = text "<skip>" <+> pretty a
 
   pretty (Assert e a)
-    = text "assert" <+> pretty e <+> ppannot a
+    = text "assert" <+> pretty e <+> pretty a
 
   pretty (Assign v e a)
-    = pretty v <+> text ":=" <+> pretty e <+> ppannot a
+    = pretty v <+> text ":=" <+> pretty e <+> pretty a
 
   pretty (Send p (t,e) a)
-    = text "send" <+> pretty p <+> parens (pretty e <+> text "::" <+> pretty t) <+> ppannot a
+    = text "send" <+> pretty p <+> parens (pretty e <+> text "::" <+> pretty t) <+> pretty a
 
   pretty (Recv (t,x) a)
-    = text "recv" <+> parens (pretty x <+> text "::" <+> pretty t) <+> ppannot a
+    = text "recv" <+> parens (pretty x <+> text "::" <+> pretty t) <+> pretty a
 
   pretty (Iter x xs s a)
     = text "for" <+> parens (int 0 <+> text "≤"
                                    <+> pretty x
                                    <+> langle <+> text "|" <> pretty xs <> text "|")
-                 <+> lbrace <+> ppannot a $$ (indent 2 $ pretty s) $$ rbrace
+                 <+> lbrace <+> pretty a $$ (indent 2 $ pretty s) $$ rbrace
 
   pretty (Goto (LV v) a)
-    = text "goto" <+> pretty v <+> ppannot a
+    = text "goto" <+> pretty v <+> pretty a
 
   pretty (Loop (LV v) s a)
-    = pretty v <> colon <+> parens (pretty s) <+> ppannot a
+    = pretty v <> colon <+> parens (pretty s) <+> pretty a
 
   pretty (Case l pl pr sl sr a)
-    = text "match" <+> pretty l <+> text "with"  <+> ppannot a $$
+    = text "match" <+> pretty l <+> text "with"  <+> pretty a $$
       indent 2
         (align (vcat [text "| InL" <+> pretty pl <+> text "->" <+> pretty sl,
                      text "| InR" <+> pretty pr <+> text "->"  <+> pretty sr]))
@@ -561,22 +562,22 @@ instance Pretty a => Pretty (Stmt a) where
   pretty (Choose v r s a)
     = text "select" <+> pretty v <+>
       text "from" <+> pretty r <+>
-      text "in"  <+> ppannot a $$ indent 2 (align (pretty s))
+      text "in"  <+> pretty a $$ indent 2 (align (pretty s))
 
   pretty (Die a)
-    = text "CRASH" <+> ppannot a
+    = text "CRASH" <+> pretty a
 
   pretty (Block ss a)
-    = braces (ppannot a <> line <> indent 2 (vcat $ punctuate semi (map pretty ss)) <> line)
+    = braces (pretty a <> line <> indent 2 (vcat $ punctuate semi (map pretty ss)) <> line)
 
   pretty (Compare v p1 p2 _)
     = pretty v <+> colon <> equals <+> pretty p1 <+> equals <> equals <+> pretty p2
 
   pretty (NonDet ss a)
-    = pretty ss <+> ppannot a
+    = pretty ss <+> pretty a
 
   pretty (Null a)
-    = text "<null>" <+> ppannot a
+    = text "<null>" <+> pretty a
 
 prettyMsg :: (TId, CId, MConstr) -> Doc
 prettyMsg (t, c, v)
@@ -630,8 +631,12 @@ meetPred :: PredAnnot a -> PredAnnot a -> PredAnnot a
 meetPred p1 p2 = p2 { annotPred = pAnd (annotPred p1) (annotPred p2) }
 
 squashAsserts :: forall a. Data a => Stmt a -> Stmt (PredAnnot a)    
-squashAsserts s@Block { blkBody = (a@Assert{}):body }
-  = annotFirst ann $ squashAsserts s { blkBody = body }
+squashAsserts s@Block { blkBody = [a@Assert{}] }
+  = s { blkBody = [fmap truePred a]
+      , annot   = truePred (annot s)
+      }
+squashAsserts s@Block { blkBody = (a@Assert{}):s1:body }
+  = annotFirst ann $ squashAsserts s { blkBody = s1:body }
   where
     ann = PredAnnot { annotPred = assertPred a
                     , annotId   = annot a
