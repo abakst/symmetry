@@ -87,7 +87,7 @@ ptrR ci p t = pidTyName ci p t "ptrR"
 ptrW :: ConfigInfo a -> Pid -> Type -> String           
 ptrW ci p t = pidTyName ci p t "ptrW"
 
-data Rule e = Rule Pid e (Maybe e) e -- p grd assert body
+data Rule e = Rule Pid e (Maybe e) e
               deriving Show
 
 class ILModel e where
@@ -161,8 +161,14 @@ nextPC ci p s = nextPC' ci p $ cfgNext ci p (ident s)
       = error "nextPC unexpected"
 
 mkRule :: (Identable a, ILModel e)
-       => ConfigInfo a -> Pid -> e -> e -> Rule e
-mkRule ci p grd bdy = rule ci p grd Nothing bdy
+       => ConfigInfo (PredAnnot a) -> Pid -> e -> e -> PredAnnot a -> Rule e
+mkRule ci p grd bdy a
+  = rule ci p grd exp bdy
+  where
+    exp = case (annotPred a) of
+               ILPTrue -> Nothing
+               q       -> Just (pred ci p q)
+               
 -------------------------
 -- Statement "semantics"    
 -------------------------
@@ -171,12 +177,12 @@ seqUpdates :: (Identable a, ILModel e)
 seqUpdates ci p = foldl1 (joinUpdate ci p)
 
 ruleOfStmt :: (Identable a, Data a, ILModel e)
-           => ConfigInfo a -> Pid -> Stmt a -> [Rule e]
+           => ConfigInfo (PredAnnot a) -> Pid -> Stmt (PredAnnot a) -> [Rule e]
 -------------------------
 -- p!e::t
 -------------------------
 ruleOfStmt ci p s@Send { sndPid = EPid q, sndMsg = (t, e) }
-  = [mkRule ci p grd (seqUpdates ci p upds)]
+  = [mkRule ci p grd (seqUpdates ci p upds) (annot s)]
   where
     grd  = pcGuard ci p s
     upds = [ incrPtrW ci p q t
@@ -185,7 +191,7 @@ ruleOfStmt ci p s@Send { sndPid = EPid q, sndMsg = (t, e) }
            ]
     
 ruleOfStmt ci p s@Send { sndPid = x@EVar {} , sndMsg = (t, e) }
-  = [ mkRule ci p grd (matchVal ci p (expr ci p x) [(EPid q, ups q) | q <- pids ci]) ]
+  = [ mkRule ci p grd (matchVal ci p (expr ci p x) [(EPid q, ups q) | q <- pids ci]) (annot s) ]
   -- = concat [ matchVal ci p x (EPid q) <$> ruleOfStmt ci p (sub q) | q <- pids ci ]
     where
       grd = pcGuard ci p s
@@ -199,7 +205,7 @@ ruleOfStmt ci p s@Send { sndPid = x@EVar {} , sndMsg = (t, e) }
 -- ?(v :: t)
 -------------------------
 ruleOfStmt ci p s@Recv{ rcvMsg = (t, v) }
-  = [ mkRule ci p grd (seqUpdates ci p upds) ]
+  = [ mkRule ci p grd (seqUpdates ci p upds) (annot s) ]
   where
     grd  = pcGuard ci p s `and`
            (readPtrR ci p t `lt` readPtrW ci p p t)
@@ -212,7 +218,7 @@ ruleOfStmt ci p s@Recv{ rcvMsg = (t, v) }
 -- case x of ...    
 -------------------------
 ruleOfStmt ci p s@Case{caseLPat = V l, caseRPat = V r}
-  = [ mkRule ci p grd (matchVal ci p (expr ci p $ EVar (caseVar s)) cases)]
+  = [ mkRule ci p grd (matchVal ci p (expr ci p $ EVar (caseVar s)) cases) (annot s)]
   where
     grd = pcGuard ci p s
     mkLocal v = EVar (GV ("local_" ++ v))
@@ -229,7 +235,7 @@ ruleOfStmt ci p s@Case{caseLPat = V l, caseRPat = V r}
 -- nondet choice
 -------------------------
 ruleOfStmt ci p s@NonDet{}
-  = [ mkRule ci p (grd s') (us s') | s' <- nonDetBody s ]
+  = [ mkRule ci p (grd s') (us s') (annot s) | s' <- nonDetBody s ]
   where
     grd s' = pcGuard ci p s `and`
             (nonDet ci p `eq` (int (ident s')))
@@ -239,7 +245,7 @@ ruleOfStmt ci p s@NonDet{}
 -- for (i < n) ...
 -------------------------
 ruleOfStmt ci p s@Assign { assignLhs = V v, assignRhs = e }
-  = [ mkRule ci p b (seqUpdates ci p upds) ]
+  = [ mkRule ci p b (seqUpdates ci p upds) (annot s) ]
   where
     b    = pcGuard ci p s
     upds = [ setState ci p [(v, expr ci p e)]
@@ -247,8 +253,8 @@ ruleOfStmt ci p s@Assign { assignLhs = V v, assignRhs = e }
            ]
     
 ruleOfStmt ci p s@Iter { iterVar = V v, iterSet = set, annot = a }
-  = [ mkRule ci p b    (seqUpdates ci p loopUpds)
-    , mkRule ci p notb (seqUpdates ci p exitUpds)
+  = [ mkRule ci p b    (seqUpdates ci p loopUpds) a
+    , mkRule ci p notb (seqUpdates ci p exitUpds) a
     ]
   where
     b        = pcGuard ci p s `and` lt ve se
@@ -270,7 +276,7 @@ ruleOfStmt ci p s@Iter { iterVar = V v, iterSet = set, annot = a }
 -- choose i in I (s)
 -------------------------
 ruleOfStmt ci p s@Choose { chooseVar = V v, chooseSet = set }
-  = [ mkRule ci p grd (seqUpdates ci p ups) ]
+  = [ mkRule ci p grd (seqUpdates ci p ups) (annot s)]
   where
     grd = pcGuard ci p s
     ups = [ setPC ci p (int (ident (chooseBody s)))
@@ -283,23 +289,23 @@ ruleOfStmt ci p s@Choose { chooseVar = V v, chooseSet = set }
 ruleOfStmt ci p s@Assert{}
   = [ rule ci p (pcGuard ci p s) q (nextPC ci p s) ]
   where
-    q = Just (pred ci p (assertPred s))
+    q = Just (pred ci p (assertPred s `pAnd` (annotPred (annot s))))
 
 -------------------------
 -- catch all
 -------------------------
 ruleOfStmt ci p s
-  = [ mkRule ci p (pcGuard ci p s) (nextPC ci p s) ]
+  = [ mkRule ci p (pcGuard ci p s) (nextPC ci p s) (annot s) ]
 
 ruleOfProc :: (Data a, Identable a, ILModel e)
-           => ConfigInfo a -> Process a -> [Rule e]
+           => ConfigInfo (PredAnnot a) -> Process (PredAnnot a) -> [Rule e]
 ruleOfProc c (p, s)
   = concatMap (ruleOfStmt c p) ss
   where
     ss = listify (const True) s
 
 rulesOfConfigInfo :: (Data a, Identable a, ILModel e)
-                  => ConfigInfo a -> [Rule e]
+                  => ConfigInfo (PredAnnot a) -> [Rule e]
 rulesOfConfigInfo c
   = concatMap (ruleOfProc c) ps
   where
@@ -311,4 +317,4 @@ generateModel c
   where
     c'    = annotAsserts c
     f i a = a { annotId = i }
-    cinfo = mkCInfo c { cProcs = (freshStmtIds f <$>) <$> cProcs c' }
+    cinfo = mkCInfo c' { cProcs = (freshStmtIds f <$>) <$> cProcs c' }

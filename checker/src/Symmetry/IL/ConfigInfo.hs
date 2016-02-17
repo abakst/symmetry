@@ -1,4 +1,5 @@
 {-# Language RecordWildCards #-}
+{-# Language ScopedTypeVariables #-}
 module Symmetry.IL.ConfigInfo where
 
 import Data.List as List
@@ -52,7 +53,7 @@ cfgNext :: Identable a
 cfgNext ci p i
   = M.lookup i . fromJust $ List.lookup p (cfg ci)
 
-mkCInfo :: (Data a, Identable a) => Config a -> ConfigInfo a
+mkCInfo :: forall a. (Data a, Identable a) => Config a -> ConfigInfo a
 mkCInfo c = CInfo { config    = c
                   , stateVars = mkCState c
                   , tyMap     = tyMap
@@ -64,7 +65,7 @@ mkCInfo c = CInfo { config    = c
     mkCfg (p, s) = (p, buildStmtCfg s)
     types = nub $ everything (++) (mkQ [] go) (cProcs c)
     tyMap = zip types [0..] 
-    go :: Stmt Int -> [Type]
+    go :: Stmt a -> [Type]
     go s@Recv{} = [fst (rcvMsg s)]
     go s@Send{} = [fst (sndMsg s)]
     go _         = []
