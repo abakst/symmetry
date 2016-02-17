@@ -37,7 +37,7 @@ data MainOptions = MainOptions { optVerify  :: Bool
 instance Options MainOptions where
   defineOptions
     = MainOptions <$> simpleOption "verify" False "Run Verifier"
-                  <*> simpleOption "qc" False "Generate QuickCheck files"
+                  <*> simpleOption "qc" False "Run QuickCheck instead of Verifier"
                   <*> simpleOption "verbose" False "Verbose Output"
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
                   <*> simpleOption "dump-model" False "Dump Liquid Haskell model"
@@ -99,21 +99,35 @@ copyIncludes opt d =
                         , copyVectorModule
                         , copyBoilerModule ]
 
+runLiquid :: FilePath -> FilePath -> IO () 
+runLiquid fp cwd
+  = runCmd True "Running Verifier" cwd cmd
+  where
+    cmd = shell (printf "liquid %s" fp)
+
+runQC :: FilePath -> FilePath -> IO ()
+runQC fp cwd
+  = runCmd True "Running QuickCheck" cwd cmd
+  where
+    cmd = shell (printf "runghc %s" fp)
+
 run1Cfg :: MainOptions -> FilePath -> Config () -> IO Bool
 run1Cfg opt outd cfg
   = do when (optModel opt) $ do
          createDirectoryIfMissing True outd
          copyIncludes opt outd
-       if optVerify opt || optQC opt then do
          let (cinfo, m) = generateModel cfg
              cinfo'     = cinfo {isQC = optQC opt}
              f          = printHaskell cinfo' m
          writeFile (outd </> "SymVerify.hs") f
          when (optQC opt)
               (writeFile (outd </> "QC.hs") (printQCFile cinfo' m))
-         return True
-       else
-         return True
+       when (optVerify opt) $
+            if optQC opt then
+              runQC (outd </> "QC.hs") outd
+            else
+              runLiquid (outd </> "SymVerify.hs") outd
+       return True
   where
     verb = optVerbose opt
     fileExists f = catch (openFile f ReadMode >> return True)
