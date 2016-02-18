@@ -212,22 +212,22 @@ data Stmt a = Skip { annot :: a }
 
              -- x := p1 == p2;
             | Compare { compareVar :: Var
-                       , compareLhs :: Pid
-                       , compareRhs :: Pid
-                       , annot      :: a
-                       }
-
-            | Case { caseVar   :: Var
-                    , caseLPat   :: Var
-                    , caseRPat   :: Var
-                    , caseLeft  :: Stmt a
-                    , caseRight :: Stmt a
-                    , annot     :: a
-                    }
-
-            | NonDet { nonDetBody :: [Stmt a]
+                      , compareLhs :: Pid
+                      , compareRhs :: Pid
                       , annot      :: a
                       }
+
+            | Case { caseVar   :: Var
+                   , caseLPat  :: Var
+                   , caseRPat  :: Var
+                   , caseLeft  :: Stmt a
+                   , caseRight :: Stmt a
+                   , annot     :: a
+                   }
+
+            | NonDet { nonDetBody :: [Stmt a]
+                     , annot      :: a
+                     }
 
             | Assign { assignLhs :: Var
                       , assignRhs :: ILExpr

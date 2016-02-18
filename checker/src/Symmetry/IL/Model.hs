@@ -166,7 +166,7 @@ updPC :: (ILModel e, Identable a)
       => ConfigInfo a -> Pid -> Int -> Int -> e
 updPC ci p i j
   = seqUpdates ci p
-        ([ setPC ci p (int i) ] ++
+        ([ setPC ci p (int j) ] ++
          [ setPCCounter ci p (condUpdate ci p i j) | isAbs p ])
 
 nextPC :: (Identable a, ILModel e)

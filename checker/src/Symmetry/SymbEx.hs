@@ -936,26 +936,7 @@ symMatch :: forall a b c.
          -> SymbEx c
 symMatch s l r
   = SE $ do sum <- runSE s
-            case sum of
-              -- s@(APidCompare _ _) -> symMatchCompare s l r
-              _                   -> symMatchSum sum l r
-
--- symMatchCompare :: forall a b c.
---                    (?callStack :: CallStack, Typeable a, Typeable b,
---                     ArbPat SymbEx a, ArbPat SymbEx b)
---                 => AbsVal (a :+: b)
---                 -> SymbEx (a -> c)
---                 -> SymbEx (b -> c)
---                 -> SymbExM (AbsVal c)
--- symMatchCompare (APidCompare (x,p) (y,q)) l r 
---   = do v <- freshVar
---        m <- symMatchSum (ASum (Just v) Nothing Nothing) l r
---        case m of
---          AProc px s a -> do
---            let p1 = pidAbsValToIL $ APid x p
---            let p2 = pidAbsValToIL $ APid y q
---            return $ AProc px (IL.Compare (varToIL v) p1 p2 () `seqStmt` s) a
---          _ -> error "TBD: matchcompare"
+            symMatchSum sum l r
 
 symMatchSum :: forall a b c.
                (?callStack :: CallStack, Typeable a, Typeable b, ArbPat SymbEx a, ArbPat SymbEx b) =>
