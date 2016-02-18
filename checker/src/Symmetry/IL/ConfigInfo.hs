@@ -85,4 +85,4 @@ setBound ci s
 
 setBoundVars :: ConfigInfo a -> [Var]
 setBoundVars ci
-  = [ v | Unknown _ v <- cSets (config ci) ]
+  = [ V s | set@(S s) <- cGlobalSets (config ci), isNothing (setBound ci set) ]

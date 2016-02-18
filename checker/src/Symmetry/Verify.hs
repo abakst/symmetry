@@ -113,15 +113,16 @@ runQC fp cwd
 
 run1Cfg :: MainOptions -> FilePath -> Config () -> IO Bool
 run1Cfg opt outd cfg
-  = do when (optModel opt) $ do
+  = do when (optProcess opt) $
+         pprint (config cinfo)
+
+       when (optModel opt) $ do
          createDirectoryIfMissing True outd
          copyIncludes opt outd
-         let (cinfo, m) = generateModel cfg
-             cinfo'     = cinfo {isQC = optQC opt}
-             f          = printHaskell cinfo' m
          writeFile (outd </> "SymVerify.hs") f
          when (optQC opt)
               (writeFile (outd </> "QC.hs") (printQCFile cinfo' m))
+
        when (optVerify opt) $
             if optQC opt then
               runQC (outd </> "QC.hs") outd
@@ -129,6 +130,13 @@ run1Cfg opt outd cfg
               runLiquid (outd </> "SymVerify.hs") outd
        return True
   where
+    cinfo :: ConfigInfo (PredAnnot Int)
+    (cinfo, m) = generateModel cfg
+    cinfo'     = cinfo {isQC = optQC opt}
+    f          = printHaskell cinfo' m
+    pprint c = print $
+               text "Config" <>
+               nest 2 (line  <> pretty c)
     verb = optVerbose opt
     fileExists f = catch (openFile f ReadMode >> return True)
                          (\(_ :: IOException) -> return False)
@@ -151,9 +159,6 @@ report status
 checkerMain :: SymbEx () -> IO ()
 checkerMain main
   = runCommand $ \opts _ -> do
-
-      when (optProcess opts) $
-        forM_ cfgs pprint
       d <- getCurrentDirectory
 
       let  dir  = optDir opts
@@ -169,10 +174,6 @@ checkerMain main
       exitSuccess
 
     where
-      pprint :: Config () -> IO () 
-      pprint c = print $
-                    text "Config" <>
-                    nest 2 (line  <> pretty (annotAsserts c))
       cfgs = stateToConfigs . runSymb $ main
 
 type IdStmtMap = M.Map Int (Stmt Int)

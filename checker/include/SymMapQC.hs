@@ -25,6 +25,8 @@ put (M m) k v = M (Map.insert k v m)
 
 emptyMap = M (Map.empty)
 
+singleton k v = M (Map.fromList [(k, v)])
+
 -- export / import as list of (key,value)
 instance (Ord k, FromJSON k, FromJSON v) => FromJSON (Map_t k v) where
          parseJSON (Array arr) = do l <- M.forM (V.toList arr) parseJSON

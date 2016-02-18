@@ -520,10 +520,10 @@ instance Pretty Pred where
   pretty (ILPTrue)       = text "T"
 
 instance Pretty a => Pretty (PredAnnot a) where
-  pretty PredAnnot { annotPred = ILPTrue } =
-    P.empty
-  pretty PredAnnot { annotPred = p } =
-    text "/* {" <> pretty p <> text "} */"
+  pretty PredAnnot { annotId = i, annotPred = ILPTrue } =
+    text "/*" <+> pretty i <+> text "*/"
+  pretty PredAnnot { annotId = i, annotPred = p } =
+    text "/*" <+> pretty i <+> text "{"  <+> pretty p <> text "} */"
 
 instance Pretty a => Pretty (Stmt a) where
   pretty (Skip a)

@@ -152,7 +152,7 @@ hMovePCCounter ci p (ExpM i) (ExpM j)
                   j
                   (inc (getMap m j))
     where
-      dec e = infixApp e opMinus (paren (intE (-1)))
+      dec e = infixApp e opMinus (intE 1)
       inc e = infixApp e opPlus (intE 1)
       m = unExp $ hReadPCCounter ci p
 
@@ -697,7 +697,7 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
         bind v e  = Generator noLoc (pvar (name v)) e
         absArb _ b u pc = [ bind b arbPos
                           , bind u (arbRange (intE 0) (vExp b))
-                          , bind pc arbEmptyMap
+                          , bind pc (singletonMap (intE 0) (vExp b))
                           ]
         arbPC p v      = arbInt p v
         arbPtr p rd wr = arbInt p rd ++ arbInt p wr
@@ -705,6 +705,9 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
         arbVal p v     = [bind v $ if isAbs p then arbEmptyMap else arbNull]
         arbGlob v      = [bind v arbZero]
         arbGlobVal v   = [bind v arbNull]
+        singletonMap k v = metaFunction "return"
+                             [metaFunction "SymMap.singleton"
+                               [k, infixApp v opMinus (intE 1)]]
         -- abs
         -- gen_exp   = foldl' (\e v -> fapp_syn e v)
         --                    (fmap_syn (Con $ UnQual $ name stateRecordCons) vh)
