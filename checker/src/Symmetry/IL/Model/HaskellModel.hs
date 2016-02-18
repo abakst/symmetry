@@ -1,8 +1,7 @@
-{-# Language ParallelListComp #-}
-{-# Language TupleSections #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ParallelListComp #-}
 module Symmetry.IL.Model.HaskellModel where
 
-import           Data.Char
 import           Data.Generics
 import           Data.List
 import           Data.Maybe
@@ -18,9 +17,6 @@ import           Symmetry.IL.ConfigInfo
 import           Symmetry.IL.Model.HaskellDefs
 import           Symmetry.IL.Model.HaskellDeadlock
 import           Symmetry.IL.Model.HaskellSpec ( initSpecOfConfig
-                                               , valHType
-                                               , intType
-                                               , mapType
                                                , withStateFields
                                                )
   
@@ -128,6 +124,12 @@ hReadState _ (PConc _) f
 hReadState _ p f
   = ExpM $ getMap (vExp f) (vExp (pidIdx p))
 
+hIsUnfold ci p@(PAbs (GV v) _)
+  = ExpM $ paren (infixApp e1 opEq e2)
+  where
+    e1 = vExp (pidUnfold p)
+    e2 = vExp v
+
 hReadPC :: ConfigInfo a
         -> Pid
         -> HaskellModel
@@ -137,11 +139,28 @@ hReadPC ci p
 hReadPCCounter :: ConfigInfo a
                -> Pid
                -> HaskellModel
+hReadPCCounter ci p
+  = ExpM . vExp $ pcCounter p
+
+hMovePCCounter :: ConfigInfo a
+               -> Pid
                -> HaskellModel
-hReadPCCounter ci p (ExpM i)
-  = ExpM $ getMap s i
-  where
-    s = vExp $ pcCounter p
+               -> HaskellModel
+               -> HaskellModel
+hMovePCCounter ci p (ExpM i) (ExpM j)
+  = ExpM $ putMap (putMap m i (dec (getMap m i)))
+                  j
+                  (inc (getMap m j))
+    where
+      dec e = infixApp e opMinus (paren (intE (-1)))
+      inc e = infixApp e opPlus (intE 1)
+      m = unExp $ hReadPCCounter ci p
+
+hReadMap :: HaskellModel
+         -> HaskellModel
+         -> HaskellModel
+hReadMap (ExpM m) (ExpM i)
+  = ExpM $ getMap m i
 
 hReadRoleBound :: ConfigInfo a
                -> Pid
@@ -173,47 +192,70 @@ hSetFields ci p ups
 hSetPC ci p e
   = hSetFields ci p [(pc p, e)]
 
+hSetPCCounter :: ConfigInfo a
+              -> Pid
+              -> HaskellModel
+              -> HaskellModel
+hSetPCCounter ci p e
+  = StateUpM [(pcCounter p, unExp e)] []
+
 con :: String -> Exp             
 con = Con . UnQual . name
 
-hExpr :: ConfigInfo a -> Pid -> ILExpr -> HaskellModel
-hExpr _ _ EUnit    = ExpM $ con unitCons    
-hExpr _ _ EString  = ExpM $ con stringCons
-hExpr _ _ (EInt i) = hInt i
-hExpr _ _ (EPid q@(PConc _))
+isIntVar :: ConfigInfo a -> String -> Bool
+isIntVar ci v
+  = v `elem` (snd <$> intVars (stateVars ci))
+
+hIte :: HaskellModel
+     -> HaskellModel
+     -> HaskellModel
+     -> HaskellModel
+hIte (ExpM b) (ExpM e1) (ExpM e2)
+  = ExpM $ If b e1 e2
+hIte _ _ _
+  = error "hIte (non expressions)"
+
+hExpr :: Bool -> ConfigInfo a -> Pid -> ILExpr -> HaskellModel
+hExpr _ _ _ EUnit    = ExpM $ con unitCons    
+hExpr _ _ _ EString  = ExpM $ con stringCons
+hExpr _ _ _ (EInt i) = hInt i
+hExpr _ _ _ (EPid q@(PConc _))
   = ExpM $ App (con pidCons) (vExp $ pidConstructor q)
-hExpr ci p (EPid q@(PAbs (V v) _))
+hExpr _ ci p (EPid q@(PAbs (V v) _))
   = ExpM $ App (con pidCons) (App (vExp $ pidConstructor q) (unExp $ readState ci p v))
-hExpr _ _ (EPid q@(PAbs _ _))
+hExpr _ _ _ (EPid q@(PAbs _ _))
   = ExpM $ App (con pidCons) (App (vExp $ pidConstructor q) (vExp $ pidIdx q))
-hExpr _ _ (EVar (GV v))
+hExpr _ _ _ (EVar (GV v))
   = ExpM . vExp $ v
-hExpr ci p (EVar (VPtrR t))
+hExpr _ ci p (EVar (VPtrR t))
   = readPtrR ci p t
-hExpr ci p (EVar (VPtrW t))
+hExpr _ ci p (EVar (VPtrW t))
   = readPtrW ci p p t
-hExpr ci p (EVar (V v))
-  = hReadState ci p v
-hExpr ci _ (EVar (VRef q v))
+hExpr b ci p (EVar (V v))
+  = if b && isIntVar ci v then
+      ExpM $ Paren (App (con intCons) (unExp $ hReadState ci p v))
+    else
+      hReadState ci p v
+hExpr _ ci _ (EVar (VRef q v))
   = hReadState ci q v
-hExpr ci p (ELeft e)
-  = ExpM $ App (con leftCons) (unExp $ hExpr ci p e)
-hExpr ci p (ERight e)
-  = ExpM $ App (con rightCons) (unExp $ hExpr ci p e)
-hExpr ci p (EPair e1 e2)
-  = ExpM $ App (App (con pairCons) (unExp $ hExpr ci p e1))
-               (unExp $ hExpr ci p e2)
-hExpr ci p (EPlus e1 e2)
+hExpr b ci p (ELeft e)
+  = ExpM $ App (con leftCons) (unExp $ hExpr b ci p e)
+hExpr b ci p (ERight e)
+  = ExpM $ App (con rightCons) (unExp $ hExpr b ci p e)
+hExpr b ci p (EPair e1 e2)
+  = ExpM $ App (App (con pairCons) (unExp $ hExpr b ci p e1))
+               (unExp $ hExpr b ci p e2)
+hExpr _ ci p (EPlus e1 e2)
   = ExpM $ infixApp e1' opPlus e2'
   where
-    e1' = unExp $ hExpr ci p e1
-    e2' = unExp $ hExpr ci p e2
+    e1' = unExp $ hExpr False ci p e1
+    e2' = unExp $ hExpr False ci p e2
 
-hExpr ci p e
+hExpr _ _ _ e
   = error (printf "hExpr: TBD(%s)" (show e))
 
 hPred :: ConfigInfo a -> Pid -> Pred -> HaskellModel
-hPred ci _ ILPTrue
+hPred _ _ ILPTrue
   = ExpM $ vExp "True"
 hPred ci p (ILNot b)
   = ExpM $ (paren (metaFunction "not" [unExp $ hPred ci p b]))
@@ -222,9 +264,9 @@ hPred ci p (ILAnd b1 b2)
 hPred ci p (ILOr b1 b2)
   = ExpM $ InfixApp (unExp $ hPred ci p b1) opOr (unExp $ hPred ci p b2)
 hPred ci p (ILBop o e1 e2)
-  = ExpM $ paren (infixApp (unExp $ hExpr ci p e1)
+  = ExpM $ paren (infixApp (unExp $ hExpr True ci p e1)
                            (qop o)
-                           (unExp $ hExpr ci p e2))
+                           (unExp $ hExpr True ci p e2))
   where
     qop Eq = opEq
     qop Lt = opLt
@@ -251,7 +293,7 @@ hReadPtrW ci p q t
 hPutMessage ci p q (e,t)
   = StateUpM [] [((q, t), e')]
   where
-    ExpM e' = hExpr ci p e
+    ExpM e' = hExpr True ci p e
 
 hGetMessage ci p@PConc{} (V v, t)
   = hSetFields ci p [(v, ExpM $ getVec (vExp (buf ci p t)) e')]
@@ -312,7 +354,7 @@ instance ILModel HaskellModel where
   add        = hAdd
   incr       = hIncr
   decr       = hDecr
-  expr       = hExpr
+  expr       = hExpr True
   pred       = hPred
   lt         = hLt
   lte        = hLte
@@ -322,18 +364,23 @@ instance ILModel HaskellModel where
   lneg       = hLNeg
   true       = hTrue
   false      = hFalse
+  ite        = hIte
+  readMap    = hReadMap
   readState  = hReadState
   readPtrR   = hReadPtrR
   readPtrW   = hReadPtrW
   readPC     = hReadPC
   readPCCounter = hReadPCCounter
+  movePCCounter = hMovePCCounter
   readRoleBound = hReadRoleBound
   nonDet = hNonDet
   nonDetRange = hNonDetRange
+  isUnfold = hIsUnfold
 
   joinUpdate = hJoinUpdates
   setPC      = hSetPC
   setState   = hSetFields
+  setPCCounter = hSetPCCounter
   incrPtrR   = hIncrPtrR
   incrPtrW   = hIncrPtrW
   putMessage = hPutMessage
@@ -378,7 +425,7 @@ printRules ci rs dl = prettyPrint $ FunBind matches
     --   = Case (vExp f) [Alt noLoc p (UnGuardedRhs e) Nothing]
     mkRecUp p fups
       = RecUpdate (vExp state) [mkFieldUp p f e | (f,e) <- fups]
-    mkFieldUp p f e
+    mkFieldUp _ f e
       = FieldUpdate (UnQual (name f)) e
     mkCall p (Just (ExpM e)) fups bufups
       = mkAssert e (paren (mkCall p Nothing fups bufups))
@@ -546,12 +593,12 @@ printQCFile ci _
             : sep (prettyPrint <$> arbitraryDecls ci)
             ++ sep (prettyPrint <$> jsonDecls ci)
 
-emptyListCon = Con $ Special $ ListCon
-unitCon      = Con $ Special $ UnitCon
+emptyListCon = Con . Special $ ListCon
+unitCon      = Con . Special $ UnitCon
 
-ifQC ci x = if isQC ci then [x] else []
+ifQC ci x = [x | isQC ci]
 
-infix_syn sym f g = InfixApp f (QConOp $ UnQual $ Symbol sym) g
+infix_syn sym f g = InfixApp f (QConOp . UnQual $ Symbol sym) g
 fmap_syn          = infix_syn "<$>"
 fapp_syn          = infix_syn "<*>"
 
@@ -582,7 +629,7 @@ runTestDecl    :: ConfigInfo a -> Decl
 runTestDecl ci =
   FunBind [ Match noLoc (name "runTest") args Nothing (UnGuardedRhs rhs) Nothing ]
   where pvarn n    = pvar $ name n
-        varn n     = Var $ UnQual $ name n
+        varn n     = Var . UnQual $ name n
         args       = [PTuple Boxed [pvarn "s"]]
         emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
         -- turn buffers into empty vectors
@@ -653,7 +700,7 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
                           , bind pc arbEmptyMap
                           ]
         arbPC p v      = arbInt p v
-        arbPtr p rd wr = concat [arbInt p rd, arbInt p wr]
+        arbPtr p rd wr = arbInt p rd ++ arbInt p wr
         arbInt p v     = [bind v $ if isAbs p then arbEmptyMap else arbZero]
         arbVal p v     = [bind v $ if isAbs p then arbEmptyMap else arbNull]
         arbGlob v      = [bind v arbZero]
@@ -784,14 +831,14 @@ pidFromJSONDecl ci =
         guards   = [ GuardedRhs noLoc [g_stmt p] (g_exp p) | p <- pids ci ]
         g_stmt p = Qualifier $ infix_syn "==" (var' "k")
                                               (Lit $ String (pidConstructor p))
-        g_exp p = let pidCon = Con $ UnQual $ name (pidConstructor p)
+        g_exp p = let pidCon = Con . UnQual $ name (pidConstructor p)
                   in if isAbs p
                      then fmap_syn pidCon (app (var' "parseJSON") (var' "v"))
                      else app (var' "return") pidCon
 
         -- parseJSON _ = mzero
         fr_err  = Match noLoc (name "parseJSON") [PWildCard] Nothing rhs_err Nothing
-        rhs_err = UnGuardedRhs $ var $ name $ "mzero"
+        rhs_err = UnGuardedRhs . var . name $ "mzero"
 
         -- possible context class
         ctx     = [ClassA tc_name [TyVar v] | v <- pid_vars]

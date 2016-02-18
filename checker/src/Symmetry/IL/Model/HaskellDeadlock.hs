@@ -68,4 +68,4 @@ deadlockFree ci@CInfo { config = Config { cProcs = ps } }
                                            (decr (readRoleBound ci p))
                                       ]
     counters p  = (foldl' add (readPCK p (-1)) . (readPCK p . snd <$>))
-    readPCK p i = readPCCounter ci p (int i)
+    readPCK p i = readMap (readPCCounter ci p) (int i)

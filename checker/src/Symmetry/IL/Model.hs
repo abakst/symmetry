@@ -1,12 +1,10 @@
-{-# Language MultiParamTypeClasses #-}
-{-# Language FunctionalDependencies #-}
 module Symmetry.IL.Model where
 
 import Prelude hiding (and, or, pred)
 import Text.Printf
 import Data.Generics
 import Data.Char
-import Symmetry.IL.AST
+import Symmetry.IL.AST hiding (isUnfold)
 import Symmetry.IL.ConfigInfo
 
 import Text.PrettyPrint.Leijen (pretty)
@@ -107,14 +105,19 @@ class ILModel e where
   lneg      :: e -> e
   lt        :: e -> e -> e
   lte       :: e -> e -> e
+  ite       :: e -> e -> e -> e
   int       :: Int -> e
+  movePCCounter :: ConfigInfo a -> Pid -> e -> e -> e
+  readMap   :: e -> e -> e
 
   readPC    :: ConfigInfo a -> Pid -> e
-  readPCCounter :: ConfigInfo a -> Pid -> e -> e
+  readPCCounter :: ConfigInfo a -> Pid -> e
   readPtrR  :: ConfigInfo a -> Pid -> Type -> e
   readPtrW  :: ConfigInfo a -> Pid -> Pid -> Type -> e
   readRoleBound :: ConfigInfo a -> Pid -> e
   readState :: ConfigInfo a -> Pid -> String -> e
+
+  isUnfold :: ConfigInfo a -> Pid -> e
 
   nonDet      :: ConfigInfo a -> Pid -> e
   nonDetRange :: ConfigInfo a -> Pid -> Set -> e
@@ -126,6 +129,7 @@ class ILModel e where
   incrPtrR   :: ConfigInfo a -> Pid -> Type -> e
   incrPtrW   :: ConfigInfo a -> Pid -> Pid -> Type -> e
   setState   :: ConfigInfo a -> Pid -> [(String , e)] -> e
+  setPCCounter :: ConfigInfo a -> Pid -> e -> e
   putMessage :: ConfigInfo a -> Pid -> Pid -> (ILExpr, Type) -> e
   getMessage :: ConfigInfo a -> Pid -> (Var, Type) -> e
 
@@ -152,14 +156,32 @@ pcGuard :: (Identable a, ILModel e)
         => ConfigInfo a -> Pid -> Stmt a -> e
 pcGuard ci p s = readPC ci p `eq` int (ident s)
 
+updPC :: (Identable a, ILModel e)
+      => ConfigInfo a -> Pid -> Int -> Int -> [Rule e]
+updPC ci p i j
+  | isAbs p   = [ rule ci p grd Nothing ups
+                , rule ci p (lneg grd) Nothing upsNotK
+                ]
+  | otherwise = [ rule ci p true Nothing ups ]
+  where
+    grd     = isUnfold ci p
+    ups     = setPC ci p (int j)
+    upsNotK = seqUpdates ci p [ ups, movePCCounter ci p (int i) (int j) ]
+
 nextPC :: (Identable a, ILModel e)
        => ConfigInfo a -> Pid -> Stmt a -> e
-nextPC ci p s = nextPC' ci p $ cfgNext ci p (ident s)
+nextPC ci p s
+  = seqUpdates ci p . nextPC' ci p $ (ident <$>) <$> cfgNext ci p (ident s)
   where
+    condUpdate ci p i j = ite (isUnfold ci p)
+                              (readPCCounter ci p)
+                              (movePCCounter ci p (int i) (int j))
     nextPC' ci' p' Nothing
-      = setPC ci' p' (int (-1))
-    nextPC' ci' p' (Just [s])
-      = setPC ci' p' (int (ident s))
+      = nextPC' ci' p' (Just [-1])--  [ setPC ci' p' (int (-1)) ] ++
+        -- [ setPCCounter ci' p' (condUpdate ci' p' (ident s) (-1)) | isAbs p' ]
+    nextPC' ci' p' (Just [s'])
+      = [ setPC ci' p' (int s') ] ++
+        [ setPCCounter ci' p' (condUpdate ci' p' (ident s) s') | isAbs p' ]
     nextPC' _ _ (Just _)
       = error "nextPC unexpected"
 
