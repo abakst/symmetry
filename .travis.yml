@@ -1,0 +1,4 @@
+## Minimal haskell file
+
+language: haskell
+before_install: cd checker
