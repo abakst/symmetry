@@ -39,7 +39,7 @@ instance Options MainOptions where
   defineOptions
     = MainOptions <$> simpleOption "verify" False "Run Verifier"
                   <*> simpleOption "qc" False "Run QuickCheck instead of Verifier"
-                  <*> simpleOption "qc-samples" 100000 "Number of random initial states to explore"
+                  <*> simpleOption "qc-samples" 1000 "Number of random initial states to explore"
                   <*> simpleOption "verbose" False "Verbose Output"
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
                   <*> simpleOption "dump-model" False "Dump Liquid Haskell model"
