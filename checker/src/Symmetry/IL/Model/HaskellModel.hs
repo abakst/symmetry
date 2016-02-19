@@ -46,6 +46,9 @@ opLte  = op (sym "<=")
 opGt   = op (sym ">")
 opGte  = op (sym ">=")
 
+cons :: Exp -> Exp -> Exp
+cons x y = paren (InfixApp x (QConOp list_cons_name) y)
+
 neg :: Exp
 neg = vExp "not"
 
@@ -532,8 +535,9 @@ totalCall ci =
                 ([vExp state] ++
                  (vExp <$> bufArgs) ++
                  [vExp "sched"] ++
-                 ifQC ci (vExp "states"))
+                 ifQC ci (cons (vExp state) (vExp "states")))
       schedPat = pParen (PInfixApp (pvar (name "s")) list_cons_name (pvar (name "sched")))
+
 initialCall :: ConfigInfo a -> Decl
 initialCall ci =
   nameBind noLoc (name "check") call
@@ -668,7 +672,9 @@ runTestDecl ci =
         lets        = BDecls [PatBind noLoc (pvarn "l") (UnGuardedRhs rs_app) Nothing]
                          -- ret_exp
         -- (reverse l, sched)
-        retExp    = Tuple Boxed [app (varn "reverse") (varn "l"), (varn "sched")]
+        retExp    = Tuple Boxed [ cons (vExp "s") (app (varn "reverse") (varn "l"))
+                                , varn "sched"
+                                ]
 
 
 -- ### Arbitrary instances ##################################################
@@ -715,7 +721,7 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
         arbPtr p rd wr = arbInt p rd ++ arbInt p wr
         arbInt p v     = [bind v $ if isAbs p then arbEmptyMap else arbZero]
         arbVal p v     = [bind v $ if isAbs p then arbEmptyMap else arbNull]
-        arbGlob v      = [bind v arbZero]
+        arbGlob v      = [bind v arbPos]
         arbGlobVal v   = [bind v arbNull]
         singletonMap k v = metaFunction "return"
                              [metaFunction "SymMap.singleton"
