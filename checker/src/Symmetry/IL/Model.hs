@@ -212,8 +212,8 @@ ruleOfStmt ci p s@Send { sndPid = EPid q, sndMsg = (t, e) }
            , nextPC ci p s
            ]
     
-ruleOfStmt ci p s@Send { sndPid = x@EVar {} , sndMsg = (t, e) }
-  = [ mkRule ci p grd (matchVal ci p (expr ci p x) [(EPid q, ups q) | q <- pids ci]) (annot s) ]
+ruleOfStmt ci p s@Send { sndPid = pidExp , sndMsg = (t, e) }
+  = [ mkRule ci p grd (matchVal ci p (expr ci p pidExp) [(EPid q, ups q) | q <- pids ci]) (annot s) ]
   -- = concat [ matchVal ci p x (EPid q) <$> ruleOfStmt ci p (sub q) | q <- pids ci ]
     where
       grd = pcGuard ci p s
@@ -300,6 +300,8 @@ ruleOfStmt ci p s@Loop { loopBody = s' }
     where
       ups = updPC ci p (ident s) (ident s')
 
+ruleOfStmt ci p s@Goto{}
+  = [ mkRule ci p (pcGuard ci p s) (nextPC ci p s) (annot s) ]
 -------------------------
 -- choose i in I (s)
 -------------------------
@@ -320,10 +322,26 @@ ruleOfStmt ci p s@Assert{}
     q = Just (pred ci p (assertPred s `pAnd` (annotPred (annot s))))
 
 -------------------------
+-- Die
+-------------------------
+ruleOfStmt ci p s@Die{}
+  = [ rule ci p (pcGuard ci p s) q (nextPC ci p s) ]
+  where
+    q = Just (pred ci p (pFalse `pAnd` (annotPred (annot s))))
+
+-------------------------
+-- Skip
+-------------------------
+ruleOfStmt ci p s@Skip{}
+  = [ mkRule ci p (pcGuard ci p s) (nextPC ci p s) (annot s) ]
+
+ruleOfStmt ci p s@Block{}
+  = [ mkRule ci p (pcGuard ci p s) (nextPC ci p s) (annot s) ]
+-------------------------
 -- catch all
 -------------------------
-ruleOfStmt ci p s
-  = [ mkRule ci p (pcGuard ci p s) (nextPC ci p s) (annot s) ]
+ruleOfStmt _ _ s
+  = error ("Unhandled stmt" ++ show (const () <$> s))
 
 ruleOfProc :: (Data a, Identable a, ILModel e)
            => ConfigInfo (PredAnnot a) -> Process (PredAnnot a) -> [Rule e]

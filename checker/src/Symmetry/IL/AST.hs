@@ -113,6 +113,8 @@ data ILExpr = EUnit
             | ERight ILExpr
             | EPair ILExpr ILExpr
             | EPlus ILExpr ILExpr
+            | EProj1 ILExpr
+            | EProj2 ILExpr
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 -- send(p, EPid p)
@@ -400,10 +402,12 @@ nextStmts toMe s@Block { blkBody = ss }
   = singleton toMe s `joinMaps` snd nexts
   where
     nexts = foldl' go ([ident s], I.empty) ss
-    go (ins, m) s' = (annots s', foldl' joinMaps m (doMaps s' <$> ins))
-    doMaps s' i    = nextStmts (ident i) s'
+    go (ins, m) s'
+      = (annots s', foldl' joinMaps m (doMaps s' <$> ins))
+    doMaps s' i    = nextStmts i s'
     annots (NonDet ts _) = ident <$> ts
-    annots s'             = [ident s']
+    annots s'@Case {}    = ident <$> lastStmts s'
+    annots s'            = [ident s']
 
 nextStmts toMe s@(Iter _ _ t _)
   = singleton toMe s `joinMaps`
@@ -489,6 +493,8 @@ instance Pretty ILExpr where
   pretty (ERight e) = text "inr" <> parens (pretty e)
   pretty (EPair e1 e2) = tupled [pretty e1, pretty e2]
   pretty (EPlus e1 e2) = pretty e1 <+> text "+" <+> pretty e2
+  pretty (EProj1 e) = text "π₁" <> parens (pretty e)
+  pretty (EProj2 e) = text "π₂" <> parens (pretty e)
 
 instance Pretty Pat where
   pretty (PUnit )      = text "()"

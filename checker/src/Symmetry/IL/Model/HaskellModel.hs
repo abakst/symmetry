@@ -217,7 +217,7 @@ hIte _ _ _
 
 hExpr :: Bool -> ConfigInfo a -> Pid -> ILExpr -> HaskellModel
 hExpr _ _ _ EUnit    = ExpM $ con unitCons    
-hExpr _ _ _ EString  = ExpM $ con stringCons
+hExpr _ _ _ EString  = ExpM $ App (con stringCons) (strE "<str>")
 hExpr _ _ _ (EInt i) = hInt i
 hExpr _ _ _ (EPid q@(PConc _))
   = ExpM $ App (con pidCons) (vExp $ pidConstructor q)
@@ -250,6 +250,10 @@ hExpr _ ci p (EPlus e1 e2)
   where
     e1' = unExp $ hExpr False ci p e1
     e2' = unExp $ hExpr False ci p e2
+hExpr b ci p (EProj1 e)
+  = ExpM $ metaFunction "vLeft" [unExp $ hExpr b ci p e]
+hExpr b ci p (EProj2 e)
+  = ExpM $ metaFunction "vRight" [unExp $ hExpr b ci p e]
 
 hExpr _ _ _ e
   = error (printf "hExpr: TBD(%s)" (show e))
