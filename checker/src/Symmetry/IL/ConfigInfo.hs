@@ -23,6 +23,7 @@ data ConfigInfo a = CInfo { config     :: Config a
                           , pids       :: [Pid]
                           , cfg        :: [(Pid, IntMap [Stmt a])]
                           , isQC       :: Bool
+                          , qcSamples  :: Int
                           }
 
 mkCState :: forall a. Data a => Config a -> ConfigState
@@ -60,6 +61,7 @@ mkCInfo c = CInfo { config    = c
                   , pids      = fst <$> cProcs c
                   , cfg       = mkCfg <$> cProcs c
                   , isQC      = False
+                  , qcSamples = 0
                   }
   where
     mkCfg (p, s) = (p, buildStmtCfg s)

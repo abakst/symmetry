@@ -42,7 +42,10 @@ envEq re1 re2
     check b k (n,p) = let (n', p') = re2 M.! k in
                       p == p' && checkN n n'
     checkN :: AbsVal Int -> AbsVal Int -> Bool
-    checkN (AInt x y) (AInt x' y') = undefined -- x == x' && y == y'
+    checkN (AInt x y) (AInt x' y') = (x `eqInt` x') && y == y'
+    eqInt Nothing Nothing                 = True
+    eqInt (Just (EVar x)) (Just (EVar y)) = x == y
+    eqInt _ _                             = False
 
 data SymbState = SymbState { renv   :: REnv
                            , ctr    :: Int

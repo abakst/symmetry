@@ -28,6 +28,7 @@ import qualified Data.Map.Strict as M
 
 data MainOptions = MainOptions { optVerify  :: Bool
                                , optQC      :: Bool
+                               , optQCSamples :: Int
                                , optVerbose :: Bool
                                , optProcess :: Bool
                                , optModel   :: Bool
@@ -38,6 +39,7 @@ instance Options MainOptions where
   defineOptions
     = MainOptions <$> simpleOption "verify" False "Run Verifier"
                   <*> simpleOption "qc" False "Run QuickCheck instead of Verifier"
+                  <*> simpleOption "qc-samples" 100000 "Number of random initial states to explore"
                   <*> simpleOption "verbose" False "Verbose Output"
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
                   <*> simpleOption "dump-model" False "Dump Liquid Haskell model"
@@ -132,7 +134,8 @@ run1Cfg opt outd cfg
   where
     cinfo :: ConfigInfo (PredAnnot Int)
     (cinfo, m) = generateModel cfg
-    cinfo'     = cinfo {isQC = optQC opt}
+    cinfo'     = cinfo { isQC = optQC opt
+                       , qcSamples = optQCSamples opt}
     f          = printHaskell cinfo' m
     pprint c = print $
                text "Config" <>

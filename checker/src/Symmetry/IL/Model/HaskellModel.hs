@@ -268,9 +268,9 @@ hPred ci p (ILAnd b1 b2)
 hPred ci p (ILOr b1 b2)
   = ExpM $ InfixApp (unExp $ hPred ci p b1) opOr (unExp $ hPred ci p b2)
 hPred ci p (ILBop o e1 e2)
-  = ExpM $ paren (infixApp (unExp $ hExpr True ci p e1)
+  = ExpM $ paren (infixApp (unExp $ hExpr False ci p e1)
                            (qop o)
-                           (unExp $ hExpr True ci p e2))
+                           (unExp $ hExpr False ci p e2))
   where
     qop Eq = opEq
     qop Lt = opLt
@@ -589,7 +589,7 @@ printQCFile ci _
              , "import Data.Maybe"
              , "import System.Directory"
              ]
-    spec =  qcDefsStr
+    spec =    qcDefsStr (qcSamples ci)
             : qcMainStr
             : (prettyPrint  $  runTestDecl ci) : ""
             : arbValStr : ""
@@ -902,8 +902,8 @@ pidToJSONDecl ci =
         mkTy     = name . ("p" ++) . show
 
 -- ### "Static" functions to be included ##################################################
-qcDefsStr="fn          = \"states.json\"\n\
-\sample_size = 100000\n"
+qcDefsStr n ="fn          = \"states.json\"\n\
+\sample_size = " ++ show n ++ "\n"
 
 qcMainStr="main :: IO () \n\
 \main = do b <- doesFileExist fn \n\
