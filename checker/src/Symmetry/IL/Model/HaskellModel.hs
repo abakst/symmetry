@@ -453,7 +453,7 @@ printRules ci rs dl = prettyPrint $ FunBind matches
 
     pat ps = [ PAsPat (name state) (PRec (UnQual (name stateRecordCons)) [PFieldWildcard]) ] ++
              [ pvar (name (buf ci q t)) | q <- pids ci, t <- fst <$> tyMap ci ] ++
-             [ mkSchedPat ps ] ++
+             (if null ps then [peList] else [ mkSchedPat ps ]) ++
              (ifQC ci (pvar (name "qc_ss")))
 
     mkSchedPat ps = foldr (\q rest -> PInfixApp (pidPattern q) list_cons_name rest) schedPVar ps
@@ -463,7 +463,7 @@ printRules ci rs dl = prettyPrint $ FunBind matches
     dlRhs      = UnGuardedRhs (mkAssert dl (if isQC ci
                                               then (var $ name "qc_ss")
                                               else unit_con))
-    dlpat      = pat (pids ci)
+    dlpat      = pat []
 
     findUp p t bufups
       = maybe (vExp $ buf ci p t) (\(p, e) -> updateBuf ci p t e) $ findUpdate p t bufups
@@ -522,10 +522,18 @@ totalCall :: ConfigInfo a -> Decl
 totalCall ci =
   FunBind [Match noLoc (name runState) args Nothing rhs Nothing]
     where
-      bufs = [ wildcard | _ <- pids ci, _ <- tyMap ci ]
-      args = (wildcard : bufs) ++ [wildcard] ++ (ifQC ci wildcard)
-      rhs  = UnGuardedRhs $ if isQC ci then emptyListCon else unitCon
-
+      args = [pvar (name state)] ++
+             (pvar . name <$> bufArgs) ++
+             [schedPat] ++
+             ifQC ci (pvar (name ("states")))
+      bufArgs = [ "a" ++ show i | i <- [0..] | _ <- pids ci, _ <- tyMap ci]
+      rhs  = UnGuardedRhs $
+              metaFunction runState
+                ([vExp state] ++
+                 (vExp <$> bufArgs) ++
+                 [vExp "sched"] ++
+                 ifQC ci (vExp "states"))
+      schedPat = pParen (PInfixApp (pvar (name "s")) list_cons_name (pvar (name "sched")))
 initialCall :: ConfigInfo a -> Decl
 initialCall ci =
   nameBind noLoc (name "check") call

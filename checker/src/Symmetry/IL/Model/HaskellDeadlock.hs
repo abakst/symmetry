@@ -35,17 +35,22 @@ blockedLocs Config{ cProcs = ps }
 
 procAtRecv :: ILModel e => ConfigInfo Int -> Pid -> [(Type, Int)] -> e
 procAtRecv ci p tis
-  = ors [ readPC ci p `eq` int i | (_, i) <- tis ]
+  = ors [ readPC ci (hackAbs p) `eq` int i | (_, i) <- tis ]
 
 procDone :: ILModel e => ConfigInfo a -> Pid -> e
 procDone ci p
-  = readPC ci p `eq` int (-1)
+  = readPC ci (hackAbs p) `eq` int (-1)
+
+hackAbs :: Pid -> Pid
+hackAbs p@(PAbs _ s) = PAbs (V (pidUnfold p)) s
+hackAbs p = p
 
 procBlocked :: (Identable a, ILModel e) => ConfigInfo a -> Pid -> [(Type, Int)] -> e
-procBlocked ci p@(PAbs _ _) tis
-  = ors [ ands [ readPC ci p `eq` int i, blocked t ] | (t, i) <- tis ]
+procBlocked ci p@(PAbs _ s) tis
+  = ors [ ands [ readPC ci p' `eq` int i, blocked t ] | (t, i) <- tis ]
   where
-    blocked t = lte (readPtrW ci p p t) (readPtrR ci p t)
+    blocked t = lte (readPtrW ci p' p' t) (readPtrR ci p' t)
+    p'        = PAbs (V (pidUnfold p)) s
 
 procBlocked ci p tis
   = ors [ ands [readPC ci p `eq` (int i),  blocked t] | (t, i) <- tis ]
