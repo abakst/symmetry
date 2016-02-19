@@ -1,4 +1,5 @@
 ## Minimal haskell file
 
 language: haskell
+ghc: 7.10
 before_install: cd checker
