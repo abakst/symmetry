@@ -34,10 +34,10 @@ dbProc  = do peers   <- newRMulti
              app loop workers
 
 -- create the illusion of `ord` function
-ord :: DSL repr => repr (String -> Int)
-ord  = lam $ \s -> ifte (lt s (str "m"))
-                     (ifte (lt s (str "f")) (int 0) (int 1))
-                     (ifte (lt s (str "s")) (int 2) (int 3))
+-- ord :: DSL repr => repr (String -> Int)
+-- ord  = lam $ \s -> ifte (lt s (str "m"))
+--                      (ifte (lt s (str "f")) (int 0) (int 1))
+--                      (ifte (lt s (str "s")) (int 2) (int 3))
 
 keyspace :: DSL repr => repr (Int -> [Int])
 keyspace  = lam $ \n -> cons n (cons (plus n (int workerCount_div_2)) nil)

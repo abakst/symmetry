@@ -156,7 +156,7 @@ type MValMap = M.Map MConstr VId -- No variables
 
 type MTypeEnv = M.Map TId MType
 
-class Identable a where
+class Eq a => Identable a where
   ident :: a -> Int
 
 instance Identable Int where
@@ -354,8 +354,10 @@ instance Traversable Stmt where
   traverse _ _
     = error "traverse undefined for non-source stmts"
 
-joinMaps :: I.IntMap [a] -> I.IntMap [a] -> I.IntMap [a]
-joinMaps = I.unionWith (++)
+joinMaps :: Eq a => I.IntMap [a] -> I.IntMap [a] -> I.IntMap [a]
+joinMaps m m' = I.unionWith (foldl' go) m m'
+  where
+    go is i = if i `elem` is then is else  i:is
 
 stmt :: (TId, [(CId, MConstr)], Stmt a) -> Stmt a
 stmt (_,_,s) = s
@@ -402,7 +404,7 @@ nextStmts toMe s@Block { blkBody = ss }
     go (ins, m) s'
       = (annots s', foldl' joinMaps m (doMaps s' <$> ins))
     doMaps s' i    = nextStmts i s'
-    annots (NonDet ts _) = ident <$> ts
+    annots (NonDet ts _) = [ ident i | i <- concatMap lastStmts ts ]
     annots s'@Case {}    = ident <$> lastStmts s'
     annots s'@Choose{}   = ident <$> lastStmts s'
     annots s'@Loop{}     = ident <$> [ s'' | s'' <- lastStmts s', notGoto s'']
