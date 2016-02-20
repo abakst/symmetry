@@ -19,11 +19,12 @@ before_install:
   - travis_retry sudo apt-get install cabal-install-$CABAL ghc-$GHC
   - export PATH="$HOME/.cabal/bin:/opt/ghc/$GHC/bin:/opt/cabal/$CABAL/bin:$PATH"
   - cd checker
+  - cabal update
 
 install:
   - cabal install --only-dependencies
-  - cabal configure --enable-tests
-  - cabal build
 
 script:
+  - cabal configure --enable-tests
+  - cabal build
   - cabal test
