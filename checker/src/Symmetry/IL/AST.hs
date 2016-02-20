@@ -357,9 +357,6 @@ instance Traversable Stmt where
 joinMaps :: I.IntMap [a] -> I.IntMap [a] -> I.IntMap [a]
 joinMaps = I.unionWith (++)
 
-addNext :: Int -> [a] -> I.IntMap [a] -> I.IntMap [a]
-addNext i is = I.alter (fmap (++is)) i
-
 stmt :: (TId, [(CId, MConstr)], Stmt a) -> Stmt a
 stmt (_,_,s) = s
 
@@ -407,7 +404,11 @@ nextStmts toMe s@Block { blkBody = ss }
     doMaps s' i    = nextStmts i s'
     annots (NonDet ts _) = ident <$> ts
     annots s'@Case {}    = ident <$> lastStmts s'
+    annots s'@Choose{}   = ident <$> lastStmts s'
+    annots s'@Loop{}     = ident <$> [ s'' | s'' <- lastStmts s', notGoto s'']
     annots s'            = [ident s']
+    notGoto Goto{}       = False
+    notGoto _            = True
 
 nextStmts toMe s@(Iter _ _ t _)
   = singleton toMe s `joinMaps`
@@ -422,7 +423,8 @@ nextStmts toMe me@(Loop v s _)
     js = [ j | Goto v' j <- listify (const True) s, v' == v]
 
 nextStmts toMe me@(Choose _ _ s _)
-  = addNext toMe [me] $ nextStmts (ident me) s
+  = singleton toMe me `joinMaps` nextStmts (ident me) s
+
 nextStmts toMe me@(Case _ _ _ sl sr _)
   = singleton toMe me `joinMaps`
     nextStmts (ident me) sl `joinMaps`

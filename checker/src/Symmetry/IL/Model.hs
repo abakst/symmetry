@@ -1,3 +1,4 @@
+{-# Language ParallelListComp #-}
 module Symmetry.IL.Model where
 
 import Prelude hiding (and, or, pred)
@@ -120,7 +121,7 @@ class ILModel e where
 
   isUnfold :: ConfigInfo a -> Pid -> e
 
-  nonDet      :: ConfigInfo a -> Pid -> e
+  nonDet      :: ConfigInfo a -> Pid -> e -> e
   nonDetRange :: ConfigInfo a -> Pid -> Set -> e
   matchVal    :: ConfigInfo a -> Pid -> e -> [(ILExpr, e)] -> e
 
@@ -257,10 +258,10 @@ ruleOfStmt ci p s@Case{caseLPat = V l, caseRPat = V r}
 -- nondet choice
 -------------------------
 ruleOfStmt ci p s@NonDet{}
-  = [ mkRule ci p (grd s') (us s') (annot s) | s' <- nonDetBody s ]
+  = [ mkRule ci p (grd i) (us s') (annot s) | s' <- nonDetBody s | i <- [0..] ]
   where
-    grd s' = pcGuard ci p s `and`
-            (nonDet ci p `eq` (int (ident s')))
+    grd i = pcGuard ci p s `and`
+            (nonDet ci p (int (length (nonDetBody s))) `eq` (int i))
     us s'  = updPC ci p (ident s) (ident s')
 
 -------------------------

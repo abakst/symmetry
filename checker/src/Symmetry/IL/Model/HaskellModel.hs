@@ -332,8 +332,11 @@ hMatchVal ci p (ExpM f) cases
 hNonDet :: ConfigInfo a
         -> Pid
         -> HaskellModel
-hNonDet _ _
-  = ExpM $ metaFunction nondet [vExp sched]
+        -> HaskellModel
+hNonDet _ _ (ExpM e)
+  = ExpM $ metaFunction nondet [vExp sched, e]
+hNonDet _ _ _
+  = error "hNonDet non exp"
 
 hNonDetRange :: ConfigInfo a
              -> Pid

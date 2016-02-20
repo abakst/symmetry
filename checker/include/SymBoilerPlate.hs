@@ -1,7 +1,7 @@
 module SymBoilerPlate where
 
-{-@ nonDet :: a -> {v:Int | true} @-}
-nonDet :: a -> Int
+{-@ nonDet :: a -> x:Int -> {v:Int | 0 <= v && v < x } @-}
+nonDet :: a -> Int -> Int
 nonDet = undefined
 
 {-@ nonDetRange :: x:Int -> y:Int -> {v:Int | x <= v && v < y} @-}  

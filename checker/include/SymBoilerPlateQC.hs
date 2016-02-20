@@ -6,13 +6,19 @@ import Control.Monad
 import Data.Aeson
 import Data.HashMap.Strict as H
 
-{-@ nonDet :: a -> {v:Int | true} @-}
-nonDet :: a -> Int
-nonDet = undefined
+import System.IO.Unsafe
+import System.Random
+
+{-@ nonDet :: a -> x:Int -> {v:Int | 0 <= v && v < x } @-}
+nonDet :: a -> Int -> Int
+nonDet _ x = nonDetRange 0 x 
 
 {-@ nonDetRange :: x:Int -> y:Int -> {v:Int | x <= v && v < y} @-}  
 nonDetRange :: Int -> Int -> Int
-nonDetRange = undefined
+nonDetRange x y = unsafePerformIO $ do g      <- getStdGen
+                                       (x, _) <- return $ randomR (x, y-1) g
+                                       return x
+                                        
 
 instance DefaultMap Int where
   def = 0
