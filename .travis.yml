@@ -6,7 +6,10 @@ branches:
   only:
     - build_test
 
-addons: {apt: {packages: [libgmp-dev, ghc-7.10.2, cabal-install-1.22] }}
+matrix:
+  include:
+    - env: SMT="z3" CABAL=1.22 GHC=7.10.2
+      addons: {apt: {packages: [libgmp-dev, ghc-7.10.2, cabal-install-1.22] }}
 
 cache: 
   directories:
@@ -21,11 +24,6 @@ before_install:
 - travis_retry stack setup
 - scripts/travis install_smt "$SMT"
 
-env:
-  global:
-  - STACK=1.0.0.0
-  - SMT=z3
-  - GHC=ghc-7.10.2
 
 install:
 # - scripts/travis install_stack "$STACK"
