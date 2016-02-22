@@ -26,18 +26,6 @@ before_install:
 - travis_retry stack install happy
 - scripts/travis install_smt "$SMT"
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-env:
-  global:
-  - STACK=1.0.0.0
-  - SMT=z3
-  - GHC=ghc-7.10.2
->>>>>>> b6e249c... why
-=======
->>>>>>> 5987100... efawefafea
-
 install:
 # - scripts/travis install_stack "$STACK"
  - scripts/travis configure_stack "$GHC"
