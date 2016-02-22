@@ -16,12 +16,12 @@ build-type:          Simple
 -- extra-source-files:
 cabal-version:       >=1.10
 
-data-files:          include/SymMap.hs
-                   , include/SymMapQC.hs
-                   , include/SymVector.hs
-                   , include/SymVectorQC.hs
-                   , include/SymBoilerPlate.hs
-                   , include/SymBoilerPlateQC.hs
+data-files:          checker/include/SymMap.hs
+                   , checker/include/SymMapQC.hs
+                   , checker/include/SymVector.hs
+                   , checker/include/SymVectorQC.hs
+                   , checker/include/SymBoilerPlate.hs
+                   , checker/include/SymBoilerPlateQC.hs
 library
   exposed-modules:   Symmetry.Language.AST
                    , Symmetry.Language.Syntax
@@ -63,14 +63,14 @@ library
                      , QuickCheck >= 2.8.1
                      , aeson
                      , aeson-pretty
-  hs-source-dirs:      src
-                     , tests
+  hs-source-dirs:      checker/src
+                     , checker/tests
   default-language:    Haskell2010
 
 test-suite tests
   default-language: Haskell98
   type:             exitcode-stdio-1.0
-  hs-source-dirs:   tests
+  hs-source-dirs:   checker/tests
   ghc-options:      -O2 -threaded
   main-is:          tests.hs
   build-depends:    base >= 4 && < 5,

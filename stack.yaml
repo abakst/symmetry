@@ -4,4 +4,4 @@ packages:
 - '.'
 extra-deps: []
 compiler-check: newer-minor
-resolver: ghc-7.10.3
+resolver: ghc-7.10.2
