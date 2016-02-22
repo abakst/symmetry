@@ -134,7 +134,7 @@ function install_dependencies {
 ## Building & Testing Stages
 
 function do_build {
-  loud stack build checker --test --no-run-tests --haddock --no-haddock-deps
+  loud stack build checker --test --no-run-tests --no-haddock-deps
 }
 
 function do_test {
