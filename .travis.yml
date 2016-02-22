@@ -6,6 +6,11 @@ branches:
   only:
     - build_test
 
+addons:
+  apt:
+    packages:
+    - libgmp-dev
+
 cache: 
   directories:
     - $HOME/.stack
