@@ -10,7 +10,7 @@ addons:
   apt:
     packages:
     - libgmp-dev
-    - cabal-install
+    - cabal-install-1.22
 
 cache: 
   directories:
