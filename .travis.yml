@@ -6,12 +6,7 @@ branches:
   only:
     - build_test
 
-addons:
-  apt:
-    packages:
-    - libgmp-dev
-    - ghc-7.10.2
-    - cabal-install-1.22
+addons: {apt: {packages: [libgmp-dev, ghc-7.10.2, cabal-install-1.22] }}
 
 cache: 
   directories:
