@@ -118,6 +118,12 @@ hInt x
   where
     mkInt = intE . toInteger 
 
+absPidIdx :: Pid -> Exp
+absPidIdx p
+  = If (InfixApp (vExp $ pidIdx p) opEq (vExp $ pidUnfold p))
+       (intE 0)
+       (intE 1)
+
 hReadState :: ConfigInfo a
            -> Pid
            -> String
@@ -126,6 +132,15 @@ hReadState _ (PConc _) f
   = ExpM $ vExp f
 hReadState _ p f
   = ExpM $ getMap (vExp f) (vExp (pidIdx p))
+
+hAbsReadState :: ConfigInfo a
+              -> Pid
+              -> String
+              -> HaskellModel
+hAbsReadState _ (PConc _) f
+  = ExpM $ vExp f
+hAbsReadState _ p f
+  = ExpM $ getMap (vExp f) (absPidIdx p)
 
 hIsUnfold ci p@(PAbs (GV v) _)
   = ExpM $ paren (infixApp e1 opEq e2)
@@ -191,6 +206,15 @@ hSetFields ci (PConc _) ups
   = StateUpM [ (f, e) | (f, ExpM e) <- ups ] []
 hSetFields ci p ups
   = StateUpM [ (f, putMap (vExp f) (vExp $ pidIdx p) e) | (f, ExpM e) <- ups ] []
+
+hAbsSetFields :: ConfigInfo a
+           -> Pid
+           -> [(String, HaskellModel)]
+           -> HaskellModel
+hAbsSetFields ci (PConc _) ups
+  = StateUpM [ (f, e) | (f, ExpM e) <- ups ] []
+hAbsSetFields ci p ups
+  = StateUpM [ (f, putMap (vExp f) (absPidIdx p) e) | (f, ExpM e) <- ups ] []
 
 hSetPC ci p e
   = hSetFields ci p [(pc p, e)]
@@ -282,20 +306,20 @@ hPred ci p (ILBop o e1 e2)
     qop Ge = opGte
 
 hReadPtrR ci p t
-  = hReadState ci p (ptrR ci p t)
+  = hAbsReadState ci p (ptrR ci p t)
 
 hIncrPtrR ci p t
-  = hSetFields ci p [(ptrR ci p t, hIncr ptrRExp)]
+  = hAbsSetFields ci p [(ptrR ci p t, hIncr ptrRExp)]
   where
     ptrRExp = hReadPtrR ci p t
 
 hIncrPtrW ci p q t
-  = hSetFields ci q [(ptrW ci q t, hIncr ptrWExp)]
+  = hAbsSetFields ci q [(ptrW ci q t, hIncr ptrWExp)]
   where
     ptrWExp = hReadPtrW ci p q t
 
 hReadPtrW ci p q t
-  = hReadState ci q (ptrW ci q t)
+  = hAbsReadState ci q (ptrW ci q t)
 
 hPutMessage ci p q (e,t)
   = StateUpM [] [((q, t), e')]
@@ -306,9 +330,8 @@ hGetMessage ci p@PConc{} (V v, t)
   = hSetFields ci p [(v, ExpM $ getVec (vExp (buf ci p t)) e')]
   where
     ExpM e' = hReadPtrR ci p t
-
 hGetMessage ci p@(PAbs (GV i) _) (V v, t)
-  = hSetFields ci p [(v, ExpM $ getVec2D (vExp (buf ci p t)) (vExp i) e')]
+  = hSetFields ci p [(v, ExpM $ getVec2D (vExp (buf ci p t)) (absPidIdx p) e')]
   where
     ExpM e' = hReadPtrR ci p t
 
@@ -482,8 +505,8 @@ updateBuf ci p@(PAbs _ _) t e
   = putVec2D v i j e 
     where
       v = vExp $ buf ci p t
-      i = vExp $ pidIdx p
-      j = getMap (vExp $ ptrW ci p t) (vExp $ pidIdx p)
+      i = absPidIdx p -- vExp $ pidIdx p
+      j = getMap (vExp $ ptrW ci p t) (absPidIdx p)
 updateBuf ci p t e
   = putVec v i e
   where
