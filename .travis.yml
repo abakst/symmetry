@@ -8,7 +8,7 @@ branches:
 
 matrix:
   include:
-    - env: SMT="z3" CABAL=1.22 GHC=7.10.2
+    - env: SMT="z3" CABAL=1.22 GHC=ghc-7.10.2
       addons: {apt: {packages: [libgmp-dev] }}
 
 cache: 
