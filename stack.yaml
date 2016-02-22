@@ -2,6 +2,6 @@ flags: {}
 packages:
 - ./liquid-fixpoint
 - '.'
-extra-deps:
-- plugins-1.5.5.0
-resolver: lts-5.3
+extra-deps: []
+compiler-check: newer-minor
+resolver: ghc-7.10.3
