@@ -252,7 +252,7 @@ stateDecl ci
     -- remove deriving classes (lh fails with them)
     dataReft     = printf "{-@ %s @-}" (pp (removeDerives dataDecl))
     fs = withStateFields ci concat absF mkPC mkPtrs mkVal mkInt mkGlob mkGlobInt 
-    absF _ b unf pcv = [mkBound b, mkCounter pcv, mkUnfold unf]
+    absF _ b unf pcv = [mkCounter pcv, mkUnfold unf]
     mkPtrs p rd wr  = mkInt p rd ++ mkInt p wr
     mkGlob v        = [([name v], valHType ci)]
     mkGlobInt v     = [([name v], intType)]

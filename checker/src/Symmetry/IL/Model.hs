@@ -282,8 +282,8 @@ ruleOfStmt ci p s@Iter { iterVar = V v, iterSet = set, annot = a }
   where
     b        = pcGuard ci p s `and` lt ve se
     notb     = pcGuard ci p s `and` (lneg (lt ve se))
-    loopUpds = [ updPC ci p (ident s) i ]
-    exitUpds = [ updPC ci p (ident s) j ]
+    loopUpds = [ updPC ci p (ident s) cont ]
+    exitUpds = [ updPC ci p (ident s) exit ]
     ve       = readState ci p v
     se       = case set of
                  S ss    -> readState ci p ss
@@ -295,6 +295,10 @@ ruleOfStmt ci p s@Iter { iterVar = V v, iterSet = set, annot = a }
     (i, j)   = case (ident <$>) <$> cfgNext ci p (ident a) of
                  Just [i, j] -> (i, j)
                  Just [i]    -> (i, -1)
+    (cont, exit) = if i == ident (annot (iterBody s)) then
+                     (i, j)
+                   else
+                     (j, i)
 
 ruleOfStmt ci p s@Loop { loopBody = s' }
   = [ mkRule ci p (pcGuard ci p s) ups (annot s') ]

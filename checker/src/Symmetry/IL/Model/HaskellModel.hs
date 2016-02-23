@@ -724,8 +724,9 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
         arbPtr p rd wr = arbInt p rd ++ arbInt p wr
         arbInt p v     = [bind v $ if isAbs p then arbEmptyMap else arbZero]
         arbVal p v     = [bind v $ if isAbs p then arbEmptyMap else arbNull]
-        arbGlob v      = [bind v arbPos]
         arbGlobVal v   = [bind v arbNull]
+        arbGlob v      = [bind v arbPos | v `notElem` absPidSets ]
+        absPidSets     = [ s | PAbs _ (S s) <- fst <$> cProcs (config ci) ]
         singletonMap k v = metaFunction "return"
                              [metaFunction "SymMap.singleton"
                                [k, infixApp v opMinus (intE 1)]]
@@ -784,7 +785,8 @@ stateFromJSONDecl ci =
         pcFs _ f      = [varParser f]
         ptrFs _ f1 f2 = [varParser f1, varParser f2]
         field _ f     = [varParser f]
-        glob          = return . varParser
+        glob f        = [varParser f | f `notElem` absPidSets]
+        absPidSets    = [ s | PAbs _ (S s) <- fst <$> cProcs (config ci) ]
 
 
         -- parseJSON _ = mzero
@@ -820,7 +822,8 @@ stateToJSONDecl ci =
         pcFs _ f      = [enc f]
         ptrFs _ f1 f2 = [enc f1, enc f2]
         field _ f     = [enc f]
-        glob          = return . enc
+        glob f        = [enc f | f `notElem` absPidSets]
+        absPidSets    = [ s | PAbs _ (S s) <- fst <$> cProcs (config ci) ]
 
         -- parseJSON _ = mzero
         tc_name = UnQual $ name "ToJSON"
