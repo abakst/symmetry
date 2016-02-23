@@ -4,7 +4,7 @@ sudo: false
 
 branches:
   only:
-    - build_test
+    - master
 
 matrix:
   include:
