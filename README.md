@@ -1,5 +1,4 @@
-# Symmetry
-
+# Symmetry  [![Build Status](https://travis-ci.org/abakst/symmetry.svg?branch=master)](https://travis-ci.org/abakst/symmetry)
 Protocol verifier for message passing programs.
 
 This package defines a DSL for writing message passing programs. In theory, programs written in this DSL
