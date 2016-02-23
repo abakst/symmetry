@@ -1,0 +1,162 @@
+#!/bin/bash
+
+set -eu
+set -o pipefail
+
+## Helper Functions
+
+function loud {
+  echo "$ $@"
+  $@
+}
+
+function stack {
+  $HOME/.local/bin/stack --no-terminal "$@"
+}
+
+# Source: https://github.com/travis-ci/travis-build/blob/fc4ae8a2ffa1f2b3a2f62533bbc4f8a9be19a8ae/lib/travis/build/script/templates/header.sh#L104-L123
+RED="\033[31;1m"
+GREEN="\033[32;1m"
+RESET="\033[0m"
+function travis_retry {
+  local result=0
+  local count=1
+  while [ $count -le 3 ]; do
+    [ $result -ne 0 ] && {
+      echo -e "\n${RED}The command \"$@\" failed. Retrying, $count of 3.${RESET}\n" >&2
+    }
+    set +e
+    "$@"
+    result=$?
+    set -e
+    [ $result -eq 0 ] && break
+    count=$(($count + 1))
+    sleep 1
+  done
+
+  [ $count -eq 4 ] && {
+    echo "\n${RED}The command \"$@\" failed 3 times.${RESET}\n" >&2
+  }
+
+  return $result
+}
+
+function prevent_timeout {
+  local cmd="$@"
+
+  $cmd &
+  local cmd_pid=$!
+
+  poke_stdout &
+  local poke_pid=$!
+
+  wait $cmd_pid
+  exit_code=$?
+
+  kill $poke_pid
+  (wait $poke_pid 2>/dev/null) || true
+
+  return $exit_code
+}
+
+function poke_stdout {
+  # Print an invisible character every minute
+  while true; do
+    echo -ne "\xE2\x80\x8B"
+    sleep 60
+  done
+}
+
+function pastebin {
+  curl -s -F 'clbin=<-' https://clbin.com
+}
+
+## Setup Stages
+
+function install_smt {
+  local smt="$1"
+
+  mkdir -p "${HOME}/.local/bin"
+  loud curl "http://goto.ucsd.edu/~gridaphobe/$smt" -o "${HOME}/.local/bin/$smt"
+  loud chmod a+x "${HOME}/.local/bin/$smt"
+}
+
+function install_stack {
+  local stack_version="$1"
+
+  mkdir -p "${HOME}/.local/bin"
+  mkdir -p '/tmp/stack'
+
+  pushd '/tmp/stack'
+
+  local dir_name="stack-${stack_version}-x86_64-linux"
+  local archive_name="${dir_name}.tar.gz"
+  local stack_url="https://github.com/commercialhaskell/stack/releases/download/v${stack_version}/${archive_name}"
+
+  loud wget "${stack_url}"
+  loud tar -xzvf "./${archive_name}"
+  loud cp "./${dir_name}/stack" "${HOME}/.local/bin/stack"
+  loud chmod a+x "${HOME}/.local/bin/stack"
+
+  popd
+}
+
+function configure_stack {
+  local ghc_version="$1"
+
+  echo "Configuring stack.yaml for ${ghc_version}..."
+
+  cat << EOF > 'stack.yaml'
+resolver: ${ghc_version}
+
+packages:
+- ./liquid-fixpoint
+- .
+EOF
+
+  loud cat stack.yaml
+}
+
+function setup_ghc {
+  loud stack setup
+  loud stack ghc -- --version
+}
+
+function install_dependencies {
+  echo "Solving dependency constraints..."
+  loud stack update
+  loud stack solver --update-config
+
+  echo "Installing dependencies..."
+  loud stack build checker --only-dependencies --test --no-run-tests --no-haddock-deps
+}
+
+## Building & Testing Stages
+
+function do_build {
+  loud stack build checker --test --no-run-tests --no-haddock-deps
+}
+
+function do_test {
+  local tests="$1"
+  local smt="$2"
+
+  local test_runner="$(stack path --dist-dir)/build/test/test"
+
+  loud prevent_timeout stack exec -- "${test_runner}" --pattern "$tests/" --smtsolver "$smt" -j2 +RTS -N2 -RTS
+}
+
+function dump_fail_logs {
+  find tests/logs/cur -type f -name '*log.fail' -print0 | while IFS= read -r -d $'\0' file; do
+    echo "${file}:"
+    echo "    $(pastebin < "${file}")"
+  done
+}
+
+## Run Test Stage
+
+stage="$1"
+shift
+
+$stage "$@"
+
