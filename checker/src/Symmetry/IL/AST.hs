@@ -192,21 +192,20 @@ data Stmt a = Skip { annot :: a }
                    , annot    :: a
                    }
 
-            {-used to create a loop with the given label-}
             | Loop { loopVar  :: LVar
-                    , loopBody :: Stmt a
-                    , annot    :: a
-                    }
-
-            | Choose { chooseVar :: Var
-                      , chooseSet :: Set
-                      , chooseBody :: Stmt a
-                      , annot      :: a
-                      }
+                   , loopBody :: Stmt a
+                   , annot    :: a
+                   }
 
             | Goto { varVar :: LVar
                    , annot  :: a
                    }
+
+            | Choose { chooseVar :: Var
+                     , chooseSet :: Set
+                     , chooseBody :: Stmt a
+                     , annot      :: a
+                     }
 
             | Assert { assertPred :: Pred
                       , annot :: a
@@ -389,7 +388,7 @@ singleton i j
   | i == ident j = I.empty
   | otherwise    = I.fromList [(i, [j])]
 
-nextStmts :: (Data a, Identable a)
+nextStmts :: forall a. (Typeable a, Data a, Identable a)
           => Int -> Stmt a -> I.IntMap [Stmt a]
 nextStmts toMe s@(NonDet ss i)
   = foldl' (\m -> joinMaps m . nextStmts (ident i))
@@ -420,9 +419,12 @@ nextStmts toMe s@(Iter _ _ t _)
 nextStmts toMe me@(Loop v s _)
   = singleton toMe me `joinMaps`
     I.fromList [(j, [me]) | j <- js ] `joinMaps`
-    nextStmts (ident s) s
+    nextStmts (ident me) s
   where
-    js = [ j | Goto v' j <- listify (const True) s, v' == v]
+    js = everything (++) (mkQ [] go) s
+    go :: Stmt a -> [Int]
+    go s'@Goto{} | varVar s' == v = [ident s']
+    go _                          = [] 
 
 nextStmts toMe me@(Choose _ _ s _)
   = singleton toMe me `joinMaps` nextStmts (ident me) s
