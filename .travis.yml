@@ -34,7 +34,7 @@ install:
  - scripts/travis install_dependencies
 
 script:
- - scripts/travis do_build && scripts/travis do_test "$TESTS" "$SMT"
+ - scripts/travis do_build # && scripts/travis do_test "$TESTS" "$SMT"
 
 after_failure:
  - scripts/travis dump_fail_logs
