@@ -244,7 +244,7 @@ data Stmt a = Skip { annot :: a }
 
 data SetBound = Known Set Int
               | Unknown Set Var
-                deriving (Eq, Read, Show, Typeable)
+                deriving (Eq, Read, Show, Data, Typeable)
 type Process a = (Pid, Stmt a)
 data Unfold = Conc Set Int deriving (Eq, Read, Show, Data, Typeable)
 
@@ -255,7 +255,7 @@ data Config a = Config {
   , cSets       :: [SetBound]
   , cUnfold     :: [Unfold]
   , cProcs      :: [Process a]
-  } deriving (Eq, Read, Show, Typeable)
+  } deriving (Eq, Read, Show, Data, Typeable)
 
 unboundVars :: forall a. Data a => Stmt a -> [Var]
 unboundVars s

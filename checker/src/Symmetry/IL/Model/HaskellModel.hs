@@ -218,16 +218,24 @@ hIte (ExpM b) (ExpM e1) (ExpM e2)
 hIte _ _ _
   = error "hIte (non expressions)"
 
+pidExp :: Pid -> Exp
+pidExp p@(PConc _)
+  = vExp $ pidConstructor p
+pidExp p@(PAbs _ _)
+  = App (vExp $ pidConstructor p) (vExp $ pidIdx p)
+
 hExpr :: Bool -> ConfigInfo a -> Pid -> ILExpr -> HaskellModel
 hExpr _ _ _ EUnit    = ExpM $ con unitCons    
 hExpr _ _ _ EString  = ExpM $ App (con stringCons) (strE "<str>")
 hExpr _ _ _ (EInt i) = hInt i
-hExpr _ _ _ (EPid q@(PConc _))
-  = ExpM $ App (con pidCons) (vExp $ pidConstructor q)
 hExpr _ ci p (EPid q@(PAbs (V v) _))
   = ExpM $ App (con pidCons) (App (vExp $ pidConstructor q) (unExp $ readState ci p v))
-hExpr _ _ _ (EPid q@(PAbs _ _))
-  = ExpM $ App (con pidCons) (App (vExp $ pidConstructor q) (vExp $ pidIdx q))
+hExpr _ _ _ (EPid q)
+  = ExpM $ App (con pidCons) (pidExp q)
+-- hExpr _ _ _ (EPid q@(PConc _))
+--   = ExpM $ App (con pidCons) (vExp $ pidConstructor q)
+-- hExpr _ _ _ (EPid q@(PAbs _ _))
+--   = ExpM $ App (con pidCons) (App (vExp $ pidConstructor q) (vExp $ pidIdx q))
 hExpr _ _ _ (EVar (GV v))
   = ExpM . vExp $ v
 hExpr _ ci p (EVar (VPtrR t))
@@ -426,32 +434,11 @@ printRules ci rs dl = prettyPrint $ FunBind matches
     mkRhs p grd a (GuardedUpM f cases)
       = GuardedRhs noLoc [Qualifier grd] (H.Case f (mkAlt p a <$> cases))
     mkRhs p grd a (StateUpM fups bufups)
-      = GuardedRhs noLoc [Qualifier grd] (mkCall p a fups bufups)
+      = GuardedRhs noLoc [Qualifier grd] (mkCall ci p a fups bufups)
     -- mkRhs p ms grd fups bufups
     --   = GuardedRhs noLoc [Qualifier grd] (mkCall p fups bufups)
     mkAlt p a (ile, StateUpM fups bufups)
-      = Alt noLoc (ilExpPat ile) (UnGuardedRhs (mkCall p a fups bufups)) Nothing
-    -- mkCase [(f, PatM p)] e
-    --   = Case (vExp f) [Alt noLoc p (UnGuardedRhs e) Nothing]
-    mkRecUp p fups
-      = RecUpdate (vExp state) [mkFieldUp p f e | (f,e) <- fups]
-    mkFieldUp _ f e
-      = FieldUpdate (UnQual (name f)) e
-    mkCall p (Just (ExpM e)) fups bufups
-      = mkAssert e (paren (mkCall p Nothing fups bufups))
-    mkCall p Nothing fups bufups
-      = Let (BDecls [PatBind noLoc
-                             (pvar $ name "qc_s'")
-                             (UnGuardedRhs $ mkRecUp p fups)
-                             Nothing]) $
-            metaFunction runState
-                         ((var $ name "qc_s'") : mkBufUps bufups ++ [vExp sched] ++
-                          (ifQC ci (Paren $ infix_syn ":"
-                                                      (var $ name "qc_s'")
-                                                      (var $ name "qc_ss"))))
-    mkBufUps bufups
-      = [ findUp p t bufups | p <- pids ci, t <- fst <$> tyMap ci]
-
+      = Alt noLoc (ilExpPat ile) (UnGuardedRhs (mkCall ci p a fups bufups)) Nothing
     rulesPid rules = let Rule p _ _ _ = head rules in p
     pidRule (Rule p _ _ _) = p
     eqPid  = (==) `on` pidRule
@@ -466,16 +453,50 @@ printRules ci rs dl = prettyPrint $ FunBind matches
     schedPVar  = pvar (name sched)
 
     mkDlMatch  = Match noLoc (name runState) dlpat Nothing dlRhs Nothing
-    dlRhs      = UnGuardedRhs (mkAssert dl (if isQC ci
-                                              then (var $ name "qc_ss")
-                                              else unit_con))
+    dlRhs      = UnGuardedRhs (mkAssert (Just (ExpM dl)) (if isQC ci
+                                                          then (var $ name "qc_ss")
+                                                          else unit_con))
     dlpat      = pat []
 
+mkCall ci p e fups bufups
+  = Let (BDecls [PatBind noLoc (pvar nextState) nextStateExp Nothing]) $
+        if isQC ci && isJust e then
+          eitherCall
+        else
+          metaFunction runState args
+  where
+    nextState = name "qc_s'"
+    nextStateExp = UnGuardedRhs . mkAssert e $ mkRecUp p fups
+                   
+    eitherCall =
+      metaFunction "either"
+        [ lamE noLoc [PWildCard] (App (Con . UnQual $ name "Left") (vExp "qc_ss"))
+        , lamE noLoc [pvar nextState] (metaFunction runState args)
+        , var nextState
+        ]
+
+
+    args = [var nextState] ++
+           mkBufUps bufups ++
+           [vExp sched] ++
+           ifQC ci (Paren $ infix_syn ":"
+                     (tuple [var nextState, pidExp p])
+                     (var $ name "qc_ss"))
+                   
+    mkRecUp p fups
+      = RecUpdate (vExp state) [mkFieldUp p f e | (f,e) <- fups]
+    mkBufUps bufups
+      = [ findUp p t bufups | p <- pids ci, t <- fst <$> tyMap ci]
+    mkFieldUp _ f e
+      = FieldUpdate (UnQual (name f)) e
     findUp p t bufups
       = maybe (vExp $ buf ci p t) (\(p, e) -> updateBuf ci p t e) $ findUpdate p t bufups
 
-mkAssert e k
+
+mkAssert (Just (ExpM e)) k
   = infixApp (metaFunction "liquidAssert" [e]) (op . sym $ "$") k
+mkAssert Nothing k
+  = k
 
 updateBuf :: ConfigInfo a -> Pid -> IL.Type -> Exp -> Exp
 updateBuf ci p@(PAbs _ _) t e
@@ -538,7 +559,7 @@ totalCall ci =
                 ([vExp state] ++
                  (vExp <$> bufArgs) ++
                  [vExp "sched"] ++
-                 ifQC ci (cons (vExp state) (vExp "states")))
+                 ifQC ci (vExp "states"))
       schedPat = pParen (PInfixApp (pvar (name "s")) list_cons_name (pvar (name "sched")))
 
 initialCall :: ConfigInfo a -> Decl
@@ -658,12 +679,11 @@ runTestDecl ci =
                             ((varn "s") : bufs ++ [varn "sched", emptyListCon])
         -- let l = runState ... in ...
         rhs = Do [ Generator noLoc (pvarn "sched") schedGen
-                 , LetStmt lets
                  , Qualifier (metaFunction "return" [retExp])
                  ]
         schedGen = metaFunction "generate"
-                   [ metaFunction "listOf1"
-                     [ metaFunction "oneof" [listE [ mkPid p | p <- pids ci ]] ]
+                   [ metaFunction "vectorOf"
+                     [ intE 500, metaFunction "oneof" [listE [ mkPid p | p <- pids ci ]] ]
                    ]
         mkPid p = if isAbs p then 
                     fmap_syn (pidCons p)
@@ -672,12 +692,12 @@ runTestDecl ci =
                     metaFunction "return" [pidCons p]
         pidChoose p = metaFunction (pidBound p) [vExp "s"]
         pidCons p   = Con . UnQual $ name (pidConstructor p) 
-        lets        = BDecls [PatBind noLoc (pvarn "l") (UnGuardedRhs rs_app) Nothing]
+        retExp      = tuple [vExp "s", rs_app]
                          -- ret_exp
-        -- (reverse l, sched)
-        retExp    = Tuple Boxed [ cons (vExp "s") (app (varn "reverse") (varn "l"))
-                                , varn "sched"
-                                ]
+        -- -- (reverse l, sched)
+        -- retExp    = Tuple Boxed [ cons (vExp "s") (app (varn "reverse") (varn "l"))
+        --                         , varn "sched"
+        --                         ]
 
 
 -- ### Arbitrary instances ##################################################
@@ -716,16 +736,20 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
         recExp    = RecConstr (UnQual (name stateRecordCons)) [FieldWildcard]
         bs        = withStateFields ci concat absArb arbPC arbPtr arbVal arbInt arbGlobVal arbGlob
         bind v e  = Generator noLoc (pvar (name v)) e
-        absArb _ b u pc = [ bind b arbPos
+        bindBound v e = case setBound ci (S v) of
+                          Just (Known _ i) -> bind v (metaFunction "return" [intE (toInteger i)]) 
+                          _                -> bind v e
+        absArb _ b u pc = [ bindBound b arbPos
                           , bind u (arbRange (intE 0) (vExp b))
                           , bind pc (singletonMap (intE 0) (vExp b))
                           ]
+        
         arbPC p v      = arbInt p v
         arbPtr p rd wr = arbInt p rd ++ arbInt p wr
         arbInt p v     = [bind v $ if isAbs p then arbEmptyMap else arbZero]
         arbVal p v     = [bind v $ if isAbs p then arbEmptyMap else arbNull]
         arbGlobVal v   = [bind v arbNull]
-        arbGlob v      = [bind v arbPos | v `notElem` absPidSets ]
+        arbGlob v      = [bindBound v arbPos | v `notElem` absPidSets ]
         absPidSets     = [ s | PAbs _ (S s) <- fst <$> cProcs (config ci) ]
         singletonMap k v = metaFunction "return"
                              [metaFunction "SymMap.singleton"
@@ -922,8 +946,11 @@ pidToJSONDecl ci =
         mkTy     = name . ("p" ++) . show
 
 -- ### "Static" functions to be included ##################################################
-qcDefsStr n ="fn          = \"states.json\"\n\
-\sample_size = " ++ show n ++ "\n"
+qcDefsStr n = unlines [ "fn = \"states.json\""
+                      , "sample_size = " ++ show n
+                      , "type Run = [(State, Pid)]"
+                      , "type QCResult = (State, Either Run Run)"
+                      ]
 
 qcMainStr="main :: IO () \n\
 \main = do b <- doesFileExist fn \n\
@@ -931,11 +958,10 @@ qcMainStr="main :: IO () \n\
 \\n\
 \          inputs  <- generate $ vector sample_size :: IO [State] \n\
 \          results <- mapM runTest inputs \n\
-\          let results' = filter (not . null . fst) results \n\
-\          C.writeFile fn (encodePretty $ toJSON results') \n\
+\          C.writeFile fn (encodePretty $ toJSON results) \n\
 \\n\
 \          bs <- C.readFile fn \n\
-\          let Just l = decode bs :: Maybe [([State],[Pid])] \n\
+\          let Just l = decode bs :: Maybe [QCResult] \n\
 \          Prelude.putStrLn (\"Successfull runs: \" ++ (show $ length l)) \n"
 
 

@@ -29,7 +29,7 @@ main = tests >>= run
 
 quickCheckTests
   = group "QuickCheck" [
-     testGroup "pos" <$> dirTests "tests/pos" [] ExitSuccess
+     testGroup "pos" <$> dirTests "checker/tests/pos" [] ExitSuccess
     ]
 
 ---------------------------------------------------------------------------
@@ -54,7 +54,7 @@ mkTest code dir file
       c          <- waitForProcess ph
       assertEqual "Wrong exit code" code c
   where
-    cmd = printf "cd %s && runghc %s --qc --verify --qc-samples 50" dir file
+    cmd = printf "cd %s && runghc %s --qc --verify --qc-samples 25" dir file
 
 binPath pkgName = do
   testPath <- getExecutablePath

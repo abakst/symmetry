@@ -63,16 +63,17 @@ stateToConfigs state
       types = tyenv state
       mkVars vs = map (IL.PVar . IL.V . ("x"++) . show) [1..length vs]
       mk1Config renv
-                = IL.boundAbs $
+                = IL.boundAbs .
+                  bigSubst $
                     IL.Config { IL.cTypes = types
                               , IL.cSets  = setBounds
-                              , IL.cProcs = bigSubst $ procs
+                              , IL.cProcs = procs
                               , IL.cUnfold = []
                               , IL.cGlobals = globals
                               , IL.cGlobalSets = (globalSets \\ sets)
                               }
         where
-          bigSubst :: [IL.Process ()] -> [IL.Process ()]
+          bigSubst :: IL.Config () -> IL.Config ()
           bigSubst c = everywhere (mkT goSub) c
           goSub :: IL.Set -> IL.Set
           goSub s  = maybe s (\(IL.V v) -> IL.S v) $ Data.List.lookup s setParams

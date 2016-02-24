@@ -334,6 +334,8 @@ ruleOfStmt ci p s@Die{}
   where
     q = Just (pred ci p (pFalse `pAnd` (annotPred (annot s))))
 
+let s = liquidAssert s        
+
 -------------------------
 -- Skip
 -------------------------
