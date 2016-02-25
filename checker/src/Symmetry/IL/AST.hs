@@ -9,7 +9,6 @@ import           Data.Traversable
 import           Data.Foldable
 import           Control.Monad.State hiding (mapM)
 import           Data.Typeable
-import           Text.Printf
 import           Data.Generics
 import           Data.List (nub, isPrefixOf, (\\))
 import qualified Data.Map.Strict as M
@@ -22,8 +21,8 @@ setSize = 1
 infty :: Int
 infty = 2
 
-data Set = S String
-         | SV String
+data Set = S { setName :: String }
+         | SV Var
          | SInts Int
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
@@ -59,13 +58,13 @@ isAbs (PAbs _ _) = True
 isAbs _          = False
 
 isBounded :: [SetBound] -> Pid -> Bool
-isBounded bs (PAbs _ s) = s `elem` [ s' | Known s' _ <- bs ]
+isBounded bs (PAbs _  s) = s `elem` [ s' | Known s' _ <- bs ]
 isBounded _ _           = False
 
 data Label = LL | RL | VL Var
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data Type = TUnit | TInt | TString | TPid | TProd Type Type | TSum Type Type
+data Type = TUnit | TInt | TString | TPid | TPidMulti | TProd Type Type | TSum Type Type
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data Pat = PUnit
@@ -108,6 +107,7 @@ data ILExpr = EUnit
             | EInt Int
             | EString
             | EPid Pid
+            | ESet Set
             | EVar Var
             | ELeft ILExpr
             | ERight ILExpr
@@ -252,7 +252,7 @@ data Config a = Config {
     cTypes      :: MTypeEnv
   , cGlobals    :: [(Var, Type)]
   , cGlobalSets :: [Set]
-  , cSets       :: [SetBound]
+  , cSetBounds  :: [SetBound]
   , cUnfold     :: [Unfold]
   , cProcs      :: [Process a]
   } deriving (Eq, Read, Show, Data, Typeable)
@@ -292,31 +292,18 @@ endLabels = nub . listify (isPrefixOf "end" . unlv)
 
 isBound :: Set -> [SetBound] -> Bool
 isBound s = any p
-  where p (Known s' _) = s == s'
+  where
+    p (Known s' _) = s == s'
+    p _            = False
 
 boundAbs :: Config a -> Config a
-boundAbs c@(Config {cProcs = ps, cSets = bs})
+boundAbs c@(Config {cProcs = ps, cSetBounds = bs})
   = c { cUnfold = us }
   where
     us = [ Conc s n | (PAbs _ s, _) <- ps , Known s' n <- bs , s == s']
 
 vars :: Pat -> [Var]
 vars = nub . listify (const True)
-
--- pvars :: MConstr -> [Var]
--- pvars
--- pvars (MTApp _ xs)   = [v | PVar v <- xs]
--- pvars (MCaseL _ c)   = pvars c
--- pvars (MCaseR _ c)   = pvars c
--- pvars (MTProd c1 c2) = nub (pvars c1 ++ pvars c2)
-
--- lvars ::  -> [Var]
--- lvars (MTApp _ _)       = []
--- lvars (MCaseL (VL l) c) = l : lvars c
--- lvars (MCaseR (VL l) c) = l : lvars c
--- lvars (MCaseL _ c)      = lvars c
--- lvars (MCaseR _ c)      = lvars c
--- lvars (MTProd c1 c2)    = nub (lvars c1 ++ lvars c2)
 
 -- | Typeclass tomfoolery
 instance Traversable Stmt where
@@ -343,7 +330,7 @@ instance Traversable Stmt where
   traverse f (Case v pl pr sl sr a)
     = mkCase <$> f a <*> traverse f sl <*> traverse f sr
     where
-      mkCase a l r = Case v pl pr l r a
+      mkCase a' l r = Case v pl pr l r a'
   traverse f (NonDet ss a)
     = flip NonDet <$> f a <*> traverse (traverse f) ss
   traverse f (Assign v e a)
@@ -462,7 +449,7 @@ instance Pretty Var where
 
 instance Pretty Set where
   pretty (S x)   = text x
-  pretty (SV x)  = text x
+  pretty (SV x)  = pretty x
   pretty (SInts n) = brackets (int 1 <+> text ".." <+> int n)
 
 instance Pretty Pid where
@@ -475,6 +462,7 @@ instance Pretty Pid where
   pretty (PUnfold _ s i)
     = text "pid" <> parens (pretty s <> brackets (int i))
 
+($$) :: Doc -> Doc -> Doc
 x $$ y  = (x <> line <> y)
 
 instance Pretty Label where
@@ -495,6 +483,7 @@ instance Pretty ILExpr where
   pretty (EInt i)  = int i
   pretty (EVar v)  = pretty v
   pretty (EPid p)  = pretty p
+  pretty (ESet p)  = pretty p
   pretty (ELeft  e) = text "inl" <> parens (pretty e)
   pretty (ERight e) = text "inr" <> parens (pretty e)
   pretty (EPair e1 e2) = tupled [pretty e1, pretty e2]
@@ -514,6 +503,7 @@ instance Pretty Type where
   pretty TInt      = text "int"
   pretty TString   = text "string"
   pretty TPid      = text "pid"
+  pretty TPidMulti = text "pid set"
   pretty (TSum p1 p2)  = parens (pretty p1 <+> text "+" <+> pretty p2)
   pretty (TProd p1 p2) = parens (pretty p1 <+> text "*" <+> pretty p2)
 
@@ -596,7 +586,7 @@ prettyMsg (t, c, v)
     text "C" <> int c <> parens (pretty v)
 
 instance Pretty a => Pretty (Config a) where
-  pretty (Config {cProcs = ps, cSets = bs, cGlobals = gs, cGlobalSets = gsets})
+  pretty (Config {cProcs = ps, cSetBounds = bs, cGlobals = gs, cGlobalSets = gsets})
     = vsep (map goGlob gs ++
             map goGlobS gsets ++
             map goB bs ++

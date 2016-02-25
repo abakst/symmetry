@@ -15,12 +15,7 @@ le x y = (lt x y) `or` (eq x y)
 
 pingServer :: forall r repr. DSL repr => repr (Pid r -> Process repr ())
 pingServer = lam $ \p ->
-             do ptrw  <- readPtrW (arb :: repr ())
-                ptrr  <- readPtrR (arb :: repr ())
-                l0    <- readGhost p "l0"
-                myIdx <- readMyIdx
-                -- assert (not (myIdx `lt` l0) `or` (ptrw `eq` int 1))
-                assert (ptrr `eq` int 0)
+             do myIdx <- readMyIdx
                 (_ :: repr ()) <- recv
                 return tt
 
@@ -29,11 +24,6 @@ master = lam $ \r -> lam $ \n ->
    do me <- self
       ps <- spawnMany r n (app pingServer me)
       doMany "l0" ps body
-
-      -- One of the invariants...
-      c    <- readGhost me "l0"
-      assert (c `eq` n)
-
       return tt
   where
     body = lam $ \p -> do send p tt

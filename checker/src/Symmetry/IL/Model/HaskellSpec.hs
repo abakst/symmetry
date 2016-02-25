@@ -1,13 +1,10 @@
 {-# Language ParallelListComp #-}
 {-# Language ViewPatterns #-}
+{-# Language RecordWildCards #-}
 {-# Language ScopedTypeVariables #-}
 module Symmetry.IL.Model.HaskellSpec where
 
--- import           Data.Char
 import           Data.Generics
--- import qualified Data.IntMap.Strict as M
--- import qualified Data.IntSet as S
--- import qualified Data.Map.Strict as Map
 import           Data.Foldable as Fold
 import           Data.List
 import           Data.Maybe
@@ -74,7 +71,7 @@ eImp p q
 
 pidToExpr :: IL.Pid -> F.Expr        
 pidToExpr p@(PConc _) = eVar $ pid p        
-pidToExpr p@(PAbs (V v) (S s)) = eApp (pid p) [eVar $ pidIdx p]
+pidToExpr p@(PAbs (V v) s) = eApp (pid p) [eVar $ pidIdx p]
 
 eReadState :: (Symbolic a, Symbolic b) => a -> b -> F.Expr                        
 eReadState s f 
@@ -92,7 +89,7 @@ eWrPtr ci p t s
 
 initOfPid :: forall a. (Data a, IL.Identable a)
           => ConfigInfo a -> IL.Process a -> F.Expr
-initOfPid ci (p@(PAbs _ (S s)), stmt)
+initOfPid ci (p@(PAbs _ s), stmt)
   = pAnd preds 
   where
     preds    = [ counterInit
@@ -140,12 +137,13 @@ initOfPid ci (p@(PConc _), stmt)
 
 schedExprOfPid :: IL.Identable a
                => ConfigInfo a -> IL.Pid -> Symbol -> F.Expr
-schedExprOfPid ci p@(IL.PAbs v (IL.S s)) state
+schedExprOfPid ci p@(IL.PAbs v s) state
   = subst1 (pAnd ([pcEqZero, idxBounds] ++
                   concat [[rdEqZero t, wrEqZero t, wrGtZero t] | t <- fst <$> tyMap ci]))
            (symbol (pidIdx p), eVar "v")
     where
-      idxBounds  = eRange (eVar "v") (F.expr (0 :: Int)) (eReadState state s)
+      idx        = IL.setName s
+      idxBounds  = eRange (eVar "v") (F.expr (0 :: Int)) (eReadState state idx)
       pcEqZero   = eEqZero (eReadMap (eReadState state (pc p)) (eILVar v))
       rdEqZero t = eRangeI eZero (eReadMap (eRdPtr ci p t state) (eILVar v)) (eReadMap (eWrPtr ci p t state) (eILVar v))
       wrEqZero t = eEqZero (eReadMap (eWrPtr ci p t state) (eILVar v))
@@ -226,15 +224,34 @@ removeDerives _                          = undefined
 ---------------
 -- State Fields
 ---------------
+data StateFieldVisitor a b
+     = SFV { absF :: Pid -> String -> String -> String -> a
+           , pcF :: Pid -> String -> a
+           , ptrF :: Pid -> String -> String -> a
+           , valF :: Pid -> String -> a
+           , intF :: Pid -> String -> a
+           , globF :: String -> a
+           , globIntF :: String -> a
+           , combine :: [a] -> b
+           }
 
-withStateFields ci f absF pcF ptrF valF intF globF globIntF
-  = f ([ absF p (pidBound p) (pidUnfold p) (pcCounter p) | p <- pids ci, isAbs p ] ++
-       [ pcF p  (pc p)        | p <- pids ci ] ++
-       [ ptrF p (ptrR ci p t) (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci ] ++
-       [ valF p v | (p, v) <- valVars (stateVars ci) ]  ++
-       [ intF p v | (p, v) <- intVars (stateVars ci) ]  ++
-       [ globF v | v <- globVals (stateVars ci) ] ++
-       [ globIntF v | V v <- setBoundVars ci ])
+withStateFields :: ConfigInfo t -> StateFieldVisitor a b -> b
+withStateFields ci SFV{..}
+  = combine (globIntFs ++
+             absFs ++
+             pcFs ++
+             ptrFs ++
+             valFs ++
+             intFs ++
+             globFs)
+  where
+    globIntFs = [ globIntF v | V v <- setBoundVars ci ]
+    absFs     = [ absF p (pidBound p) (pidUnfold p) (pcCounter p) | p <- pids ci, isAbs p ]
+    pcFs      = [ pcF p  (pc p)        | p <- pids ci ]
+    ptrFs     = [ ptrF p (ptrR ci p t) (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci ] 
+    valFs     = [ valF p v | (p, v) <- valVars (stateVars ci) ]
+    intFs     = [ intF p v | (p, v) <- intVars (stateVars ci) ] 
+    globFs    = [ globF v | v <- globVals (stateVars ci) ] 
 
 stateDecl :: ConfigInfo a
           -> ([Decl], String)
@@ -251,12 +268,20 @@ stateDecl ci
 
     -- remove deriving classes (lh fails with them)
     dataReft     = printf "{-@ %s @-}" (pp (removeDerives dataDecl))
-    fs = withStateFields ci concat absF mkPC mkPtrs mkVal mkInt mkGlob mkGlobInt 
-    absF _ b unf pcv = [mkBound b, mkCounter pcv, mkUnfold unf]
+    fs = withStateFields ci SFV { combine = concat
+                                , absF = mkAbs
+                                , pcF = mkPC
+                                , ptrF = mkPtrs
+                                , valF = mkVal
+                                , intF = mkInt
+                                , globF = mkGlob
+                                , globIntF = mkGlobInt
+                                }
+    mkAbs _ b unf pcv = [mkBound b, mkCounter pcv, mkUnfold unf]
     mkPtrs p rd wr  = mkInt p rd ++ mkInt p wr
     mkGlob v        = [([name v], valHType ci)]
     mkGlobInt v     = [([name v], intType) | v `notElem` absPidSets]
-    absPidSets      = [ s | PAbs _ (S s) <- fst <$> cProcs (config ci) ]
+    absPidSets      = [ IL.setName s | PAbs _ s <- fst <$> cProcs (config ci) ]
 
     mkUnfold p  = ([name p], intType)
     mkBound p   = ([name p], intType)
@@ -276,6 +301,7 @@ valHType :: ConfigInfo a -> Type
 valHType ci = TyApp (TyCon (UnQual (name valType)))
                     (pidPreApp ci)
 
+pidPreApp :: ConfigInfo a -> Type
 pidPreApp ci
   = foldl' TyApp (TyCon . UnQual $ name pidPre) pidPreArgs
   where

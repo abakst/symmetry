@@ -13,12 +13,14 @@ import Text.PrettyPrint.Leijen (pretty)
 import Debug.Trace
 
 -- Values    
-unitCons, nullCons, intCons, stringCons, pidCons, leftCons, rightCons, pairCons :: String
+unitCons, nullCons, intCons, stringCons, pidCons, pidMultiCons, leftCons, rightCons, pairCons :: String
 unitCons   = "VUnit"
 nullCons   = "VUnInit"
 intCons    = "VInt"
 stringCons = "VString"
 pidCons    = "VPid"
+pidMultiCons = "VPidMulti"
+setCons    = "VSet"
 rightCons  = "VInR"
 leftCons   = "VInL"
 pairCons   = "VPair"
@@ -58,7 +60,7 @@ prefix x (y:ys) = x ++ (toUpper y : ys)
 pid :: Pid -> String
 pid (PConc i)      = prefix "pid" . prefix "r" $ show i
 pid (PAbs _ (S s)) = prefix "pid" s
-pid _ = error "pid: non conc or abs"
+pid p = error ("pid: non conc or abs: " ++ show p)
 
 pidUnfold :: Pid -> String
 pidUnfold p@(PAbs _ _) = prefix (pid p) "k"
@@ -111,6 +113,8 @@ class ILModel e where
   int       :: Int -> e
   movePCCounter :: ConfigInfo a -> Pid -> e -> e -> e
   readMap   :: e -> e -> e
+
+  readSetBound :: ConfigInfo a -> Pid -> Set -> e
 
   readPC    :: ConfigInfo a -> Pid -> e
   readPCCounter :: ConfigInfo a -> Pid -> e
@@ -204,6 +208,19 @@ ruleOfStmt :: (Identable a, Data a, ILModel e)
 -------------------------
 -- p!e::t
 -------------------------
+ruleOfStmt ci p s@Send { sndPid = EPid (PAbs i set@(SV _)), sndMsg = (t, e) }
+  = [ mkRule ci p grd (matchVal ci p (expr ci p (ESet set)) cases) (annot s) ]
+    where
+      grd      = pcGuard ci p s
+      sets     = let (ks, us) = allSets ci in
+                 [k | Known k _ <- ks] ++ [u | Unknown u _ <- us]
+      cases    = mkCase <$> sets 
+      mkCase q = (ESet q, ups q)
+      ups q    = seqUpdates ci p [ incrPtrW ci p (PAbs i q) t
+                                 , putMessage ci p (PAbs i q) (e, t)
+                                 , nextPC ci p s
+                                 ]
+
 ruleOfStmt ci p s@Send { sndPid = EPid q, sndMsg = (t, e) }
   = [mkRule ci p grd (seqUpdates ci p upds) (annot s)]
   where
@@ -285,13 +302,17 @@ ruleOfStmt ci p s@Iter { iterVar = V v, iterSet = set, annot = a }
     loopUpds = [ updPC ci p (ident s) cont ]
     exitUpds = [ updPC ci p (ident s) exit ]
     ve       = readState ci p v
-    se       = case set of
-                 S ss    -> readState ci p ss
-                            -- case setBound ci set of
-                            --   Just (Known _ n) -> int n
-                            --   Just (Unknown _ (V x)) -> readState ci p x
-                            --   Nothing -> readState ci p ss
-                 SInts n -> int n
+    se       = readSetBound ci p set
+               -- case set of
+               --   S ss    -> readState ci p ss
+               --   SV _    -> setBound ci p set
+               --              -- Case analysis on sets...? 
+               --              error "TBD" 
+               --              -- case setBound ci set of
+               --              --   Just (Known _ n) -> int n
+               --              --   Just (Unknown _ (V x)) -> readState ci p x
+               --              --   Nothing -> readState ci p ss
+               --   -- SInts n -> int n
     (i, j)   = case (ident <$>) <$> cfgNext ci p (ident a) of
                  Just [i, j] -> (i, j)
                  Just [i]    -> (i, -1)

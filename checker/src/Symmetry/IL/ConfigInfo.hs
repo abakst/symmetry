@@ -81,9 +81,15 @@ setBound ci s
   | not (List.null unknown) = Just $ head unknown
   | otherwise               = Nothing
   where
-    bs = cSets (config ci)
+    bs = cSetBounds (config ci)
     known = [ k | k@(Known s' _) <- bs, s == s' ]
     unknown = [ u | u@(Unknown s' _) <- bs, s == s' ]
+
+allSets :: ConfigInfo a -> ([SetBound], [SetBound])
+allSets ci 
+  = ([ k | k@(Known _ _) <- sets], [ u | u@(Unknown _ _) <- sets])
+  where
+    sets = cSetBounds (config ci)
 
 setBoundVars :: ConfigInfo a -> [Var]
 setBoundVars ci

@@ -76,21 +76,22 @@ get  = lam $ \db -> lam $ \k ->
             return msg
 
 worker :: DSL repr => repr (Process repr ())
-worker  = do let worker_h = lam $ \worker -> lam $ \map ->
-                              do msg :: repr MsgT <- recv
-                                 match msg
-                                   (lam $ \m ->
-                                      do let k    = proj1 m
-                                         let port = proj2 m
-                                         res <- app2 SrcHelper.lookup k map
-                                         send port res
-                                         app worker map)
-                                   (lam $ \m ->
-                                      do let k = proj1 m
-                                         let v = proj2 m
-                                         app worker (cons (pair k v) map))
-             app (fixM worker_h) nil
-             return tt
+worker
+  = do app (fixM workerLoop) nil
+       return tt
+  where
+    workerLoop
+      = lam $ \loop -> lam $ \map -> do
+           msg :: repr MsgT <- recv
+           match msg
+             (lam $ \m ->
+                do let (k, p) = (proj1 m, proj2 m)
+                   result <- app2 SrcHelper.lookup k map
+                   send p result
+                   map |> loop)
+             (lam $ \m ->
+                do let (k, v) = (proj1 m, proj2 m)
+                   cons (pair k v) map |> loop)
 
 master :: DSL repr => repr (Process repr ())
 master  = do db <- createDB
@@ -104,7 +105,7 @@ master  = do db <- createDB
                              (lam $ \ht -> do let k = proj1 $ proj1 ht
                                               r <- app2 get db k
                                               ret tt)
-             forever $ return tt
+             return tt
 
 workerCount       = 4
 workerCount_div_2 = workerCount `div` 2

@@ -154,11 +154,6 @@ run1Cfg opt outd cfg
     pprint c = print $
                text "Config" <>
                nest 2 (line  <> pretty c)
-    verb = optVerbose opt
-    fileExists f = catch (openFile f ReadMode >> return True)
-                         (\(_ :: IOException) -> return False)
-    filterBoundedAbs c@(Config { cSets = bs }) =
-      c { cProcs = [ p | p <- cProcs c, not (isBounded bs (fst p)) ] }
 
 
 report status

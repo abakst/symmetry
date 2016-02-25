@@ -13,6 +13,7 @@ nonDetRange = undefined
            | VUnInit {}
            | VInt { vInt :: Int }
            | VString { vString :: String }
+           | VSet { vSetName :: String }
            | VPid { vPid :: p }
            | VInR { vInR :: Val p }
            | VInL { vInL :: Val p }
@@ -22,22 +23,15 @@ data Val p = VUnit {}
              | VUnInit {}
              | VInt { vInt :: Int }
              | VString { vString :: String }
+             | VSet { vSetName :: String }
              | VPid { vPid :: p }
              | VInR { vInR :: Val p }
              | VInL { vInL :: Val p }
              | VPair { vLeft :: Val p, vRight :: Val p }
+             deriving (Show)
 
-instance (Show a) => Show (Val a) where
-  show VUnit       = "VUnit"
-  show VUnInit     = "VUnInit"
-  show (VInt i)    = "VInt " ++ (show i)
-  show (VString s) = "VString " ++ s
-  show (VPid p)    = "VPid " ++ (show p)
-  show (VInR v)    = "VInR " ++ (show v)
-  show (VInL v)    = "VInL " ++ (show v)
-  show (VPair l r) = "VPair (" ++ show l ++ ", " ++ show r ++ ")"
+isVUnit, isVUnInit, isVInt, isVString, isVPid, isVInR, isVInL, isVPair, isSet :: Val p -> Bool
 
-isVUnit, isVUnInit, isVInt, isVString, isVPid, isVInR, isVInL, isVPair :: Val p -> Bool
 isVUnit VUnit{} = True
 isVUnit _       = False
 
@@ -49,6 +43,10 @@ isVInt _      = False
 
 isVString VString{} = True
 isVString _         = False
+
+isVSet VSet{} = True
+isVSet _      = False
+                
 
 isVPid VPid{} = True
 isVPid _         = False
@@ -70,3 +68,4 @@ isVPair _         = False
 {-@ measure isVInL    @-}
 {-@ measure isVInR    @-}
 {-@ measure isVPair   @-}
+{-@ measure isVSet    @-}

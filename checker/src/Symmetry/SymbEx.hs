@@ -39,7 +39,7 @@ envEq re1 re2
   = M.keys re1 == M.keys re2 &&
     M.foldlWithKey' check True re1
   where
-    check b k (n,p) = let (n', p') = re2 M.! k in
+    check _ k (n,p) = let (n', p') = re2 M.! k in
                       p == p' && checkN n n'
     checkN :: AbsVal Int -> AbsVal Int -> Bool
     checkN (AInt x y) (AInt x' y') = (x `eqInt` x') && y == y'
@@ -58,44 +58,50 @@ type SymbExM a = State SymbState a
 
 stateToConfigs :: SymbState -> [IL.Config ()]
 stateToConfigs state
-  = map mk1Config (renvs state)
-    where
-      types = tyenv state
-      mkVars vs = map (IL.PVar . IL.V . ("x"++) . show) [1..length vs]
-      mk1Config renv
-                = IL.boundAbs .
-                  bigSubst $
-                    IL.Config { IL.cTypes = types
-                              , IL.cSets  = setBounds
-                              , IL.cProcs = procs
-                              , IL.cUnfold = []
-                              , IL.cGlobals = globals
-                              , IL.cGlobalSets = (globalSets \\ sets)
-                              }
-        where
-          bigSubst :: IL.Config () -> IL.Config ()
-          bigSubst c = everywhere (mkT goSub) c
-          goSub :: IL.Set -> IL.Set
-          goSub s  = maybe s (\(IL.V v) -> IL.S v) $ Data.List.lookup s setParams
-          kvs   = M.toList renv
-          concProcs = [ (IL.PConc n, s) | (S (RS n), (_, s)) <- kvs ]
-          absProcs  = [ (roleToPid r, s) | (M r, (_, s)) <- kvs ]
-          setBounds = [ IL.Known   (roleToSet r) x | (M r, (AInt _ (Just x), _)) <- kvs ]
-          setParams = [ (roleToSet r, varToIL x) | (M r, (AInt (Just (EVar x)) _, _)) <- kvs ]
-          sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
-          procs = concProcs ++ absProcs
-          globals = mapMaybe lookupType
-                  . nub
-                  . concatMap IL.unboundVars
-                  $ map snd procs
-          globalSets = nub
-                     . concatMap IL.unboundSets
-                     $ map snd procs
-          lookupType v = something (mkQ Nothing (goType v)) procs
-          goType :: IL.Var -> IL.Stmt () -> Maybe (IL.Var, IL.Type)
-          goType v IL.Send{IL.sndMsg = (t,e)} = do t <- calcType v e t
-                                                   return (v, t)
-          goType _ _ = Nothing
+  = map (mk1Config state) (renvs state)
+
+mk1Config state renv
+  = -- IL.boundAbs $
+    -- bigSubst $
+    IL.Config { IL.cTypes = types
+              , IL.cSetBounds  = setBounds
+              , IL.cProcs = procs
+              , IL.cUnfold = []
+              , IL.cGlobals = globals
+              , IL.cGlobalSets = (globalSets \\ sets)
+              }
+  where
+    types = tyenv state
+    mkVars vs = map (IL.PVar . IL.V . ("x"++) . show) [1..length vs]
+    kvs   = M.toList renv
+    concProcs = [ (IL.PConc n, s) | (S (RS n), (_, s)) <- kvs ]
+    absProcs  = [ (roleToPid r, s) | (M r, (_, s)) <- kvs ]
+    setBounds = mapMaybe mkBound kvs
+    sets  = [ s | (IL.PAbs _ s, _) <- absProcs ]
+    procs = concProcs ++ absProcs
+    globals = mapMaybe lookupType
+              . nub
+              . concatMap IL.unboundVars
+              $ map snd procs
+    -- TODO: does this make sense anymore?
+    globalSets = nub
+                   -- TODO: fix this, it's wrong and bad
+                 . (++ [ IL.S s | IL.Unknown _ (IL.V s) <- setBounds ])
+                 . concatMap IL.unboundSets
+                 $ map snd procs
+    lookupType v = something (mkQ Nothing (goType v)) procs
+    goType :: IL.Var -> IL.Stmt () -> Maybe (IL.Var, IL.Type)
+    goType v IL.Send{IL.sndMsg = (t,e)} = do t <- calcType v e t
+                                             return (v, t)
+    goType _ _ = Nothing
+
+mkBound :: (Role, (AbsVal Int, a)) -> Maybe IL.SetBound
+mkBound (M r, (AInt _ (Just x), _))
+  = Just (IL.Known (roleToSet r) x)
+mkBound (M r, (AInt (Just (EVar x)) _,  _))
+  = Just (IL.Unknown (roleToSet r) (varToIL x))
+mkBound _
+  = Nothing
 
 calcType :: IL.Var -> IL.ILExpr -> IL.Type -> Maybe IL.Type
 calcType v (IL.EVar v') t
@@ -206,6 +212,7 @@ setExpr e (AString _)     = AString (Just e)
 setExpr e (AInt _ i)      = AInt  (Just e) i
 setExpr e (ASum _ l r)    = ASum  (Just e) l r
 setExpr e (APid _ p)      = APid  (Just e) p
+setExpr e (APidMulti _ p) = APidMulti  (Just e) p
 setExpr e (AProd _ p1 p2) = AProd (Just e) p1 p2
 
 getVar :: AbsVal t -> Maybe (Expr t)
@@ -228,7 +235,7 @@ absToType x = go (typeRep x)
         = IL.TPid
       | tyConName (typeRepTyCon a) == "Pid" &&
         "RMulti" == (tyConName . typeRepTyCon $ head as)
-        = IL.TPid -- probably not right
+        = IL.TPidMulti -- probably not right
       | tyConName (typeRepTyCon a) == "[]" &&
         tyConName (typeRepTyCon $ head as) == "Char"
         = IL.TString
@@ -362,10 +369,12 @@ varToIL (VPtrW x) = IL.VPtrW x
 varToIL (VIdx r)  = roleIdxVar r
 
 varToILSet :: Var a -> IL.Set
-varToILSet (V x) = IL.S ("x" ++ x)
+varToILSet v
+  = let IL.V s = varToIL v in IL.S s
 
 varToILSetVar :: Var a -> IL.Set
-varToILSetVar (V x) = IL.SV ("x" ++ x)
+varToILSetVar v
+  = IL.SV (varToIL v)
 
 pidAbsValToIL :: (?callStack :: CallStack)
               => AbsVal (Pid RSing) -> IL.ILExpr
@@ -398,6 +407,9 @@ absToIL (AInt  _ (Just i)) = [IL.EInt i]
 absToIL (AString _)        = [IL.EString]
 absToIL (AList _ _)        = error "TBD: absToIL List"
 
+  -- APidElem   :: Maybe (Expr (Pid RMulti)) -> Maybe (Var Int) -> L.Pid (Maybe RMulti) -> AbsVal (Pid RSing)
+absToIL (APidElem (Just e) (Just i) (Pid _))
+  = [IL.EPid (IL.PAbs (varToIL i) (IL.SV (let IL.EVar v = absExpToIL e in v)))]
 absToIL (APidElem Nothing (Just i) (Pid (Just r)))
   = [IL.EPid (IL.PAbs (varToIL i) (roleToSet r))]
 
@@ -405,11 +417,12 @@ absToIL (APid (Just x) _) = [absExpToIL x]
 absToIL (APid Nothing (Pid (Just (RS r))))             = [IL.EPid (IL.PConc r)]
 absToIL (APid Nothing (Pid (Just (RSelf (S (RS r)))))) = [IL.EPid (IL.PConc r)]
 absToIL (APid Nothing (Pid (Just (RSelf (M r)))))      = [IL.EPid (roleToPid r)]
-absToIL (APid Nothing (Pid (Just (RElem (RM r)))))     = error "TBD: elem"
+absToIL (APid Nothing (Pid (Just (RElem (RM _)))))     = error "TBD: elem"
 absToIL (APid Nothing (Pid Nothing))                   = error "wut"
 
-absToIL (APidMulti (Just x) _)              = error "TBD: PidMulti" 
-absToIL (APidMulti Nothing (Pid (Just r)))  = error "TBD: PidMulti" 
+absToIL (APidMulti (Just x) _)              = [absExpToIL x]
+absToIL (APidMulti Nothing (Pid (Just r)))  = [IL.ESet (roleToSet r)]
+absToIL (APidMulti Nothing p) = error ("absToIL " ++ show p)
 
 absToIL (ASum (Just x) _ _) = [absExpToIL x]
 absToIL (ASum _ (Just a) Nothing)  = IL.ELeft <$> absToIL a
@@ -427,6 +440,8 @@ absToIL (AProd _ a b) = do x <- absToIL a
                            return $ IL.EPair x y
 
 absToIL (APred _ _) = error "absToIL APred"
+
+absToIL p = error "absToIL TBD"
 -------------------------------------------------
 -- | Generate IL from primitive Processes
 -------------------------------------------------
@@ -458,7 +473,7 @@ sendToIL p m = do
 
 choosePid :: (?callStack :: CallStack)
           => AbsVal (Pid RSing) -> (IL.ILExpr -> IL.Stmt ()) -> SymbExM (IL.Stmt ())
-choosePid p@(APid _ (Pid (Just (RElem r)))) f
+choosePid (APid _ (Pid (Just (RElem r)))) f
   = do v <- freshVar
        let pv = IL.EPid (IL.PAbs (varToIL v) (roleToSet r))-- IL.EVar (varToIL v)
        return $ IL.Choose (varToIL v) (roleToSet r) (f pv) ()
@@ -884,7 +899,9 @@ symDoMany s p f
                 return $ AProc Nothing (iterVar v x s) (error "TBD: symDoMany")
     where
       incrVar v = (`seqStmt` incr v)
-      iter v r s    = IL.Iter (varToIL v) (roleToSet r) (incrVar v s) ()
+      iter v r s    = IL.Iter (varToIL v)
+                              (roleToSet r)
+                              (incrVar v s) ()
       iterVar v x s = IL.Iter (varToIL v) (varToILSetVar x) (incrVar v s) ()
 
 roleToSet :: RMulti -> IL.Set

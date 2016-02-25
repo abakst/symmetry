@@ -31,6 +31,7 @@ instance DefaultMap (Val p) where
            | VUnInit {}
            | VInt { vInt :: Int }
            | VString { vString :: String }
+           | VSet { vSetName :: String }
            | VPid { vPid :: p }
            | VInR { vInR :: Val p }
            | VInL { vInL :: Val p }
@@ -40,20 +41,12 @@ data Val p = VUnit {}
              | VUnInit {}
              | VInt { vInt :: Int }
              | VString { vString :: String }
+             | VSet { vSetName :: String }
              | VPid { vPid :: p }
              | VInR { vInR :: Val p }
              | VInL { vInL :: Val p }
              | VPair { vLeft :: Val p, vRight :: Val p }
-
-instance (Show a) => Show (Val a) where
-  show VUnit       = "VUnit"
-  show VUnInit     = "VUnInit"
-  show (VInt i)    = "VInt " ++ (show i)
-  show (VString s) = "VString " ++ s
-  show (VPid p)    = "VPid " ++ (show p)
-  show (VInR v)    = "VInR " ++ (show v)
-  show (VInL v)    = "VInL " ++ (show v)
-  show (VPair l r) = "VPair (" ++ show l ++ ", " ++ show r ++ ")"
+               deriving (Show)
 
 instance (FromJSON p) => FromJSON (Val p) where
   parseJSON (Object o) = case H.toList o of
@@ -62,6 +55,7 @@ instance (FromJSON p) => FromJSON (Val p) where
       | key == "VUnInit" -> return VUnInit
       | key == "VInt"    -> VInt    <$> parseJSON val
       | key == "VString" -> VString <$> parseJSON val
+      | key == "VSet"    -> VSet    <$> parseJSON val
       | key == "VPid"    -> VPid    <$> parseJSON val
       | key == "VInR"    -> VInR    <$> parseJSON val
       | key == "VInL"    -> VInL    <$> parseJSON val
@@ -76,6 +70,7 @@ instance (ToJSON p) => ToJSON (Val p) where
   toJSON VUnInit     = object [ "VUnInit" .= Null         ]
   toJSON (VInt i)    = object [ "VInt"    .= toJSON i     ]
   toJSON (VString s) = object [ "VString" .= toJSON s     ]
+  toJSON (VSet s)    = object [ "VSet"    .= toJSON s     ]
   toJSON (VPid p)    = object [ "VPid"    .= toJSON p     ]
   toJSON (VInR v)    = object [ "VInR"    .= toJSON v     ]
   toJSON (VInL v)    = object [ "VInL"    .= toJSON v     ]

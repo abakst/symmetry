@@ -39,7 +39,8 @@ valInj v = prefix "is" v
 pcCounter :: Pid -> String
 pcCounter p = prefix (pc p) "k"
 
-pidBound (PAbs _ (S s)) = s
+pidBound :: Pid -> String
+pidBound (PAbs _ s) = setName s
               
 pidConstructor :: Pid -> String
 pidConstructor = (toUpper <$>) . pid
