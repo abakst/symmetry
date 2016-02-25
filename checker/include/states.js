@@ -39,6 +39,24 @@ function printBadTrace(trace) {
     printState(fields, srest[i][0]);
   }
   printState(fields, s0);
+
+  //Highlight changed values
+  //I clearly don't know what I'm doing
+  var rows = $("tr").length;
+  var squares = $("tr td");
+  var cols = squares.length / (rows - 1);
+  var last = squares.slice(0, cols);
+  for (i = 1; i < rows - 1; i++) {
+    var cur = squares.slice(i*cols, (i + 1)*cols);
+    for (j = 0; j < cols; j++) {
+      if (cur[j].textContent != last[j].textContent) {
+        last[j].setAttribute("class", "changed");
+      } else {
+        last[j].setAttribute("class", "");
+      }
+    }
+    last = cur;
+  }
 }
 
 function populateFields(s) {
