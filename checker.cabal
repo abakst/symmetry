@@ -22,6 +22,8 @@ data-files:          checker/include/SymMap.hs
                    , checker/include/SymVectorQC.hs
                    , checker/include/SymBoilerPlate.hs
                    , checker/include/SymBoilerPlateQC.hs
+                   , checker/include/states.js
+                   , checker/include/states.html
 library
   exposed-modules:   Symmetry.Language.AST
                    , Symmetry.Language.Syntax

@@ -1,0 +1,65 @@
+<html>
+<script src="http://rubaxa.github.io/Sortable/Sortable.js"></script>
+<link rel="stylesheet" href="http://www.w3schools.com/lib/w3.css">
+<link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css">
+<style>
+  ul {
+    font-family: "courier";
+    list-style-type: none;
+    width: 150pt;
+    opacity: 1;
+    margin: 0;
+    padding: 0;
+  }
+  li {
+    background-color: #c2dbef;
+    border: 2px solid white;
+    padding: 2px;
+  }
+  table {
+    font-size: 12pt; 
+    font-family: "courier";
+    border: 1px solid #efefef;
+  }
+  i {
+    padding-right: 5px;
+    padding-left: 2px;
+  }
+  th {
+    border: 1px solid grey;
+  }
+  tr {
+    background-color: #fefefe;
+  }
+  tr:nth-child(even) {
+    background-color: #d2ebff;
+  }
+  .fields {
+    float:left;
+    padding: 10px;
+    border: 1px dashed grey;
+  }
+  .table {
+    float:left;
+    padding: 10px;
+  }
+</style>
+<body>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+<script type="text/javascript" src="states.json"></script>
+<script type="text/javascript" src="states.js"></script>
+<!-- <select multiple="multiple" id="theFields" size=30> -->
+<!-- </select> -->
+<div class="fields">
+<ul class="select-field" id="selectedFields">
+Enabled:
+</ul>
+<ul class="select-field" id="disabledFields">
+Disabled:
+</ul>
+</div>
+<div class="table">
+<table id="theTable">
+</table>
+</div>
+</html>

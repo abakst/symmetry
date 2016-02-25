@@ -620,9 +620,10 @@ printQCFile ci _
              , "import Data.Aeson"
              , "import Data.Aeson.Encode.Pretty"
              , "import Control.Monad"
-             , "import Data.ByteString.Lazy.Char8 as C (putStrLn, writeFile, readFile)"
+             , "import Data.ByteString.Lazy.Char8 as C (putStrLn, writeFile, appendFile, readFile)"
              , "import Data.HashMap.Strict as H hiding (map,filter,null)"
              , "import Data.Maybe"
+             , "import Data.String"
              , "import System.Directory"
              ]
     spec =    qcDefsStr (qcSamples ci)
@@ -958,11 +959,12 @@ qcMainStr="main :: IO () \n\
 \\n\
 \          inputs  <- generate $ vector sample_size :: IO [State] \n\
 \          results <- mapM runTest inputs \n\
-\          C.writeFile fn (encodePretty $ toJSON results) \n\
+\          C.writeFile fn (fromString \"var states =\\n\")\n\
+\          C.appendFile fn (encodePretty $ toJSON results) \n\
 \\n\
-\          bs <- C.readFile fn \n\
-\          let Just l = decode bs :: Maybe [QCResult] \n\
-\          Prelude.putStrLn (\"Successfull runs: \" ++ (show $ length l)) \n"
+\      --  bs <- C.readFile fn \n\
+\      --  let Just l = decode bs :: Maybe [QCResult] \n\
+\      --  Prelude.putStrLn (\"Successfull runs: \" ++ (show $ length l)) \n"
 
 
 arbValStr = "instance (Arbitrary a) => Arbitrary (Val a) where \n\

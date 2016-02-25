@@ -96,10 +96,19 @@ copyBoilerModule opt d
        f <- getDataFileName ("checker" </> "include" </> f')
        copyFile f (d </> "SymBoilerPlate.hs")
 
+copyWeb _ d
+  = forM_ ["states.js", "states.html"] $ \f -> 
+       do f' <- fn f
+          copyFile f' (d </> f)
+  where
+    fn f = getDataFileName ("checker" </> "include" </> f)
+
 copyIncludes opt d =
   mapM_ (\f -> f opt d) [ copyMapModule
                         , copyVectorModule
-                        , copyBoilerModule ]
+                        , copyBoilerModule
+                        , copyWeb
+                        ]
 
 runLiquid :: FilePath -> FilePath -> IO () 
 runLiquid fp cwd
