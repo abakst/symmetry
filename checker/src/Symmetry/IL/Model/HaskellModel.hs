@@ -623,8 +623,10 @@ printQCFile ci _
              , "import Data.ByteString.Lazy.Char8 as C (putStrLn, writeFile, appendFile, readFile)"
              , "import Data.HashMap.Strict as H hiding (map,filter,null)"
              , "import Data.Maybe"
+             , "import Data.Either"
              , "import Data.String"
              , "import System.Directory"
+             , "import System.Exit"
              ]
     spec =    qcDefsStr (qcSamples ci)
             : qcMainStr
@@ -961,6 +963,8 @@ qcMainStr="main :: IO () \n\
 \          results <- mapM runTest inputs \n\
 \          C.writeFile fn (fromString \"var states =\\n\")\n\
 \          C.appendFile fn (encodePretty $ toJSON results) \n\
+\          when (any (isLeft . snd) results) exitFailure\n\
+\          exitSuccess\n\
 \\n\
 \      --  bs <- C.readFile fn \n\
 \      --  let Just l = decode bs :: Maybe [QCResult] \n\
