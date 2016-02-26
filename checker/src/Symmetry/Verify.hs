@@ -185,11 +185,11 @@ checkerMain main
 
       es <- forM cfgs $ run1Cfg optsImplied outd
       let status = and es
-      report status
+
+      when (optVerify opts) $ report status
+
       unless status exitFailure
-
       exitSuccess
-
     where
       cfgs = stateToConfigs . runSymb $ main
 

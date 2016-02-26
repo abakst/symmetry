@@ -554,10 +554,9 @@ instance Pretty a => Pretty (Stmt a) where
     = text "recv" <+> parens (pretty x <+> text "::" <+> pretty t) <+> pretty a
 
   pretty (Iter x xs s a)
-    = text "for" <+> parens (int 0 <+> text "≤"
-                                   <+> pretty x
-                                   <+> langle <+> text "|" <> pretty xs <> text "|")
-                 <+> lbrace <+> pretty a $$ (indent 2 $ pretty s) $$ rbrace
+    = pretty x <+> text ":=" <+> int 0 $$
+      text "while" <+> parens (pretty x <+> langle <+> text "|" <> pretty xs <> text "|")
+                   <+> pretty a $$ (indent 2 $ pretty s)
 
   pretty (Goto (LV v) a)
     = text "goto" <+> pretty v <+> pretty a
