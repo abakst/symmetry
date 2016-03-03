@@ -179,8 +179,8 @@ hReadSetBound ci p (SV v)
     e = caseSplitSets ci p v go
     go (Known _ i)       = intE (toInteger i)
     go (Unknown _ (V s)) = vExp s
-hReadSetBound ci p (SInts s)
-  = undefined
+hReadSetBound _ _ (SInts s)
+  = hInt s
 
 caseSplitSets :: ConfigInfo a -> Pid -> Var -> (SetBound -> Exp) -> Exp
 caseSplitSets ci p (V v) g
@@ -213,15 +213,18 @@ hAdd (ExpM e1) (ExpM e2)
 
 hSetFields :: ConfigInfo a
            -> Pid
+           -> Pid
            -> [(String, HaskellModel)]
            -> HaskellModel
-hSetFields ci (PConc _) ups
+hSetFields ci p (PConc _) ups
   = StateUpM [ (f, e) | (f, ExpM e) <- ups ] []
-hSetFields ci p ups
-  = StateUpM [ (f, putMap (vExp f) (vExp $ pidIdx p) e) | (f, ExpM e) <- ups ] []
+hSetFields ci p q@(PAbs (V v) _) ups
+  = StateUpM [ (f, putMap (vExp f) (unExp $ hReadState ci p v) e) | (f, ExpM e) <- ups] []
+hSetFields ci _ q ups
+  = StateUpM [ (f, putMap (vExp f) (vExp $ pidIdx q) e) | (f, ExpM e) <- ups ] []
 
 hSetPC ci p e
-  = hSetFields ci p [(pc p, e)]
+  = hSetFields ci p p [(pc p, e)]
 
 hSetPCCounter :: ConfigInfo a
               -> Pid
@@ -257,7 +260,7 @@ hExpr _ _ _ EUnit    = ExpM $ con unitCons
 hExpr _ _ _ EString  = ExpM $ App (con stringCons) (strE "<str>")
 hExpr _ _ _ (EInt i) = hInt i
 hExpr _ _ _ (ESet (S s))
-  = ExpM $ App (con pidMultiCons) (vExp s)
+  = ExpM $ app (con setCons) (strE s)
 hExpr b ci p (ESet (SV v))
   = hExpr b ci p (EVar v)
 hExpr _ ci p (EPid q@(PAbs (V v) _))
@@ -322,16 +325,20 @@ hReadPtrR ci p t
   = hReadState ci p (ptrR ci p t)
 
 hIncrPtrR ci p t
-  = hSetFields ci p [(ptrR ci p t, hIncr ptrRExp)]
+  = hSetFields ci p p [(ptrR ci p t, hIncr ptrRExp)]
   where
     ptrRExp = hReadPtrR ci p t
 
 hIncrPtrW ci p q t
-  = hSetFields ci q [(ptrW ci q t, hIncr ptrWExp)]
+  = hSetFields ci p q [(ptrW ci q t, hIncr ptrWExp)]
   where
     ptrWExp = hReadPtrW ci p q t
 
-hReadPtrW ci p q t
+hReadPtrW ci p q@(PAbs (V v) _) t
+  = ExpM $ getMap (vExp (ptrW ci q t)) i
+  where
+    i = unExp $ hReadState ci p v
+hReadPtrW ci _ q t
   = hReadState ci q (ptrW ci q t)
 
 hPutMessage ci p q (e,t)
@@ -340,12 +347,12 @@ hPutMessage ci p q (e,t)
     ExpM e' = hExpr True ci p e
 
 hGetMessage ci p@PConc{} (V v, t)
-  = hSetFields ci p [(v, ExpM $ getVec (vExp (buf ci p t)) e')]
+  = hSetFields ci p p [(v, ExpM $ getVec (vExp (buf ci p t)) e')]
   where
     ExpM e' = hReadPtrR ci p t
 
 hGetMessage ci p@(PAbs (GV i) _) (V v, t)
-  = hSetFields ci p [(v, ExpM $ getVec2D (vExp (buf ci p t)) (vExp i) e')]
+  = hSetFields ci p p [(v, ExpM $ getVec2D (vExp (buf ci p t)) (vExp i) e')]
   where
     ExpM e' = hReadPtrR ci p t
 
@@ -521,8 +528,8 @@ mkCall ci p e fups bufups
       = [ findUp p t bufups | p <- pids ci, t <- fst <$> tyMap ci]
     mkFieldUp _ f e
       = FieldUpdate (UnQual (name f)) e
-    findUp p t bufups
-      = maybe (vExp $ buf ci p t) (\(p, e) -> updateBuf ci p t e) $ findUpdate p t bufups
+    findUp q t bufups
+      = maybe (vExp $ buf ci q t) (\(q, e) -> updateBuf ci p q t e) $ findUpdate q t bufups
 
 
 mkAssert (Just (ExpM e)) k
@@ -530,18 +537,30 @@ mkAssert (Just (ExpM e)) k
 mkAssert Nothing k
   = k
 
-updateBuf :: ConfigInfo a -> Pid -> IL.Type -> Exp -> Exp
-updateBuf ci p@(PAbs _ _) t e
+updateBuf :: ConfigInfo a -> Pid -> Pid -> IL.Type -> Exp -> Exp
+updateBuf ci p q@(PAbs (V idx) _) t e
   = putVec2D v i j e 
     where
-      v = vExp $ buf ci p t
-      i = vExp $ pidIdx p
-      j = getMap (vExp $ ptrW ci p t) (vExp $ pidIdx p)
-updateBuf ci p t e
+      v = vExp $ buf ci q t
+      i = if isAbs p then
+            unExp (hReadState ci p idx)
+          else
+            vExp $ pidIdx q
+      j = if isAbs p then
+            getMap (vExp $ ptrW ci q t) (unExp (hReadState ci p idx))
+          else
+            getMap (vExp $ ptrW ci q t) (vExp $ pidIdx q)
+updateBuf ci p q@(PAbs _ _) t e
+  = putVec2D v i j e 
+    where
+      v = vExp $ buf ci q t
+      i = vExp $ pidIdx q
+      j = getMap (vExp $ ptrW ci q t) (vExp $ pidIdx q)
+updateBuf ci p q t e
   = putVec v i e
   where
-    v = vExp $ buf ci p t
-    i = vExp $ ptrW ci p t
+    v = vExp $ buf ci q t
+    i = vExp $ ptrW ci q t
           
 
 findUpdate :: Pid -> IL.Type -> [((Pid, IL.Type), Exp)] -> Maybe (Pid, Exp)

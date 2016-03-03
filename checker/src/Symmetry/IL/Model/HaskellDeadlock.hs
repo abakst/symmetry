@@ -50,7 +50,7 @@ procBlocked ci p@(PAbs _ s) tis
   = ors [ ands [ readPC ci p' `eq` int i, blocked t ] | (t, i) <- tis ]
   where
     blocked t = lte (readPtrW ci p' p' t) (readPtrR ci p' t)
-    p'        = PAbs (V (pidUnfold p)) s
+    p'        = PAbs (GV (pidUnfold p)) s
 
 procBlocked ci p tis
   = ors [ ands [readPC ci p `eq` (int i),  blocked t] | (t, i) <- tis ]

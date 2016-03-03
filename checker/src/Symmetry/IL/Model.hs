@@ -134,7 +134,7 @@ class ILModel e where
   setPC      :: ConfigInfo a -> Pid -> e -> e
   incrPtrR   :: ConfigInfo a -> Pid -> Type -> e
   incrPtrW   :: ConfigInfo a -> Pid -> Pid -> Type -> e
-  setState   :: ConfigInfo a -> Pid -> [(String , e)] -> e
+  setState   :: ConfigInfo a -> Pid -> Pid -> [(String , e)] -> e
   setPCCounter :: ConfigInfo a -> Pid -> e -> e
   putMessage :: ConfigInfo a -> Pid -> Pid -> (ILExpr, Type) -> e
   getMessage :: ConfigInfo a -> Pid -> (Var, Type) -> e
@@ -265,10 +265,10 @@ ruleOfStmt ci p s@Case{caseLPat = V l, caseRPat = V r}
     cases = [ (ELeft (mkLocal l), lUpdates)
             , (ERight (mkLocal r), rUpdates)
             ]
-    lUpdates = seqUpdates ci p [ setState ci p [(l, expr ci p $ mkLocal l)]
+    lUpdates = seqUpdates ci p [ setState ci p p [(l, expr ci p $ mkLocal l)]
                                , updPC ci p (ident s) (ident (caseLeft s))
                                ]
-    rUpdates = seqUpdates ci p [ setState ci p [(r, expr ci p $ mkLocal r)]
+    rUpdates = seqUpdates ci p [ setState ci p p [(r, expr ci p $ mkLocal r)]
                                , updPC ci p (ident s) (ident (caseRight s))
                                ]
 -------------------------
@@ -288,7 +288,7 @@ ruleOfStmt ci p s@Assign { assignLhs = V v, assignRhs = e }
   = [ mkRule ci p b (seqUpdates ci p upds) (annot s) ]
   where
     b    = pcGuard ci p s
-    upds = [ setState ci p [(v, expr ci p e)]
+    upds = [ setState ci p p [(v, expr ci p e)]
            , nextPC ci p s
            ]
     
@@ -303,16 +303,6 @@ ruleOfStmt ci p s@Iter { iterVar = V v, iterSet = set, annot = a }
     exitUpds = [ updPC ci p (ident s) exit ]
     ve       = readState ci p v
     se       = readSetBound ci p set
-               -- case set of
-               --   S ss    -> readState ci p ss
-               --   SV _    -> setBound ci p set
-               --              -- Case analysis on sets...? 
-               --              error "TBD" 
-               --              -- case setBound ci set of
-               --              --   Just (Known _ n) -> int n
-               --              --   Just (Unknown _ (V x)) -> readState ci p x
-               --              --   Nothing -> readState ci p ss
-               --   -- SInts n -> int n
     (i, j)   = case (ident <$>) <$> cfgNext ci p (ident a) of
                  Just [i, j] -> (i, j)
                  Just [i]    -> (i, -1)
@@ -336,7 +326,7 @@ ruleOfStmt ci p s@Choose { chooseVar = V v, chooseSet = set }
   where
     grd = pcGuard ci p s
     ups = [ setPC ci p (int (ident (chooseBody s)))
-          , setState ci p [(v, nonDetRange ci p set)]
+          , setState ci p p [(v, nonDetRange ci p set)]
           ]
 
 -------------------------
