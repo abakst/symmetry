@@ -31,10 +31,10 @@ library
                    , Symmetry.IL.AST
                    , Symmetry.IL.ConfigInfo
                    , Symmetry.IL.Model
+                   , Symmetry.IL.Deadlock
                    , Symmetry.IL.Model.HaskellModel
                    , Symmetry.IL.Model.HaskellDefs
                    , Symmetry.IL.Model.HaskellSpec
-                   , Symmetry.IL.Model.HaskellDeadlock
                    , Symmetry.SymbEx
                    , Symmetry.Verify
                    , Paths_checker

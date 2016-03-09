@@ -26,7 +26,7 @@ master = lam $ \r -> lam $ \n ->
       doMany "l0" ps body
       return tt
   where
-    body = lam $ \p -> do send p tt
+    body = lam $ \p -> send p tt
 
 mainProc :: (DSL repr) => repr (Int -> ())
 mainProc = lam $ \n -> exec $ do r <- newRMulti

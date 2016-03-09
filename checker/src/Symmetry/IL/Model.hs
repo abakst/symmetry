@@ -1,4 +1,5 @@
 {-# Language ParallelListComp #-}
+{-# Language ScopedTypeVariables #-}
 module Symmetry.IL.Model where
 
 import Prelude hiding (and, or, pred)
@@ -92,6 +93,10 @@ ptrR ci p t = pidTyName ci p t "ptrR"
 ptrW :: ConfigInfo a -> Pid -> Type -> String           
 ptrW ci p t = pidTyName ci p t "ptrW"
 
+numBlocked :: ConfigInfo a -> Pid -> String
+numBlocked _ p
+  = prefix (pid p) "numBlocked"
+
 data Rule e = Rule Pid e (Maybe e) e
               deriving Show
 
@@ -111,17 +116,18 @@ class ILModel e where
   lte       :: e -> e -> e
   ite       :: e -> e -> e -> e
   int       :: Int -> e
-  movePCCounter :: ConfigInfo a -> Pid -> e -> e -> e
-  readMap   :: e -> e -> e
 
-  readSetBound :: ConfigInfo a -> Pid -> Set -> e
+  movePCCounter  :: ConfigInfo a -> Pid -> e -> e -> e
+  readMap        :: e -> e -> e
+  blockedCounter :: ConfigInfo a -> Pid -> Pid -> e
+  readSetBound   :: ConfigInfo a -> Pid -> Set -> e
 
-  readPC    :: ConfigInfo a -> Pid -> e
+  readPC        :: ConfigInfo a -> Pid -> Pid -> e
   readPCCounter :: ConfigInfo a -> Pid -> e
-  readPtrR  :: ConfigInfo a -> Pid -> Type -> e
-  readPtrW  :: ConfigInfo a -> Pid -> Pid -> Type -> e
+  readPtrR      :: ConfigInfo a -> Pid -> Pid -> Type -> e
+  readPtrW      :: ConfigInfo a -> Pid -> Pid -> Type -> e
   readRoleBound :: ConfigInfo a -> Pid -> e
-  readState :: ConfigInfo a -> Pid -> String -> e
+  readState     :: ConfigInfo a -> Pid -> Pid -> String -> e
 
   isUnfold :: ConfigInfo a -> Pid -> e
 
@@ -136,6 +142,7 @@ class ILModel e where
   incrPtrW   :: ConfigInfo a -> Pid -> Pid -> Type -> e
   setState   :: ConfigInfo a -> Pid -> Pid -> [(String , e)] -> e
   setPCCounter :: ConfigInfo a -> Pid -> e -> e
+  setBlockedCounter :: ConfigInfo a -> Pid -> Pid -> e -> e
   putMessage :: ConfigInfo a -> Pid -> Pid -> (ILExpr, Type) -> e
   getMessage :: ConfigInfo a -> Pid -> (Var, Type) -> e
 
@@ -160,21 +167,32 @@ ors (x:xs) = foldl' or x xs
 
 pcGuard :: (Identable a, ILModel e)
         => ConfigInfo a -> Pid -> Stmt a -> e
-pcGuard ci p s = readPC ci p `eq` int (ident s)
+pcGuard ci p s = readPC ci p p `eq` int (ident s)
 
 condUpdate ci p i j
   = ite (isUnfold ci p)
         (readPCCounter ci p)
         (movePCCounter ci p (int i) (int j))
 
-updPC :: (ILModel e, Identable a)
+updPC :: (ILModel e, Data a, Identable a)
       => ConfigInfo a -> Pid -> Int -> Int -> e
 updPC ci p i j
   = seqUpdates ci p
         ([ setPC ci p (int j) ] ++
-         [ setPCCounter ci p (condUpdate ci p i j) | isAbs p ])
+         -- [ setPCCounter ci p (condUpdate ci p i j) | isAbs p ] ++
+         [ setPCCounter ci p (movePCCounter ci p (int i) (int j)) | isAbs p ] ++
+         [ setBlockedCounter ci p p updBlocked | isAbs p, not (null conjs) ])
+    where
+      updBlocked = ite stepToBlocked 
+                       (incr (blockedCounter ci p p))
+                       (blockedCounter ci p p)
+      blockedAt t = readPtrR ci p p t `eq` readPtrW ci p p t
+      stepToBlocked = ands conjs
+      conjs = [ blockedAt t | (t,j') <- badLocs, j' == j ]
+      pProc   = pidProc ci p
+      badLocs = snd (blockedLocsOfProc pProc)
 
-nextPC :: (Identable a, ILModel e)
+nextPC :: (Data a, Identable a, ILModel e)
        => ConfigInfo a -> Pid -> Stmt a -> e
 nextPC ci p s
   = nextPC' ci p $ (ident <$>) <$> cfgNext ci p (ident s)
@@ -205,6 +223,38 @@ seqUpdates ci p = foldl1 (joinUpdate ci p)
 
 ruleOfStmt :: (Identable a, Data a, ILModel e)
            => ConfigInfo (PredAnnot a) -> Pid -> Stmt (PredAnnot a) -> [Rule e]
+
+                                          
+-------------------------
+-- Checking if a process is blocked
+-------------------------
+blockedLocsOfProc :: forall a. (Identable a, Data a)
+                  => Process a -> (Pid, [(Type, Int)])
+blockedLocsOfProc (p, s)
+  = (p, everything (++) (mkQ [] go) s)
+  where
+    go :: Stmt a -> [(Type, Int)]
+    go (Recv (t,_) i) = [(t, ident i)]
+    go _               = []
+
+
+isBlockedOn :: (Identable a, Data a, ILModel e)
+            => ConfigInfo a -> Pid -> Pid -> Type -> e
+isBlockedOn ci p q t
+  = maybe false blockedAt $ lookup t badLocs
+  where
+    blockedAt i = (readPC ci p q `eq` int i) `and`
+                  (readPtrR ci p q t `eq` readPtrW ci p q t)
+    qProc       = pidProc ci q
+    badLocs     = snd (blockedLocsOfProc qProc)
+
+updateBlocked :: (Identable a, Data a, ILModel e)
+              => ConfigInfo a -> Pid -> Pid -> Type -> e
+updateBlocked ci p q t
+  = setBlockedCounter ci p q (ite (isBlockedOn ci p q t)
+                                  (decr (blockedCounter ci p q))
+                                  (blockedCounter ci p q))
+
 -------------------------
 -- p!e::t
 -------------------------
@@ -219,6 +269,7 @@ ruleOfStmt ci p s@Send { sndPid = EPid (PAbs i set@(SV _)), sndMsg = (t, e) }
       ups q    = seqUpdates ci p [ incrPtrW ci p (PAbs i q) t
                                  , putMessage ci p (PAbs i q) (e, t)
                                  , nextPC ci p s
+                                 , updateBlocked ci p (PAbs i q) t
                                  ]
 
 ruleOfStmt ci p s@Send { sndPid = EPid q, sndMsg = (t, e) }
@@ -228,17 +279,20 @@ ruleOfStmt ci p s@Send { sndPid = EPid q, sndMsg = (t, e) }
     upds = [ incrPtrW ci p q t
            , putMessage ci p q (e, t)
            , nextPC ci p s
-           ]
+           ] ++
+           [ updateBlocked ci p q t | isAbs q ]
     
 ruleOfStmt ci p s@Send { sndPid = pidExp , sndMsg = (t, e) }
   = [ mkRule ci p grd (matchVal ci p (expr ci p pidExp) [(EPid q, ups q) | q <- pids ci]) (annot s) ]
   -- = concat [ matchVal ci p x (EPid q) <$> ruleOfStmt ci p (sub q) | q <- pids ci ]
     where
       grd = pcGuard ci p s
-      ups q = seqUpdates ci p [ incrPtrW ci p q t
-                              , putMessage ci p q (e, t)
-                              , nextPC ci p s
-                              ]
+      ups q = seqUpdates ci p ([ incrPtrW ci p q t
+                               , putMessage ci p q (e, t)
+                               , nextPC ci p s
+                               ] ++
+                               [ updateBlocked ci p q t | isAbs q ]
+                              )
       -- sub q = s { sndPid = EPid q }
               
 -------------------------
@@ -248,7 +302,7 @@ ruleOfStmt ci p s@Recv{ rcvMsg = (t, v) }
   = [ mkRule ci p grd (seqUpdates ci p upds) (annot s) ]
   where
     grd  = pcGuard ci p s `and`
-           (readPtrR ci p t `lt` readPtrW ci p p t)
+           (readPtrR ci p p t `lt` readPtrW ci p p t)
     upds = [ incrPtrR ci p t
            , getMessage ci p (v,t)
            , nextPC ci p s
@@ -301,7 +355,7 @@ ruleOfStmt ci p s@Iter { iterVar = V v, iterSet = set, annot = a }
     notb     = pcGuard ci p s `and` (lneg (lt ve se))
     loopUpds = [ updPC ci p (ident s) cont ]
     exitUpds = [ updPC ci p (ident s) exit ]
-    ve       = readState ci p v
+    ve       = readState ci p p v
     se       = readSetBound ci p set
     (i, j)   = case (ident <$>) <$> cfgNext ci p (ident a) of
                  Just [i, j] -> (i, j)
@@ -325,7 +379,7 @@ ruleOfStmt ci p s@Choose { chooseVar = V v, chooseSet = set }
   = [ mkRule ci p grd (seqUpdates ci p ups) (annot s)]
   where
     grd = pcGuard ci p s
-    ups = [ setPC ci p (int (ident (chooseBody s)))
+    ups = [ updPC ci p (ident s) (ident (chooseBody s))
           , setState ci p p [(v, nonDetRange ci p set)]
           ]
 

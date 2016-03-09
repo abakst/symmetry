@@ -94,3 +94,11 @@ allSets ci
 setBoundVars :: ConfigInfo a -> [Var]
 setBoundVars ci
   = [ V s | set@(S s) <- cGlobalSets (config ci), isNothing (setBound ci set) ]
+
+pidProc :: ConfigInfo a -> Pid -> Process a
+pidProc ci (PAbs _ set)
+  = head [ pr | pr@(PAbs _ set',_) <- cProcs (config ci), set == set' ]
+pidProc ci p
+  = fromJust $ List.lookup p (assocify <$> cProcs (config ci))
+  where
+    assocify x = (fst x, x)

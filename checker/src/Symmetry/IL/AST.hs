@@ -596,8 +596,11 @@ instance Pretty a => Pretty (Config a) where
       goGlobS s = text "Global" <+> pretty s
       goB (Known s n) = text "|" <> pretty s <> text "|" <+> equals <+> int n
       goB (Unknown s v) = text "|" <> pretty s <> text "|" <+> equals <+> pretty v
-      go (pid, s) = text "Proc" <+> parens (pretty pid) <> colon <$$>
+      go (pid, s) = processName pid <> colon <$$>
                     indent 2 (pretty s)
+      processName (PConc n)  = text "P" <> text "r" <> int n
+      processName (PAbs _ s) = braces (text "P" <> pretty s)
+      processName p          = pretty p
 
 recvVars :: forall a. (Data a, Typeable a) => Stmt a -> [Var]
 recvVars s

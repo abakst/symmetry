@@ -48,7 +48,9 @@ envEq re1 re2
     eqInt _ _                             = False
 
 data SymbState = SymbState { renv   :: REnv
-                           , ctr    :: Int
+                           , varCtr  :: Int
+                           , loopCtr :: Int
+                           , roleCtr :: Int
                            , ntypes :: Int
                            , me     :: (AbsVal Int, Role)
                            , renvs  :: [REnv]
@@ -126,7 +128,9 @@ roleIdxVar r = IL.GV ("i" ++ roleToString r)
 emptyState :: SymbState
 emptyState = SymbState { renv = M.empty
                        , renvs = []
-                       , ctr = 1
+                       , varCtr = 0
+                       , roleCtr = 1
+                       , loopCtr = 0
                        , ntypes = 0
                        , me = (AInt Nothing (Just 1), S (RS 0))
                        , tyenv = M.empty
@@ -135,27 +139,34 @@ emptyState = SymbState { renv = M.empty
 runSymb :: SymbEx a -> SymbState
 runSymb e = execState (runSE e) emptyState
 
-freshInt :: SymbExM Int
-freshInt = do n <- gets ctr
-              modify $ \s -> s { ctr = n + 1 }
-              return n
+freshVar :: SymbExM (Var a)
+freshVar = do n <- gets varCtr
+              modify $ \s -> s { varCtr = n + 1 }
+              return (V (show n))
+
+freshLoopNum :: SymbExM Int
+freshLoopNum = do n <- gets loopCtr
+                  modify $ \s -> s { loopCtr = n + 1 }
+                  return n
+
+freshRoleNum :: SymbExM Int
+freshRoleNum = do n <- gets roleCtr
+                  modify $ \s -> s { roleCtr = n + 1 }
+                  return n
 
 freshTId :: SymbExM Int
 freshTId = do n <- gets ntypes
               modify $ \s -> s { ntypes = n + 1 }
               return n
 
-freshVar :: SymbExM (Var a)
-freshVar = (V . show) <$> freshInt
-
 fresh :: AbsVal t -> SymbExM (AbsVal t)
 fresh (AUnit _)    = AUnit . Just . EVar <$> freshVar
 fresh (AInt _ n)   = (\v -> return (AInt (Just (EVar v)) n))  =<< freshVar
 fresh (AString _)  = AString . Just . EVar <$> freshVar
 fresh (ASum _ l r) = do v  <- Just . EVar <$> freshVar
-                        i  <- freshInt
-                        fl <- mapM ((setVar (V (show i)) <$>) . fresh) l
-                        fr <- mapM ((setVar (V (show i)) <$>) . fresh) r
+                        V x  <- freshVar
+                        fl <- mapM ((setVar (V x) <$>) . fresh) l
+                        fr <- mapM ((setVar (V x) <$>) . fresh) r
                         return $ ASum v fl fr
 fresh (AProd _ l r) = do v  <- Just . EVar <$> freshVar
                          fl <- fresh l
@@ -802,7 +813,7 @@ symForever :: (?callStack :: CallStack)
            => SymbEx (Process SymbEx ()) -> SymbEx (Process SymbEx ())
 -------------------------------------------------
 symForever p
-  = SE $ do n <- freshInt
+  = SE $ do n <- freshLoopNum
             let v  = IL.LV $ "endL" ++ show n
                 sv = IL.Goto v ()
             AProc b s r <- prohibitSpawn (runSE p)
@@ -815,8 +826,8 @@ symFixM :: (?callStack :: CallStack)
 -------------------------------------------------
 symFixM f
   = SE . return . AArrow Nothing $ \a ->
-          SE $ do n <- freshInt
-                  let v = IL.LV $ "L" ++ show n
+          SE $ do n <- freshLoopNum
+                  let v = IL.LV $ "e" ++ show n
                       sv = IL.Goto v  ()
                       g = SE . return . AArrow Nothing $ \a -> SE $ return (AProc Nothing sv a)
                   AArrow _ h  <- runSE (app f g)
@@ -835,14 +846,14 @@ err
 symNewRSing :: SymbEx (Process SymbEx RSing)
 -------------------------------------------------
 symNewRSing
-  = SE $ do n <- freshInt
+  = SE $ do n <- freshRoleNum
             return (AProc Nothing skip (ARoleSing Nothing (RS n)))
 
 -------------------------------------------------
 symNewRMulti :: SymbEx (Process SymbEx RMulti)
 -------------------------------------------------
 symNewRMulti
-  = SE $ do n <- freshInt
+  = SE $ do n <- freshRoleNum
             return (AProc Nothing skip (ARoleMulti Nothing (RM n)))
 
 -------------------------------------------------
@@ -986,8 +997,8 @@ symMatchSum (ASum x vl vr) l r
       (Nothing, Nothing) -> do
         (v1, v2) <- case x of
                       Nothing -> error "does this happen?" -- return (Nothing, Nothing)
-                      _       -> do i  <- freshInt -- instead of freshVar to reuse var in diff. branch
-                                    return (V (show i), V (show i))
+                      _       -> do V i  <- freshVar
+                                    return (V i, V i) -- stupid polymorphism
         val1 <- setVar v1 <$> runSE arb
         val2 <- setVar v2 <$> runSE arb
         c1 <- runSE . app l . SE . return $ val1

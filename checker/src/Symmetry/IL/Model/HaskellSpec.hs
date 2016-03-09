@@ -93,18 +93,13 @@ initOfPid ci (p@(PAbs _ s), stmt)
   = pAnd preds 
   where
     preds    = [ counterInit
-               , unfoldInit
-               , eRange (eReadState st eK)
-                 eZero (eReadState st (pidBound p))
                , eEq counterSum setSize
                ] ++
                counterInits
                  
     st       = "v"
-    eK       = pidUnfold p
     counterInit  = eEq setSize (readCtr 0)
-    unfoldInit   = eEq eZero (eReadMap (eReadState st (pc p)) (eReadState st eK))
-    setSize      = eDec (eReadState st (pidBound p))
+    setSize      = eReadState st (pidBound p)
     counterSum   = foldl' (\e i -> ePlus e (readCtr i)) (readCtr (-1)) stmts
     counterInits = (\i -> eEq eZero (readCtr i)) <$> filter (/= 0) ((-1) : stmts)
     counterBounds= (\i -> eLe eZero (readCtr i)) <$> filter (/= 0) stmts
@@ -246,7 +241,8 @@ withStateFields ci SFV{..}
              globFs)
   where
     globIntFs = [ globIntF v | V v <- setBoundVars ci ]
-    absFs     = [ absF p (pidBound p) (pidUnfold p) (pcCounter p) | p <- pids ci, isAbs p ]
+    absFs     = [ absF p (pidBound p) (pcCounter p) (numBlocked ci p)
+                | p <- pids ci, isAbs p ]
     pcFs      = [ pcF p  (pc p)        | p <- pids ci ]
     ptrFs     = [ ptrF p (ptrR ci p t) (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci ] 
     valFs     = [ valF p v | (p, v) <- valVars (stateVars ci) ]
@@ -277,13 +273,12 @@ stateDecl ci
                                 , globF = mkGlob
                                 , globIntF = mkGlobInt
                                 }
-    mkAbs _ b unf pcv = [mkBound b, mkCounter pcv, mkUnfold unf]
+    mkAbs _ b pcv blkd = [mkBound b, mkCounter pcv, ([name blkd], intType)]
     mkPtrs p rd wr  = mkInt p rd ++ mkInt p wr
     mkGlob v        = [([name v], valHType ci)]
     mkGlobInt v     = [([name v], intType) | v `notElem` absPidSets]
     absPidSets      = [ IL.setName s | PAbs _ s <- fst <$> cProcs (config ci) ]
 
-    mkUnfold p  = ([name p], intType)
     mkBound p   = ([name p], intType)
     mkCounter p = ([name p], mapType intType intType)
     recQuals = unlines [ mkDeref f t ++ "\n" ++ mkEq f | ([f], t) <- fs ]
@@ -343,6 +338,17 @@ boundPred (IL.Known (S s) n)
 boundPred (IL.Unknown (S s) (V x))
   = eEq (eReadState "v" x) (eReadState "v" s)
 
+initBlockedState :: (Data a, IL.Identable a)
+                 => ConfigInfo a -> [F.Expr]
+initBlockedState ci
+  = initBlockedState1 <$> absProcs
+  where
+    absProcs = filter (isAbs.fst) (cProcs (config ci))
+    initBlockedState1 (p, Recv{}) =
+      eEq (eReadState "v" (numBlocked ci p)) (eReadState "v" (pidBound p))
+    initBlockedState1 (p,_) =
+      eEq (eReadState "v" (numBlocked ci p)) eZero
+
 initSpecOfConfig :: (Data a, IL.Identable a)
                  => ConfigInfo a -> String
 initSpecOfConfig ci
@@ -358,13 +364,13 @@ initSpecOfConfig ci
 --            , valTypeSpec
             ]
      ++ (unlines $ scrapeQuals ci)
-    
     where
       concExpr   = pAnd  ((initOfPid ci <$> cProcs (config ci)) ++
                           [ eEqZero (eReadState (symbol "v") (symbol v))
                             | V v <- iters ] ++
                           [ eGt (eReadState (symbol "v") (symbol v)) eZero
                             | S v <- globSets (stateVars ci) ] ++ -- TODO do not assume this...
+                          initBlockedState ci ++
                           catMaybes [ boundPred <$> setBound ci s | (PAbs _ s) <- pids ci ])
       iters      = everything (++) (mkQ [] goVars) (cProcs (config ci))
       goVars :: IL.Stmt Int -> [Var]

@@ -13,9 +13,9 @@ import           Language.Haskell.Exts.Build
 import           Language.Haskell.Exts.Pretty
 import           Symmetry.IL.AST as IL
 import           Symmetry.IL.Model
+import           Symmetry.IL.Deadlock
 import           Symmetry.IL.ConfigInfo
 import           Symmetry.IL.Model.HaskellDefs
-import           Symmetry.IL.Model.HaskellDeadlock
 import           Symmetry.IL.Model.HaskellSpec ( initSpecOfConfig
                                                , withStateFields
                                                , StateFieldVisitor(..)
@@ -121,12 +121,17 @@ hInt x
 
 hReadState :: ConfigInfo a
            -> Pid
+           -> Pid
            -> String
            -> HaskellModel
-hReadState _ (PConc _) f
+hReadState _ _ (PConc _) f
   = ExpM $ vExp f
-hReadState _ p f
-  = ExpM $ getMap (vExp f) (vExp (pidIdx p))
+hReadState ci p@(PAbs (GV _) _) q@(PAbs (V idx) _) f
+  = ExpM $ getMap (vExp f) i
+  where
+    ExpM i = hReadState ci p p idx
+hReadState _ p q f
+  = ExpM $ getMap (vExp f) (vExp (pidIdx q))
 
 hIsUnfold ci p@(PAbs (GV v) _)
   = ExpM $ paren (infixApp e1 opEq e2)
@@ -136,9 +141,10 @@ hIsUnfold ci p@(PAbs (GV v) _)
 
 hReadPC :: ConfigInfo a
         -> Pid
+        -> Pid
         -> HaskellModel
-hReadPC ci p
-  = hReadState ci p (pc p)
+hReadPC ci p q
+  = hReadState ci p q (pc q)
 
 hReadPCCounter :: ConfigInfo a
                -> Pid
@@ -171,7 +177,7 @@ hReadSetBound :: ConfigInfo a
               -> Set
               -> HaskellModel
 hReadSetBound ci p (S s)
-  = hReadState ci p s
+  = hReadState ci p p s
 -- Essentially inlining the var lookup
 hReadSetBound ci p (SV v)
   = ExpM e
@@ -186,7 +192,7 @@ caseSplitSets :: ConfigInfo a -> Pid -> Var -> (SetBound -> Exp) -> Exp
 caseSplitSets ci p (V v) g
   = caseE caseExp cases
   where
-    caseExp             = unExp (hReadState ci p v)
+    caseExp             = unExp (hReadState ci p p v)
     (ks, us)            = allSets ci
     mkAlt b@(Known k i)       = alt noLoc (mkPat k) (g b)
     mkAlt b@(Unknown u (V v)) = alt noLoc (mkPat u) (g b)
@@ -219,7 +225,7 @@ hSetFields :: ConfigInfo a
 hSetFields ci p (PConc _) ups
   = StateUpM [ (f, e) | (f, ExpM e) <- ups ] []
 hSetFields ci p q@(PAbs (V v) _) ups
-  = StateUpM [ (f, putMap (vExp f) (unExp $ hReadState ci p v) e) | (f, ExpM e) <- ups] []
+  = StateUpM [ (f, putMap (vExp f) (unExp $ hReadState ci p p v) e) | (f, ExpM e) <- ups] []
 hSetFields ci _ q ups
   = StateUpM [ (f, putMap (vExp f) (vExp $ pidIdx q) e) | (f, ExpM e) <- ups ] []
 
@@ -264,23 +270,23 @@ hExpr _ _ _ (ESet (S s))
 hExpr b ci p (ESet (SV v))
   = hExpr b ci p (EVar v)
 hExpr _ ci p (EPid q@(PAbs (V v) _))
-  = ExpM $ App (con pidCons) (App (vExp $ pidConstructor q) (unExp $ readState ci p v))
+  = ExpM $ App (con pidCons) (App (vExp $ pidConstructor q) (unExp $ readState ci p p v))
 hExpr _ _ _ (EPid q)
   = ExpM $ App (con pidCons) (pidExp q)
 
 hExpr _ _ _ (EVar (GV v))
   = ExpM . vExp $ v
 hExpr _ ci p (EVar (VPtrR t))
-  = readPtrR ci p t
+  = readPtrR ci p p t
 hExpr _ ci p (EVar (VPtrW t))
   = readPtrW ci p p t
 hExpr b ci p (EVar (V v))
   = if b && isIntVar ci v then
-      ExpM $ Paren (App (con intCons) (unExp $ hReadState ci p v))
+      ExpM $ Paren (App (con intCons) (unExp $ hReadState ci p p v))
     else
-      hReadState ci p v
-hExpr _ ci _ (EVar (VRef q v))
-  = hReadState ci q v
+      hReadState ci p p v
+hExpr _ ci p (EVar (VRef q v))
+  = hReadState ci p q v
 hExpr b ci p (ELeft e)
   = ExpM $ App (con leftCons) (unExp $ hExpr b ci p e)
 hExpr b ci p (ERight e)
@@ -321,25 +327,25 @@ hPred ci p (ILBop o e1 e2)
     qop Gt = opGt
     qop Ge = opGte
 
-hReadPtrR ci p t
-  = hReadState ci p (ptrR ci p t)
+hReadPtrR ci p q t
+  = hReadState ci p q (ptrR ci q t)
 
 hIncrPtrR ci p t
   = hSetFields ci p p [(ptrR ci p t, hIncr ptrRExp)]
   where
-    ptrRExp = hReadPtrR ci p t
+    ptrRExp = hReadPtrR ci p p t
 
 hIncrPtrW ci p q t
   = hSetFields ci p q [(ptrW ci q t, hIncr ptrWExp)]
   where
     ptrWExp = hReadPtrW ci p q t
 
-hReadPtrW ci p q@(PAbs (V v) _) t
-  = ExpM $ getMap (vExp (ptrW ci q t)) i
-  where
-    i = unExp $ hReadState ci p v
-hReadPtrW ci _ q t
-  = hReadState ci q (ptrW ci q t)
+-- hReadPtrW ci p q@(PAbs (V v) _) t
+--   = ExpM $ getMap (vExp (ptrW ci q t)) i
+--   where
+--     i = unExp $ hReadState ci p v
+hReadPtrW ci p q t
+  = hReadState ci p q (ptrW ci q t)
 
 hPutMessage ci p q (e,t)
   = StateUpM [] [((q, t), e')]
@@ -349,12 +355,12 @@ hPutMessage ci p q (e,t)
 hGetMessage ci p@PConc{} (V v, t)
   = hSetFields ci p p [(v, ExpM $ getVec (vExp (buf ci p t)) e')]
   where
-    ExpM e' = hReadPtrR ci p t
+    ExpM e' = hReadPtrR ci p p t
 
 hGetMessage ci p@(PAbs (GV i) _) (V v, t)
   = hSetFields ci p p [(v, ExpM $ getVec2D (vExp (buf ci p t)) (vExp i) e')]
   where
-    ExpM e' = hReadPtrR ci p t
+    ExpM e' = hReadPtrR ci p p t
 
 hMatchVal :: ConfigInfo a
           -> Pid
@@ -387,7 +393,7 @@ hNonDetRange :: ConfigInfo a
              -> Set
              -> HaskellModel
 hNonDetRange ci p (S s)
-  = ExpM $ metaFunction nondetRange [intE 0, unExp $ readState ci p s]
+  = ExpM $ metaFunction nondetRange [intE 0, unExp $ readState ci p p s]
 hNonDetRange _ _ _
   = error "hNonDetRange (TBD)"
 
@@ -403,6 +409,21 @@ hRule _ p g assert us
 hJoinUpdates _ _ (StateUpM us bufs) (StateUpM us' bufs')
   = StateUpM (us ++ us') (bufs ++ bufs')
 
+hBlockedCounter :: ConfigInfo a
+                -> Pid
+                -> Pid
+                -> HaskellModel
+hBlockedCounter ci p q
+  = ExpM (vExp $ numBlocked ci q)
+
+hSetBlockedCounter :: ConfigInfo a
+                   -> Pid
+                   -> Pid
+                   -> HaskellModel
+                   -> HaskellModel
+hSetBlockedCounter ci p q (ExpM e)
+  = StateUpM [(numBlocked ci q, e)] []
+  
 instance ILModel HaskellModel where 
   int        = hInt
   add        = hAdd
@@ -431,11 +452,13 @@ instance ILModel HaskellModel where
   nonDet = hNonDet
   nonDetRange = hNonDetRange
   isUnfold = hIsUnfold
+  blockedCounter = hBlockedCounter
 
   joinUpdate = hJoinUpdates
   setPC      = hSetPC
   setState   = hSetFields
   setPCCounter = hSetPCCounter
+  setBlockedCounter = hSetBlockedCounter
   incrPtrR   = hIncrPtrR
   incrPtrW   = hIncrPtrW
   putMessage = hPutMessage
@@ -543,11 +566,11 @@ updateBuf ci p q@(PAbs (V idx) _) t e
     where
       v = vExp $ buf ci q t
       i = if isAbs p then
-            unExp (hReadState ci p idx)
+            unExp (hReadState ci p p idx)
           else
             vExp $ pidIdx q
       j = if isAbs p then
-            getMap (vExp $ ptrW ci q t) (unExp (hReadState ci p idx))
+            getMap (vExp $ ptrW ci q t) (unExp (hReadState ci p p idx))
           else
             getMap (vExp $ ptrW ci q t) (vExp $ pidIdx q)
 updateBuf ci p q@(PAbs _ _) t e
@@ -805,10 +828,16 @@ arbitraryStateDecl ci =  InstDecl noLoc Nothing [] [] tc_name [tv_name] [InsDecl
                             bind v (metaFunction "return" [intE (toInteger i)]) 
                           _                ->
                             bind v e
-        absArb _ b u pc = [ bindBound b arbPos
-                          , bind u (arbRange (intE 0) (vExp b))
-                          , bind pc (singletonMap (intE 0) (vExp b))
-                          ]
+        absArb p b pc blk = [ bindBound b arbPos
+                            , bind pc (singletonMap (intE 0) (vExp b))
+                            , if initBlocked p then
+                                bind blk (metaFunction "return" [vExp b])
+                              else
+                                bind blk arbZero
+                            ]
+        initBlocked p  = case snd (pidProc ci p) of
+                           Recv{} -> True
+                           _      -> False
         
         arbPC p v      = arbInt p v
         arbPtr p rd wr = arbInt p rd ++ arbInt p wr
