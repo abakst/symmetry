@@ -94,8 +94,8 @@ initOfPid ci (p@(PAbs _ s), stmt)
   where
     preds    = [ counterInit
                , eEq counterSum setSize
-               ] ++
-               counterInits
+               ] ++ counterInits
+                 ++ counterBounds
                  
     st       = "v"
     counterInit  = eEq setSize (readCtr 0)
@@ -114,12 +114,16 @@ initOfPid ci (p@(PAbs _ s), stmt)
     go s = [ident s]
 
 initOfPid ci (p@(PConc _), stmt)
-  = pAnd (pcEqZero :
-          concat [[ rdEqZero t, rdGeZero t
-                  , wrEqZero t, wrGeZero t
-                  , rdLeWr t               ] | t <- fst <$> tyMap ci ])
+  = pAnd ([pcEqZero] ++ ptrBounds ++ loopVarBounds)
     where
       s           = "v"
+
+      ptrBounds = concat [[ rdEqZero t, rdGeZero t
+                          , wrEqZero t, wrGeZero t
+                          , rdLeWr t               ] | t <- fst <$> tyMap ci ]
+
+      loopVarBounds = [ eEqZero (eReadState s v) | (p', v) <- intVars (stateVars ci), p == p' ]
+                    
       pcEqZero    = eEq (eReadState s (pc p)) (F.expr initStmt)
       rdEqZero t  = eEqZero (eRdPtr ci p t s)
       rdGeZero t  = eLe eZero (eRdPtr ci p t s)
@@ -140,7 +144,7 @@ schedExprOfPid ci p@(IL.PAbs v s) state
       idx        = IL.setName s
       idxBounds  = eRange (eVar "v") (F.expr (0 :: Int)) (eReadState state idx)
       pcEqZero   = eEqZero (eReadMap (eReadState state (pc p)) (eILVar v))
-      rdEqZero t = eRangeI eZero (eReadMap (eRdPtr ci p t state) (eILVar v)) (eReadMap (eWrPtr ci p t state) (eILVar v))
+      rdEqZero t = eRangeI eZero (eReadMap (eRdPtr ci p t state) (eILVar v)) (eReadMap (eRdPtr ci p t state) (eILVar v))
       wrEqZero t = eEqZero (eReadMap (eWrPtr ci p t state) (eILVar v))
       wrGtZero t = eLe eZero (eReadMap (eWrPtr ci p t state) (eILVar v))
 
@@ -149,7 +153,6 @@ schedExprsOfConfig :: IL.Identable a
 schedExprsOfConfig ci s
   = go <$> filter isAbs (fst <$> ps)
   where
-    m    = tyMap ci
     ps   = cProcs (config ci)
     go p = schedExprOfPid ci p s
            
@@ -229,6 +232,17 @@ data StateFieldVisitor a b
            , globIntF :: String -> a
            , combine :: [a] -> b
            }
+
+defaultVisitor :: StateFieldVisitor [String] [String]       
+defaultVisitor = SFV { absF = \_ x y z -> [x,y,z]
+                     , pcF = \_ s -> [s]
+                     , ptrF = \_ s1 s2 -> [s1,s2]
+                     , valF = \_ s -> [s]
+                     , intF = \_ s -> [s]
+                     , globF = \s -> [s]
+                     , globIntF = \s -> [s]
+                     , combine = concat
+                     }
 
 withStateFields :: ConfigInfo t -> StateFieldVisitor a b -> b
 withStateFields ci SFV{..}
