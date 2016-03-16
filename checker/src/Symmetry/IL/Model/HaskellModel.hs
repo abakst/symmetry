@@ -572,11 +572,15 @@ mkCall :: ConfigInfo a
 mkCall ci p e fups bufups
   | isQC ci && isJust e
     = do n <- addTransitionM p e fups
-         return $ Let (BDecls [PatBind noLoc (pvar nextState) (nextStateRhs n) Nothing]) eitherCall
+         return . letDecl n $ eitherCall
+  | isQC ci
+    = do n <- addTransitionM p e fups
+         return . letDecl n $ metaFunction runState (args "qc_s'")
   | otherwise
     = do n <- addTransitionM p e fups
          return $ metaFunction runState (args n)
   where
+    letDecl n = Let (BDecls [PatBind noLoc (pvar nextState) (nextStateRhs n) Nothing]) 
     args n = [if isQC ci then vExp n else nextStateExp n] ++
              mkBufUps bufups ++
              [vExp sched] ++
@@ -713,12 +717,12 @@ transitionRule ci (p, t, assert, updates)
   = if isAbs p then
       unlines [ printf "{-@ assume %s :: s0:{v:State | %s} -> %s:Int -> %s{s1:State | %s} @-}" t pre (pidIdx p) xtraSpec fieldUpdates
               , printf "%s :: State -> Int -> %sState" t xtraTy
-              , prettyPrint body
+              , prettyPrint tx 
               ]
     else
       unlines [ printf "{-@ assume %s :: s0:{v:State | %s} -> %s{s1:State | %s} @-}" t pre xtraSpec fieldUpdates 
               , printf "%s :: State -> %sState" t xtraTy
-              , prettyPrint body
+              , prettyPrint tx 
               ]
   where
     pre          = maybe "true" (\e -> printLine (logicify ci (vExp "v") e)) assert
@@ -742,15 +746,13 @@ transitionRule ci (p, t, assert, updates)
 
     printLine = prettyPrintWithMode defaultMode { layout = PPNoLayout }                                                   
 
-    body = sfun noLoc (name t) args (UnGuardedRhs (mkAssert (ExpM <$> assert) recUp)) Nothing
-    args = [name state] ++
-           [ name (pidIdx p) | isAbs p ] ++
-           [ name xtraArg    | not (null bufReads) ]
-
-    toLog = logicify ci
-    
+    tx   = FunBind [body]
+    body = runStateMatch t args (UnGuardedRhs (mkAssert (ExpM <$> assert) recUp))
+    args = [PAsPat (name state) (PRec (UnQual (name stateRecordCons)) [PFieldWildcard])] ++
+           [pvar $ name (pidIdx p) | isAbs p ] ++
+           [pvar $ name xtraArg    | not (null bufReads) ]
     recUp
-      = RecUpdate (vExp state) ([mkFieldUp p f (toLog (vExp state) e) | (f,e) <- nonReads] ++
+      = RecUpdate (vExp state) ([mkFieldUp p f e | (f,e) <- nonReads] ++
                                 [mkReadUp p f e  | (f,e) <- bufReads])
     mkFieldUp _ f e
       = FieldUpdate (UnQual (name f)) e
@@ -759,6 +761,8 @@ transitionRule ci (p, t, assert, updates)
 
     readExp f = f ++ "_e"
 
+runStateMatch f args rhs
+  = Match noLoc (name f) args Nothing rhs Nothing
     -- logicalExp = 
           
 printHaskell :: (Data a, Identable a)
