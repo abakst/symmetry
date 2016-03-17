@@ -512,14 +512,14 @@ data RuleState = RS { txCtr :: Int
                     , txList :: TxList
                     }
 
-declRules :: ConfigInfo a -> [Rule HaskellModel] -> Exp -> S.State RuleState Decl
-declRules ci rs dl = FunBind <$> matches
+declRules :: ConfigInfo a -> [Rule HaskellModel] -> Exp -> Exp -> S.State RuleState Decl
+declRules ci rs cond done = FunBind <$> matches
   where
     matches     = do ms <- ruleMatches
                      return (ms ++ [mkDlMatch])
     ruleMatches = mapM mkMatch perPid
     mkMatch rules
-      = do m <- Match noLoc (name runState) (pat [rulesPid rules]) Nothing <$> mkGuardedRhss rules <*> return Nothing 
+      = do m <- Match noLoc (name runState) (pat True [rulesPid rules]) Nothing <$> mkGuardedRhss rules <*> return Nothing 
            S.modify $ \s -> s { txCtr = 0 }
            return m
     mkGuardedRhss rules
@@ -541,19 +541,22 @@ declRules ci rs dl = FunBind <$> matches
     eqPid  = (==) `on` pidRule
     perPid = groupBy eqPid $ sortBy (compare `on` pidRule) rs
 
-    pat ps = [ PAsPat (name state) (PRec (UnQual (name stateRecordCons)) [PFieldWildcard]) ] ++
-             [ pvar (name (buf ci q t)) | q <- pids ci, t <- fst <$> tyMap ci ] ++
-             (if null ps then [peList] else [ mkSchedPat ps ]) ++
-             (ifQC ci (pvar (name "qc_ss")))
+    pat b ps = [ PAsPat (name state) (PRec (UnQual (name stateRecordCons)) [PFieldWildcard]) ] ++
+               [ pvar (name (buf ci q t)) | q <- pids ci, t <- fst <$> tyMap ci ] ++
+               [ mkSchedPat b ps ] ++
+               (ifQC ci (pvar (name "qc_ss")))
 
-    mkSchedPat ps = foldr (\q rest -> PInfixApp (pidPattern q) list_cons_name rest) schedPVar ps
+    mkSchedPat b ps = if b then
+                        foldr (\q rest -> PInfixApp (pidPattern q) list_cons_name rest) schedPVar ps
+                      else
+                        PList [pidPattern p | p <- ps]
     schedPVar  = pvar (name sched)
 
-    mkDlMatch  = Match noLoc (name runState) dlpat Nothing dlRhs Nothing
-    dlRhs      = UnGuardedRhs (mkAssert (Just (ExpM dl)) (if isQC ci
-                                                          then (var $ name "qc_ss")
-                                                          else unit_con))
-    dlpat      = pat []
+    mkDlMatch  = Match noLoc (name runState) dlpat Nothing (GuardedRhss [dlRhs]) Nothing
+    dlRhs      = GuardedRhs noLoc [Qualifier cond] (mkAssert (Just (ExpM done)) (if isQC ci
+                                                                                 then (var $ name "qc_ss")
+                                                                                 else unit_con))
+    dlpat      = pat False . concat $ [[univAbs p, extAbs p] | p <- pids ci, isAbs p ]
 
 readMsgUpdates :: [(String, Exp)] -> ([(String, Exp)], [(String, Exp)])
 readMsgUpdates ups
@@ -780,8 +783,8 @@ printHaskell ci rs = unlines [ header
                        , "import SymBoilerPlate"
                        ] ++ (if isQC ci then [] else ["import Language.Haskell.Liquid.Prelude"])
 
-    ExpM dl        = deadlockFree ci
-    (rules,ruleSt) = S.runState (declRules ci rs dl) RS { txCtr = 0, txList = [] }
+    (ExpM cond, ExpM done) = deadlockFree ci
+    (rules,ruleSt) = S.runState (declRules ci rs cond done) RS { txCtr = 0, txList = [] }
     body = unlines [ unlines (prettyPrint <$> initialState ci)
                    , unlines (prettyPrint <$> initialSched ci)
                    , prettyPrint (initialCall ci)

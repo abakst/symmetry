@@ -28,6 +28,7 @@ predicate StatePre V = (0 <= xl0 V && xl0 V <= r1 V && r1 V > 0) &&
 
                        (pidR0PtrR0 V <= pidR0PtrW0 V) &&
                        (0 <= pidR0PtrR0 V) &&
+                       (pidR1NumBlocked V >= 0) &&
  
                        (if (pidR0Pc V = 8) then (pidR0PtrR0 V = xl1 V + 1) else (pidR0PtrR0 V = xl1 V)) &&
                        (pidR0PtrW0 V = Map_select (pidR1PcK V) (-1)) &&
@@ -38,13 +39,13 @@ predicate StatePre V = (0 <= xl0 V && xl0 V <= r1 V && r1 V > 0) &&
 
 {-@ 
 predicate Multi S V = (0 <= V && V < r1 S) &&
-                      (Set_mem V (pidR1Blocked S) <=>
-                        ((Map_select (pidR1Pc S) V = 1) && (V >= xl0 S && (V != xl0 S || pidR0Pc S != 4)))) && 
                       (Map_select (pidR1PtrR0 S) V = (if (Map_select (pidR1Pc S) V > 1 || Map_select (pidR1Pc S) V == (-1)) then 1 else 0)) &&
                       ((Map_select (pidR1PtrW0 S) V = 0 => (Map_select (pidR1Pc S) V = 0 || Map_select (pidR1Pc S) V = 1))) &&
                       (((Map_select (pidR1PtrW0 S) V = (if (V < xl0 S || (V == xl0 S && pidR0Pc S = 4)) then 1 else 0)))) &&
                       ((Map_select (pidR1Pc S) V = 2 => isPidR0 (vPid (Map_select (x2 S) V))))
 @-}
+                      -- (Set_mem V (pidR1Blocked S) <=>
+                      --   ((Map_select (pidR1Pc S) V = 1) && (V >= xl0 S && (V != xl0 S || pidR0Pc S != 4)))) && 
 
 {-@ data State = State{x0 :: Int, r1 :: Int, pidR1PcK :: Map_t Int Int,
                    pidR1Blocked :: Set Int,
@@ -102,22 +103,21 @@ runState state@State{..} pidR0Buf0 pidR1Buf0 ((PIDR1 ir1) : sched)
                                 (setVec2D ir1' (get pidR1PtrW0 ir1') (VPid (PIDR1 ir1')) pidR1Buf0)
                                 sched
 runState state@State{..} pidR0Buf0 pidR1Buf0 [PIDR0, PIDR1 i, PIDR1 i']
-  | assumption state i i'
-   = liquidAssert (get pidR1Pc i == (-1)) $
-     liquidAssert (pidR0Pc == -1) $
+   = liquidAssert (not (assumption state i i') || get pidR1Pc i == (-1)) $
+     liquidAssert (not (assumption state i i') || pidR0Pc == -1) $
                     ()
 runState state a0 a1 (s : sched) = runState state a0 a1 sched
                                    
 {-@ predicate BlockedDoneP0 S   = (pidR0Pc S = (-1) || (pidR0Pc S = 7 && pidR0PtrW0 S <= pidR0PtrR0 S)) @-}
-{-@ predicate BlockedDoneP1 S I = (Map_select (pidR1PcK S) (-1) + pidR1NumBlocked S == r1 S) &&
-                                  (pidR1NumBlocked S = Map_select (pidR1PcK S) 1) &&
-                                  (pidR1NumBlocked S >= 0 && Map_select (pidR1PcK S) (-1) >= 0) &&
-                                  ((Map_select (pidR1Pc s) i = (-1) && Map_select (pidR1PcK s) (-1) = r1 S) ||
-                                   (Set_mem I (pidR1Blocked S) && pidR1NumBlocked S > 0 && Map_select (pidR1PcK S) 1 > 0)) @-}
+{-@ predicate BlockedDoneP1 S I J = (Map_select (pidR1PcK S) (-1) + pidR1NumBlocked S == r1 S) &&
+                                    (pidR1NumBlocked S = Map_select (pidR1PcK S) 1) &&
+                                    (pidR1NumBlocked S >= 0 && Map_select (pidR1PcK S) (-1) >= 0) &&
+                                    ((Map_select (pidR1Pc S) I = (-1) && Map_select (pidR1PcK s) (-1) = r1 S) ||
+                                     (Map_select (pidR1Pc S) J = 1 && Map_select (pidR1PtrW0 S) J <= Map_select (pidR1PtrR0 S) J && pidR1NumBlocked S > 0 && Map_select (pidR1PcK S) 1 > 0)) @-}
 
-{-@ assume assumption :: s:State -> i:Int -> i2:Int ->
+{-@ assume assumption :: s:State -> i:Int -> j:Int ->
                         {v:Bool | (Prop(v) <=>  ((BlockedDoneP0 s) &&
-                                                 (BlockedDoneP1 s i))) }
+                                                 (BlockedDoneP1 s i j))) }
 @-}
 assumption :: State -> Int -> Int -> Bool
 assumption = undefined
