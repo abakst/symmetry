@@ -71,9 +71,11 @@ deadlockFree ci@CInfo { config = Config { cProcs = ps } }
     --                                   , eq (counters p (lkup p))
     --                                        (decr (readRoleBound ci p))
     --                                   ]
-    blockedOrDone p@(PAbs _ _) = ors [ ands [ procDone ci p, eq (readPCK p (-1)) (readRoleBound ci p) ]
-                                     , procBlocked ci p (lkup p)
-                                     ]
+    blockedOrDone p@(PAbs _ _) = ands [ eq (readEnabled ci p) emptySet
+                                      , ors [ ands [ procDone ci p, eq (readPCK p (-1)) (readRoleBound ci p) ]
+                                            , procBlocked ci p (lkup p)
+                                            ]
+                                      ]
     -- (readPCK p (-1) `add` blockedCounter ci p p) `lt` (readRoleBound ci p)
     counters p  = (foldl' add (readPCK p (-1)) . (readPCK p . snd <$>))
     readPCK p i = readMap (readPCCounter ci p) (int i)

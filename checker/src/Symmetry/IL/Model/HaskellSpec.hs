@@ -66,6 +66,11 @@ eEqZero e = eEq e eZero
 eApp :: Symbolic a => a -> [F.Expr] -> F.Expr            
 eApp f = eApps (F.eVar f)
 
+eMember :: F.Expr -> F.Expr -> F.Expr
+eMember i s = eApps mem [i, s]
+  where
+    mem = F.eVar "Set_mem"
+
 eImp p q
   = F.PImp p q
 
@@ -135,23 +140,30 @@ initOfPid ci (p@(PConc _), stmt)
       firstNonBlock s                      = ident s
 
 schedExprOfPid :: IL.Identable a
-               => ConfigInfo a -> IL.Pid -> Symbol -> F.Expr
-schedExprOfPid ci p@(IL.PAbs v s) state
-  = subst1 (pAnd ([pcEqZero, idxBounds] ++
-                  concat [[rdEqZero t, wrEqZero t, wrGtZero t] | t <- fst <$> tyMap ci]))
-           (symbol (pidIdx p), eVar "v")
+               => ConfigInfo a -> IL.Process a -> Symbol -> F.Expr
+schedExprOfPid ci (p@(IL.PAbs v s), prog) state
+  = subst1 (pAnd ([pcEqZero, idxBounds, isEnabledP] ++
+                  concat [[rdEqZero t, wrEqZero t, wrGtZero t] | t <- fst <$> tyMap ci] ++
+                  [] ))
+           (symbol (pidIdx p), vv)
     where
+      vv         = eVar "v"
       idx        = IL.setName s
-      idxBounds  = eRange (eVar "v") (F.expr (0 :: Int)) (eReadState state idx)
+      idxBounds  = eRange vv (F.expr (0 :: Int)) (eReadState state idx)
       pcEqZero   = eEqZero (eReadMap (eReadState state (pc p)) (eILVar v))
       rdEqZero t = eRangeI eZero (eReadMap (eRdPtr ci p t state) (eILVar v)) (eReadMap (eRdPtr ci p t state) (eILVar v))
       wrEqZero t = eEqZero (eReadMap (eWrPtr ci p t state) (eILVar v))
       wrGtZero t = eLe eZero (eReadMap (eWrPtr ci p t state) (eILVar v))
+      isEnabled  = eMember (eILVar v) (eReadState state (enabledSet ci p))
+      isEnabledP = case prog of
+                     Recv{} -> F.PNot isEnabled
+                     _      -> isEnabled
+                     
 
 schedExprsOfConfig :: IL.Identable a
                    => ConfigInfo a -> Symbol -> [F.Expr]
 schedExprsOfConfig ci s
-  = go <$> filter isAbs (fst <$> ps)
+  = go <$> filter (isAbs . fst) ps
   where
     ps   = cProcs (config ci)
     go p = schedExprOfPid ci p s
@@ -211,6 +223,9 @@ mapTyCon = TyCon (UnQual (name "Map_t"))
 mapType :: Type -> Type -> Type
 mapType k v = TyApp (TyApp mapTyCon k) v
 
+intSetType :: Type
+intSetType = TyApp (TyCon (UnQual (name "Set"))) intType
+
 stateRecord :: [([Name], Type)] -> QualConDecl
 stateRecord fs
   = QualConDecl noLoc [] [] (RecDecl (name stateRecordCons) fs)
@@ -255,7 +270,7 @@ withStateFields ci SFV{..}
              globFs)
   where
     globIntFs = [ globIntF v | V v <- setBoundVars ci ]
-    absFs     = [ absF p (pidBound p) (pcCounter p) (numBlocked ci p)
+    absFs     = [ absF p (pidBound p) (pcCounter p) (enabledSet ci p)
                 | p <- pids ci, isAbs p ]
     pcFs      = [ pcF p  (pc p)        | p <- pids ci ]
     ptrFs     = [ ptrF p (ptrR ci p t) (ptrW ci p t) | p <- pids ci, t <- fst <$> tyMap ci ] 
@@ -287,7 +302,7 @@ stateDecl ci
                                 , globF = mkGlob
                                 , globIntF = mkGlobInt
                                 }
-    mkAbs _ b pcv blkd = [mkBound b, mkCounter pcv, ([name blkd], intType)]
+    mkAbs _ b pcv blkd = [mkBound b, mkCounter pcv, ([name blkd], intSetType)]
     mkPtrs p rd wr  = mkInt p rd ++ mkInt p wr
     mkGlob v        = [([name v], valHType ci)]
     mkGlobInt v     = [([name v], intType) | v `notElem` absPidSets]
@@ -298,13 +313,18 @@ stateDecl ci
     recQuals = unlines [ mkDeref f t ++ "\n" ++ mkEq f | ([f], t) <- fs ]
 
     mkDeref f t = printf "{-@ qualif Deref_%s(v:%s, w:%s): v = %s w @-}"
-                          (pp f) (pp t) stateRecordCons (pp f) 
+                          (pp f) (pp (fixupQualType t)) stateRecordCons (pp f) 
     mkEq f = printf "{-@ qualif Eq_%s(v:%s, w:%s ): %s v = %s w @-}"
                      (pp f) stateRecordCons stateRecordCons (pp f) (pp f)
     mkPC  = liftMap intType
     mkVal = liftMap (valHType ci)
     mkInt = liftMap intType
     liftMap t p v = [([name v], if isAbs p then mapType intType t else t)]
+
+fixupQualType (TyApp (TyCon (UnQual (Ident "Set"))) _)
+  = TyApp (TyCon (UnQual (name "Set_Set"))) (TyVar (name "a"))
+fixupQualType t
+  = t
 
 valHType :: ConfigInfo a -> Type
 valHType ci = TyApp (TyCon (UnQual (name valType)))
@@ -352,17 +372,6 @@ boundPred (IL.Known (S s) n)
 boundPred (IL.Unknown (S s) (V x))
   = eEq (eReadState "v" x) (eReadState "v" s)
 
-initBlockedState :: (Data a, IL.Identable a)
-                 => ConfigInfo a -> [F.Expr]
-initBlockedState ci
-  = initBlockedState1 <$> absProcs
-  where
-    absProcs = filter (isAbs.fst) (cProcs (config ci))
-    initBlockedState1 (p, Recv{}) =
-      eEq (eReadState "v" (numBlocked ci p)) (eReadState "v" (pidBound p))
-    initBlockedState1 (p,_) =
-      eEq (eReadState "v" (numBlocked ci p)) eZero
-
 initSpecOfConfig :: (Data a, IL.Identable a)
                  => ConfigInfo a -> String
 initSpecOfConfig ci
@@ -384,7 +393,6 @@ initSpecOfConfig ci
                             | V v <- iters ] ++
                           [ eGt (eReadState (symbol "v") (symbol v)) eZero
                             | S v <- globSets (stateVars ci) ] ++ -- TODO do not assume this...
-                          initBlockedState ci ++
                           catMaybes [ boundPred <$> setBound ci s | (PAbs _ s) <- pids ci ])
       iters      = everything (++) (mkQ [] goVars) (cProcs (config ci))
       goVars :: IL.Stmt Int -> [Var]

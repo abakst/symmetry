@@ -55,6 +55,13 @@ cons x y = paren (InfixApp x (QConOp list_cons_name) y)
 neg :: Exp
 neg = vExp "not"
 
+setInsert :: Exp -> Exp -> Exp
+setInsert i s
+  = metaFunction "union" [metaFunction "singleton" [i], s]
+
+setDelete :: Exp -> Exp -> Exp
+setDelete i s
+  = metaFunction "difference" [s, metaFunction "singleton" [i]]
 ---------------------
 -- Logicify
 ---------------------
@@ -66,9 +73,12 @@ logicify ci s e
     go :: Exp -> Exp
     go (If e1 e2 e3) = If (p e1) (p e2) (p e3)
     go e'@(Var (UnQual (Ident i)))
-      | i `elem` fields = metaFunction i [s]
-      | i == mapGetFn   = vExp $ "Map_select"
-      | i == mapPutFn   = vExp $ "Map_store"
+      | i `elem` fields   = metaFunction i [s]
+      | i == mapGetFn     = vExp $ "Map_select"
+      | i == mapPutFn     = vExp $ "Map_store"
+      | i == "union"      = vExp $ "Set_cup"
+      | i == "difference" = vExp $ "Set_dif"
+      | i == "singleton"  = vExp $ "Set_sng"
       | otherwise       = e'
     go e' = e'
     p e'@(Paren _) = e'
@@ -140,6 +150,15 @@ hInt x
   = ExpM $ if x < 0 then paren (mkInt x) else mkInt x
   where
     mkInt = intE . toInteger 
+
+hEmptySet :: HaskellModel
+hEmptySet = ExpM (vExp "empty")
+
+hUnion :: HaskellModel -> HaskellModel -> HaskellModel
+hUnion (ExpM e1) (ExpM e2)
+  = ExpM $ metaFunction "union" [e1, e2]
+hUnion e1 e2
+  = error (printf "hUnion %s %s" (show e1) (show e2))
 
 hReadState :: ConfigInfo a
            -> Pid
@@ -443,9 +462,51 @@ hSetBlockedCounter :: ConfigInfo a
                    -> Pid
                    -> HaskellModel
                    -> HaskellModel
-hSetBlockedCounter ci p q (ExpM e)
-  = StateUpM [(numBlocked ci q, e)] []
+hSetBlockedCounter ci p q e
+  = StateUpM [(numBlocked ci q, unExp e)] []
   
+hReadEnabled :: ConfigInfo a
+             -> Pid
+             -> HaskellModel
+hReadEnabled ci p
+  = ExpM (vExp $ enabledSet ci p)
+
+hSetEnabled :: ConfigInfo a
+            -> Pid
+            -> HaskellModel
+            -> HaskellModel
+hSetEnabled ci p e
+  = StateUpM [(enabledSet ci p, unExp e)] []
+
+hEnable :: ConfigInfo a
+        -> Pid
+        -> Pid
+        -> HaskellModel
+hEnable ci p q
+  = ExpM $ setInsert i (vExp (enabledSet ci q))
+    where
+      i = enabledIdx ci p q
+
+hDisable :: ConfigInfo a
+         -> Pid
+         -> Pid
+         -> HaskellModel
+hDisable ci p q
+  = ExpM $ setDelete i (vExp (enabledSet ci q))
+    where
+      i = enabledIdx ci p q
+
+enabledIdx :: ConfigInfo a
+           -> Pid
+           -> Pid
+           -> Exp
+enabledIdx ci p (PAbs (V v) _)
+  = unExp $ hReadState ci p p v
+enabledIdx ci p (PAbs (GV v) _)
+  = vExp v
+enabledIdx ci p q
+  = error (printf "hEnable(%s)" (show q))
+
 instance ILModel HaskellModel where 
   int        = hInt
   add        = hAdd
@@ -474,13 +535,17 @@ instance ILModel HaskellModel where
   nonDet = hNonDet
   nonDetRange = hNonDetRange
   isUnfold = hIsUnfold
-  blockedCounter = hBlockedCounter
+  readEnabled = hReadEnabled
+  enable = hEnable
+  disable = hDisable
+  emptySet = hEmptySet
+  union    = hUnion
 
   joinUpdate = hJoinUpdates
   setPC      = hSetPC
   setState   = hSetFields
   setPCCounter = hSetPCCounter
-  setBlockedCounter = hSetBlockedCounter
+  setEnabled = hSetEnabled
   incrPtrR   = hIncrPtrR
   incrPtrW   = hIncrPtrW
   putMessage = hPutMessage
@@ -778,6 +843,7 @@ printHaskell ci rs = unlines [ header
     header = unlines $ [ "{-# Language RecordWildCards #-}"
                        , "{-@ LIQUID \"--no-true-types\" @-}"
                        , "module SymVerify where"
+                       , "import Data.Set"
                        , "import SymVector"
                        , "import SymMap"
                        , "import SymBoilerPlate"
