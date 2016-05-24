@@ -7,16 +7,9 @@ import           Symmetry.IL.ConfigInfo
 import           Text.PrettyPrint
 import qualified Text.PrettyPrint.Leijen as P hiding ((<$>))
 
-printProlog :: P.Pretty a => ConfigInfo a -> String
+printProlog :: P.Pretty a => ConfigInfo a -> String  
 printProlog ci
-  = renderStyle style{mode = LeftMode} (rewrite ci)
-
-rewrite :: P.Pretty a => ConfigInfo a -> Doc
-rewrite ci
-  = term "rewrite" [s0, skip] <> text "."
-  where
-    s0 = toProlog (config ci)
-    skip = text "skip"
+  = renderStyle style{mode = LeftMode} (toProlog (config ci))
 
 class Prolog a where
   toProlog :: a -> Doc
