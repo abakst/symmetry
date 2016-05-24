@@ -35,6 +35,7 @@ term p xs
 
 unhandled :: P.Pretty a => a -> b
 unhandled x = error ("prolog " ++ show (P.pretty x))
+  = text p <> tupled xs              
 
 instance Prolog Pid where
   toProlog (PConc n)
