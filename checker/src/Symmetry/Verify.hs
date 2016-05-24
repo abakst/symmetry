@@ -6,6 +6,7 @@ import Symmetry.SymbEx
 import Symmetry.IL.AST
 import Symmetry.IL.Model (generateModel)
 import Symmetry.IL.ConfigInfo
+import Symmetry.IL.Rewrite.Prolog
 import Symmetry.IL.Model.HaskellModel (printHaskell,printQCFile)
 -- import Symmetry.IL.Unfold
 -- import Symmetry.IL.Inst
@@ -27,6 +28,7 @@ import Text.PrettyPrint.Leijen  (pretty, nest, text, (<>), line, hPutDoc)
 import qualified Data.Map.Strict as M
 
 data MainOptions = MainOptions { optVerify  :: Bool
+                               , optRewrite  :: Bool
                                , optQC      :: Bool
                                , optQCSamples :: Int
                                , optVerbose :: Bool
@@ -38,6 +40,7 @@ data MainOptions = MainOptions { optVerify  :: Bool
 instance Options MainOptions where
   defineOptions
     = MainOptions <$> simpleOption "verify" False "Run Verifier"
+                  <*> simpleOption "rewrite" False "Dump Prolog version of protocol suitable for rewriting"
                   <*> simpleOption "qc" False "Run QuickCheck instead of Verifier"
                   <*> simpleOption "qc-samples" 1000 "Number of random initial states to explore"
                   <*> simpleOption "verbose" False "Verbose Output"
@@ -144,6 +147,10 @@ run1Cfg opt outd cfg
          when (optQC opt)
               (writeFile (outd </> "QC.hs") (printQCFile cinfo' m))
 
+       when (optRewrite opt) $ do
+         createDirectoryIfMissing True outd
+         writeFile (outd </> "symverify.pl") p
+
        runVerifier opt outd
   where
     cinfo :: ConfigInfo (PredAnnot Int)
@@ -151,6 +158,7 @@ run1Cfg opt outd cfg
     cinfo'     = cinfo { isQC = optQC opt
                        , qcSamples = optQCSamples opt}
     f          = printHaskell cinfo' m
+    p          = printProlog  cinfo'
     pprint c = print $
                text "Config" <>
                nest 2 (line  <> pretty c)
