@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections     #-}
 module Symmetry.IL.Rewrite.Prolog (printProlog) where
 
 import           Symmetry.IL.AST
@@ -7,9 +7,16 @@ import           Symmetry.IL.ConfigInfo
 import           Text.PrettyPrint
 import qualified Text.PrettyPrint.Leijen as P hiding ((<$>))
 
-printProlog :: P.Pretty a => ConfigInfo a -> String  
+printProlog :: P.Pretty a => ConfigInfo a -> String
 printProlog ci
-  = renderStyle style{mode = LeftMode} (toProlog (config ci))
+  = renderStyle style{mode = LeftMode} (rewrite ci)
+
+rewrite :: P.Pretty a => ConfigInfo a -> Doc
+rewrite ci
+  = term "rewrite" [s0, skip] <> text "."
+  where
+    s0 = toProlog (config ci)
+    skip = text "skip"
 
 class Prolog a where
   toProlog :: a -> Doc
@@ -24,18 +31,20 @@ list xs
 
 term :: String -> [Doc] -> Doc
 term p xs
-  = text p <> tupled xs              
+  = text p <> tupled xs
 
 unhandled :: P.Pretty a => a -> b
-unhandled x = error ("prolog " ++ show (P.pretty x))    
+unhandled x = error ("prolog " ++ show (P.pretty x))
 
 instance Prolog Pid where
   toProlog (PConc n)
     = text "p" <> int n
+  toProlog (PAbs v s)
+    = toProlog v <> colon <> toProlog s
   toProlog p
     = unhandled p
 
-instance Prolog Var where               
+instance Prolog Var where
   toProlog (V v) = text v
   toProlog (GV v) = text v
   toProlog v     = unhandled v
@@ -59,16 +68,16 @@ instance P.Pretty a => Prolog (Pid, Stmt a) where
   toProlog (_, Skip{})
     = text "skip"
   toProlog (p, Send{sndPid = q, sndMsg = (_,e)})
-    = term "send" [to,msg,from]
+    = term "send" [who,to,msg]
     where
-      from = toProlog p
-      msg  = toProlog e
-      to   = toProlog q
+      who = toProlog p
+      msg = toProlog e
+      to  = toProlog q
   toProlog (p, Recv{rcvMsg = (_,v)})
-    = term "recv" [var, to]
+    = term "recv" [who,var]
     where
       var = toProlog v
-      to  = toProlog p
+      who = toProlog p
   toProlog (p, Block{blkBody = body})
     = term "seq" [list (map (toProlog . (p,)) body)]
   toProlog (p, Iter{iterVar = v, iterSet = s, iterBody = b})
