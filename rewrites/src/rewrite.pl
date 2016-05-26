@@ -1,19 +1,20 @@
 :- use_module(library(avl)).
+:- use_module(library(lists)).
 :- use_module(library(terms)).
 :- use_module(library(ordsets)).
-:- use_module('lib/misc.pl', [format_atom/3, fresh_pred_sym/1, substitute_term/4,copy_instantiate/4]).
-
-%% par(A,B)     : A || B .
+:- use_module('lib/misc.pl', [format_atom/3, fresh_pred_sym/1,
+			      substitute_term/4,copy_instantiate/4,
+			     get_ord_pairs/2]).
+%% Terms:
+%% par([A,B,C]) : A || B || C.
 %% seq([A,B,C]) : A;B;C .
 %% send(p, x, v): p sends v to q.
 %%  | x=e_pid(q): send to  pid p.
 %%  | x=e_var(y): send to the pid stored in variable y.
 %% recv(p, x)   : p receives x.
-%% sym(P, S, A)    : composition of symmetric processes p in set s with source A.
-%% for(P, S, A)    : for each process p in s execute A.
+%% sym(P, S, A) : composition of symmetric processes p in set s with source A.
+%% for(P, S, A) : for each process p in s execute A.
 %% skip         : no-operation.
-
-
 
 rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	(
@@ -68,12 +69,31 @@ rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	  rewrite(par(A1,B1), Gamma, [], Rho, par(skip, C), Gamma, Delta2, _) ->
 	  substitute_term(Q, Proc, C, C1),
 	  T1=C1,
-	  Rho1=Rho, %TODO: safe constants from loop
+	  
+	  Rho1=Rho, %TODO: save constants from loop
 	  Gamma1=Gamma,
 	  substitute_term(P, Proc, Delta2, Delta3),
 	  append(Delta, for(P,Delta3), Delta1)
-
-	%Todo: par([A,B,C,...]).
+	%par([A,B,C,...])
+	%TODO: refactor me, seriously
+	; functor(T, par, 1) ->
+	  arg(1, T, L),
+	  (   L=[]->
+	      T1=skip, Gamma1=Gamma, Delta1=Delta, Rho1=Rho
+	  ;   L=[skip|Ls]->
+	      T1=par(Ls), Gamma1=Gamma, Delta1=Delta, Rho1=Rho
+	  ;   list_to_ord_set(L, OL),
+	      get_ord_pairs(OL, Pairs),
+	      select(TL-TR, Pairs, _),
+	      rewrite_step(par(TL, TR), Gamma, Delta, Rho, T2, Gamma1, Delta1, Rho1),
+	      list_to_ord_set([TL,TR], Ts),
+	      ord_subtract(OL, Ts, Ts1),
+	      (   functor(T2, par, 2) ->
+		  T2=par(T2A,T2B),
+		  T1=par([T2A,T2B|Ts1])
+	      ;   T1=par([T2|Ts1])
+	      )
+	  )
 	%par(A, B)
 	; functor(T, par, 2) ->
 	  arg(1, T, A),
