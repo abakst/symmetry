@@ -2,14 +2,18 @@
 {-# LANGUAGE TupleSections     #-}
 module Symmetry.IL.Rewrite.Prolog (printProlog) where
 
-import           Symmetry.IL.AST
+import           Symmetry.IL.AST hiding(($$))
 import           Symmetry.IL.ConfigInfo
 import           Text.PrettyPrint
 import qualified Text.PrettyPrint.Leijen as P hiding ((<$>))
 
 printProlog :: P.Pretty a => ConfigInfo a -> String
 printProlog ci
-  = renderStyle style{mode = LeftMode} (rewrite ci)
+  = renderStyle style{mode = LeftMode} (protocol $$ prolog)
+  where
+    prolog = rewrite ci
+    protocol =
+      vcat [ text "%%" <+> text l | l <- lines (show (P.pretty (config ci)))]
 
 rewrite :: P.Pretty a => ConfigInfo a -> Doc
 rewrite ci
