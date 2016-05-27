@@ -5,20 +5,23 @@
 :- use_module('lib/misc.pl', [format_atom/3, fresh_pred_sym/1,
 			      substitute_term/4,copy_instantiate/4,
 			     get_ord_pairs/2]).
-%% Terms:
-%% par([A,B,C]) : A || B || C.
-%% seq([A,B,C]) : A;B;C .
-%% send(p, x, v): p sends v to q.
-%%  | x=e_pid(q): send to  pid p.
-%%  | x=e_var(y): send to the pid stored in variable y.
-%% recv(p, x)   : p receives x.
-%% sym(P, S, A) : composition of symmetric processes p in set s with source A.
-%% for(P, S, A) : for each process p in s execute A.
-%% skip         : no-operation.
-
+/*
+===========
+ Language:
+===========
+ par([A,B,C]) : A || B || C.
+ seq([A,B,C]) : A;B;C .
+ send(p, x, v): p sends v to q.
+  | x=e_pid(q): send to  pid p.
+  | x=e_var(y): send to the pid stored in variable y.
+ recv(p, x)   : p receives x.
+ sym(P, S, A) : composition of symmetric processes p in set s with source A.
+ for(P, S, A) : for each process p in s execute A.
+ skip         : no-operation.
+*/
 rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	(
-	  %recv(p, x)
+	  /* recv(p, x) */
 	  functor(T, recv, 2),
 	  arg(1, T, P),
 	  atomic(P),
@@ -31,9 +34,9 @@ rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	  ;   avl_store(Q-P, Gamma, Vs, Gamma1)
 	  ),
 	  avl_store(P-X, Rho, V, Rho1)
-	;
-	  %send(p, x, v)
-	  functor(T, send, 3) ->
+	/* send(p, x, v)*/
+	%TODO: the sends-from info does not need an annotation.
+	; functor(T, send, 3) ->
 	  arg(1, T, PExp),
 	  arg(2, T, XExp),
 	  arg(3, T, V),
@@ -54,8 +57,48 @@ rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	  T1=skip,
 	  Delta1=Delta,
 	  Rho1=Rho
-	%TODO check for all pairs.
-	%par(for(P,s,A), sym(Q,s,B))
+	% sym
+	; functor(T, par, 1),
+	  T=par([TA]),
+	  functor(TA, sym, 3),
+	  TA=sym(P, S, A),
+	  rewrite(A, Gamma, Delta, Rho, skip, Gamma1, Delta1, Rho1) ->
+	  T1=skip
+ 	  /* par([A,B,C,...]) */
+	; functor(T, par, 1) ->
+	  arg(1, T, L),
+	  (   L==[] ->
+	      T1=skip, Gamma1=Gamma, Delta1=Delta, Rho1=Rho
+	  /* rewrite single expression */
+	  ;   select(A, L, LR),
+	      (   A==skip->
+		  T1=par(LR), Gamma1=Gamma, Delta1=Delta, Rho1=Rho
+	      ;   rewrite_step(A, Gamma, Delta, Rho, A1, Gamma1, Delta1, Rho1) ->
+		  T1=par([A1|LR])
+	      )
+	  /* rewrite (ordered)-pairs of expressions */
+	  ;   list_to_ord_set(L, OL),
+	      get_ord_pairs(OL, Pairs),
+	      select(TL-TR, Pairs, _),
+	      rewrite_step(par(TL, TR), Gamma, Delta, Rho, T2, Gamma1, Delta1, Rho1) ->
+	      list_to_ord_set([TL,TR], Ts),
+	      ord_subtract(OL, Ts, Ts1),
+	      T2=par(T2A,T2B),
+	      T1=par([T2A,T2B|Ts1])
+	  )
+	  /* seq([A|B]) */
+	; functor(T, seq, 1) ->
+	  arg(1, T, L),
+	  (   L == [] ->
+	      T1=skip, Gamma1=Gamma, Delta1=Delta, Rho1=Rho
+	  ;   L=[A|B],
+	      (  A==skip ->
+		  T1=seq(B),Gamma1=Gamma, Delta1=Delta, Rho1=Rho
+	      ;   rewrite_step(A, Gamma, Delta, Rho, A1, Gamma1, Delta1, Rho1) ->
+		  T1=seq([A1|B])
+	      )
+	  )
+	/* par(for(P,s,A), sym(Q,s,B)) */  
 	; functor(T, par, 2),
 	  arg(1, T, TA),
 	  arg(2, T, TB),
@@ -68,54 +111,25 @@ rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	  copy_instantiate(B, Q, Proc, B1),
 	  rewrite(par(A1,B1), Gamma, [], Rho, par(skip, C), Gamma, Delta2, _) ->
 	  substitute_term(Q, Proc, C, C1),
-	  T1=C1,
-	  
-	  Rho1=Rho, %TODO: save constants from loop
+	  T1=par(skip, sym(Q, S, C1)),
+	  Rho1=Rho, %TODO: save constants from loop 
 	  Gamma1=Gamma,
 	  substitute_term(P, Proc, Delta2, Delta3),
-	  append(Delta, for(P,Delta3), Delta1)
-	%par([A,B,C,...])
-	%TODO: refactor me, seriously
-	; functor(T, par, 1) ->
-	  arg(1, T, L),
-	  (   L=[]->
-	      T1=skip, Gamma1=Gamma, Delta1=Delta, Rho1=Rho
-	  ;   L=[skip|Ls]->
-	      T1=par(Ls), Gamma1=Gamma, Delta1=Delta, Rho1=Rho
-	  ;   list_to_ord_set(L, OL),
-	      get_ord_pairs(OL, Pairs),
-	      select(TL-TR, Pairs, _),
-	      rewrite_step(par(TL, TR), Gamma, Delta, Rho, T2, Gamma1, Delta1, Rho1),
-	      list_to_ord_set([TL,TR], Ts),
-	      ord_subtract(OL, Ts, Ts1),
-	      (   functor(T2, par, 2) ->
-		  T2=par(T2A,T2B),
-		  T1=par([T2A,T2B|Ts1])
-	      ;   T1=par([T2|Ts1])
-	      )
-	  )
-	%par(A, B)
+	  append(Delta, [for(P,Delta3)], Delta1)
+	  %par(A, B): keeps order
 	; functor(T, par, 2) ->
 	  arg(1, T, A),
 	  arg(2, T, B),
-	  (   A==skip, B==skip ->
-	      T1=skip, Gamma1=Gamma, Delta1=Delta, Rho1=Rho
-	  ;   rewrite_step(A, Gamma, Delta, Rho, A1, Gamma1, Delta1, Rho1)->
+	  (   rewrite_step(A, Gamma, Delta, Rho, A1, Gamma1, Delta1, Rho1)->
 	      T1=par(A1,B)
 	  ;   rewrite_step(B, Gamma, Delta, Rho, B1, Gamma1, Delta1, Rho1) ->
 	      T1=par(A,B1)
-	  )
-	% seq([A|B])
-	; functor(T, seq, 1) ->
-	  arg(1, T, S),
-	  (   S == [] ->
-	      T1=skip, Gamma1=Gamma, Delta1=Delta, Rho1=Rho
-	  ;   S=[A|B],
-	      (  A==skip ->
-		  T1=seq(B),Gamma1=Gamma, Delta1=Delta, Rho1=Rho
-	      ;   rewrite_step(A, Gamma, Delta, Rho, A1, Gamma1, Delta1, Rho1) ->
-		  T1=seq([A1|B])
-	      )
+	  ;   functor(A, seq, 1),
+	      A=seq([C|Cs]),
+	      %% or rewrite to anything?
+	      rewrite_step(par(C,B), Gamma, Delta, Rho, par(skip,D), Gamma1, Delta1, Rho1)->
+	      T1=par(seq(Cs), D)
+
 	  )
 	).
 
@@ -125,8 +139,7 @@ rewrite(T, Gamma, Delta, Rho, T2, Gamma2, Delta2, Rho2) :-
 	    rewrite(T1, Gamma1, Delta1, Rho1, T2, Gamma2, Delta2, Rho2)
 	;   format('Failed to rewrite term:~p~n' ,[T]), fail
 	).
-	
-		
+			
 rewrite(T, Gamma1, Delta1, Rho1) :-
 	empty_avl(Gamma),
 	empty_avl(Rho),
@@ -134,7 +147,7 @@ rewrite(T, Gamma1, Delta1, Rho1) :-
 	rewrite(T, Gamma, Delta, Rho, skip, Gamma1, Delta1, Rho1).
 
 pp_term(T, S) :-
-	%% TODO
+	/* TODO */
 	(   functor(T, recv, 2) ->
 	    arg(1, T, P),
 	    arg(2, T, X),
@@ -143,17 +156,3 @@ pp_term(T, S) :-
 	    arg(1, T, P),
 	    arg(2, T, X)
 	).
-
-%%%%%%%%%%
-% Examples
-%%%%%%%%%&
-
-%Ex "Send first" P1=seq([send(e_pid(p0),e_pid(p1),p0),recv(p0,x1)]), P2=seq([send(e_pid(p1), e_pid(p0), p1), recv(p1,x1)]), T=(par(P1,P2)), rewrite(T, _, Delta1, Rho1).
-
-%Ex: "registry"
-%
-%M=seq([send(e_pid(m),e_pid(p1),r),send(e_pid(m),e_pid(p2),r),recv(m,x1),send(e_pid(m),e_pid(r),m)]), R=seq([recv(r, x1),recv(r, x2),send(e_pid(r),e_pid(m),a),recv(r, x3)]), P1=seq([recv(p1, x1),send(e_pid(p1),e_var(x1),p1)]), P2=seq([recv(p2, x1),send(e_pid(p2),e_var(x1),p2)]), T= (par(M,par(par(R,P1),P2))), rewrite(T, _, Delta1, Rho1).
-
-%%  P1=seq([send(e_pid(m),e_pid(p),m), recv(m, x1)]), P2=seq([recv(p, id), send(e_pid(p),e_var(id),p)]), T=(par(P1,P2)), rewrite(T, _, Delta1, Rho1).
-
-%% Loops: P1=seq([send(e_pid(m),e_pid(P),m),recv(m,x)]), P2=seq([recv(P, id),send(e_pid(P),e_pid(m),m)]), T=(par(for(P, s, P1),sym(P, s, P2))), rewrite(T, _, Delta1, Rho1).
