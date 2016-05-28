@@ -5,12 +5,14 @@
 		 get_pairs/2,
 		 get_ord_pairs/2,
 		 substitute_term/4,
+		 substitute_term_avl/4,
 		 format_atom/3,
 		 copy_instantiate/4
 		], [hidden(true)]).
 		 
 :- use_module(library(ordsets)).
 :- use_module(library(terms)).
+:- use_module(library(avl)).
 
 /* Copy T and instantiate Q to V in the new term */
 copy_instantiate(T, Q, V, T1) :-
@@ -19,7 +21,7 @@ copy_instantiate(T, Q, V, T1) :-
 	ord_subtract(TVars, QVars, FVars),
 	copy_term(T-FVars-Q, T1-FVars-V).
 
-%T1=T[X1/X] : T1 is the result of replacing each occurrence of X in T by X1.
+/* T1=T[X1/X] : T1 is the result of replacing each occurrence of X in T by X1. */
 substitute_term(X1, X, T, T1) :-
 	(   T==X ->
 	    T1=X1
@@ -33,6 +35,12 @@ substitute_term(X1, X, T, T1) :-
 	    )
 	;   T1=T
 	).
+
+/* AVL1:=AVL[X1/X]. Rebuilds AVL since subtituting might result in an unbalanced tree. */
+substitute_term_avl(X1, X, AVL, AVL1) :-
+	avl_to_list(AVL, L),
+	substitute_term(X1, X, L, L1),
+	list_to_avl(L1, AVL1).
 
 get_pairs([], []).
 get_pairs([S|Set], Pairs) :-
