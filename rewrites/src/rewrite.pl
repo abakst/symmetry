@@ -3,12 +3,14 @@
 :- use_module(library(terms)).
 :- use_module(library(ordsets)).
 :- use_module('lib/misc.pl', [format_atom/3, fresh_pred_sym/1,
-			      substitute_term/4,copy_instantiate/4,
-			     get_ord_pairs/2]).
+			      substitute_term/4,substitute_term_avl/4,
+			      copy_instantiate/4,
+			      get_ord_pairs/2]).
+
 /*
-===========
+==============================================================================
  Language:
-===========
+==============================================================================
  par([A,B,C]) : A || B || C.
  seq([A,B,C]) : A;B;C .
  send(p, x, v): p sends v to q.
@@ -16,9 +18,21 @@
   | x=e_var(y): send to the pid stored in variable y.
  recv(p, x)   : p receives x.
  sym(P, S, A) : composition of symmetric processes p in set s with source A.
+                S must be distinct from process ids.
  for(P, S, A) : for each process p in s execute A.
  skip         : no-operation.
+==============================================================================
+==============================================================================
+
+===================================
+ TODOs:
+===================================
+   - remove e_pid(.) for send.
+   - storing constants for loops.
+===================================
+===================================
 */
+
 rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	(
 	  /* recv(p, x) */
@@ -57,7 +71,7 @@ rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	  T1=skip,
 	  Delta1=Delta,
 	  Rho1=Rho
-	% sym
+	 /* par([sym(P, S, A)]): reduce sym(P, S, A) if there are no other proccesses around. */
 	; functor(T, par, 1),
 	  T=par([TA]),
 	  functor(TA, sym, 3),
@@ -76,7 +90,7 @@ rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	      ;   rewrite_step(A, Gamma, Delta, Rho, A1, Gamma1, Delta1, Rho1) ->
 		  T1=par([A1|LR])
 	      )
-	  /* rewrite (ordered)-pairs of expressions */
+	  /* rewrite ordered pairs of expressions */
 	  ;   list_to_ord_set(L, OL),
 	      get_ord_pairs(OL, Pairs),
 	      select(TL-TR, Pairs, _),
@@ -98,40 +112,48 @@ rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 		  T1=seq([A1|B])
 	      )
 	  )
-	/* par(for(P,s,A), sym(Q,s,B)) */  
+	/* par(for(P, s, A), sym(Q, s, B)): merge for loop with parallel composition. */  
 	; functor(T, par, 2),
 	  arg(1, T, TA),
 	  arg(2, T, TB),
 	  functor(TA, for, 3),
 	  functor(TB, sym, 3), 
-	  TA=for(P,S,A),
-	  TB=sym(Q,S,B),
+	  TA=for(P, S, A),
+	  TB=sym(Q, S, B),
 	  fresh_pred_sym(Proc),
+	  replace_proc_id(Proc, S, Rho, Rho2),
 	  copy_instantiate(A, P, Proc, A1),
 	  copy_instantiate(B, Q, Proc, B1),
-	  rewrite(par(A1,B1), Gamma, [], Rho, par(skip, C), Gamma, Delta2, _) ->
+	  rewrite(par(A1, B1), Gamma, [], Rho2, par(skip, C), Gamma, Delta2, Rho3) ->
 	  substitute_term(Q, Proc, C, C1),
 	  T1=par(skip, sym(Q, S, C1)),
-	  Rho1=Rho, %TODO: save constants from loop 
+	  replace_proc_id(S, Proc, Rho3, Rho1),
 	  Gamma1=Gamma,
 	  substitute_term(P, Proc, Delta2, Delta3),
-	  append(Delta, [for(P,Delta3)], Delta1)
-	  %par(A, B): keeps order
+	  append(Delta, [for(P, S ,Delta3)], Delta1)
+	  /* par(A, B): rewrite ordered pairs. */
 	; functor(T, par, 2) ->
 	  arg(1, T, A),
 	  arg(2, T, B),
 	  (   rewrite_step(A, Gamma, Delta, Rho, A1, Gamma1, Delta1, Rho1)->
-	      T1=par(A1,B)
+	      T1=par(A1, B)
 	  ;   rewrite_step(B, Gamma, Delta, Rho, B1, Gamma1, Delta1, Rho1) ->
-	      T1=par(A,B1)
+	      T1=par(A, B1)
 	  ;   functor(A, seq, 1),
 	      A=seq([C|Cs]),
-	      %% or rewrite to anything?
-	      rewrite_step(par(C,B), Gamma, Delta, Rho, par(skip,D), Gamma1, Delta1, Rho1)->
-	      T1=par(seq(Cs), D)
-
+	      rewrite_step(par(C, B), Gamma, Delta, Rho, par(C1, B1), Gamma1, Delta1, Rho1)->
+	      T1=par(seq([C1|Cs]), B1)
 	  )
 	).
+
+replace_proc_id(Proc1, Proc, Rho, Rho1) :-
+	/* Transform all mappings for process Proc into mappings for process Proc1 */
+	findall(Proc-Var-Val, avl_member(Proc-Var, Rho, Val), L),
+	  (   foreach(Proc-Var-Val, L),
+	      fromto(Rho, RhoIn, RhoOut, Rho1)
+	  do  avl_delete(Proc-Var, RhoIn, _, RhoIn1),
+	      avl_store(Proc1-Var, RhoIn1, Val, RhoOut)
+	  ).
 
 rewrite(T, Gamma, Delta, Rho, T2, Gamma2, Delta2, Rho2) :-
 	(   	T=T2, Gamma=Gamma2, Delta=Delta2, Rho=Rho2
