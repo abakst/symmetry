@@ -46,6 +46,13 @@ P2=seq([recv(P, id),send(e_pid(P),e_pid(m),P)]),
 T=(par([seq([for(Q, s, P1A),for(Q, s, P1B)]), sym(P, s, P2)])),
 rewrite(T, _, Delta1, Rho1).
 
+% Reverse ping: two loops
+P1A=seq([send(e_pid(m),e_pid(Q), m)]),
+P1B=seq([recv(m, x)]),
+P2=seq([recv(P, id), send(e_pid(P),e_var(id),P)]),
+T=(par([for(Q, s, P1A), for(Q, s, P1B), sym(P, s, P2)])),
+rewrite(T, _, Delta1, Rho1).
+
 % Double ping: 
 P1=seq([send(e_pid(m),e_pid(Q),m),send(e_pid(m),e_pid(Q),m),recv(m,id1),recv(m,id2)]),
 P2=seq([send(e_pid(P),e_pid(m),P),send(e_pid(P),e_pid(m),P), recv(P, x1), recv(P, x2)]),
