@@ -14,7 +14,6 @@
  par([A,B,C]) : A || B || C.
  seq([A,B,C]) : A;B;C .
  send(p, x, v): p sends v to q.
-  | x=e_pid(q): send to  pid p.
   | x=e_var(y): send to the pid stored in variable y.
  recv(p, x)   : p receives x.
  sym(P, S, A) : composition of symmetric processes p in set s with source A.
@@ -23,12 +22,14 @@
  skip         : no-operation.
 ==============================================================================
 ==============================================================================
+*/
 
+/*
 ===================================
  TODOs:
 ===================================
    - remove e_pid(.) for send.
-   - storing constants for loops.
+   - while loops
 ===================================
 ===================================
 */
@@ -51,11 +52,9 @@ rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	/* send(p, x, v)*/
 	%TODO: the sends-from info does not need an annotation.
 	; functor(T, send, 3) ->
-	  arg(1, T, PExp),
+	  arg(1, T, P),
 	  arg(2, T, XExp),
 	  arg(3, T, V),
-	  functor(PExp, e_pid, 1),
-	  arg(1, PExp, P),
 	  (   functor(XExp, e_pid, 1) ->
 	      arg(1, XExp, Q)
 	  ;   functor(XExp, e_var, 1) ->
