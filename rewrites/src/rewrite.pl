@@ -7,8 +7,7 @@
 			      copy_instantiate/4,
 			      get_ord_pairs/2]).
 
-/*
-==============================================================================
+/*==============================================================================
  Language:
 ==============================================================================
  par([A,B,C]) : A || B || C.
@@ -21,18 +20,25 @@
  for(P, S, A) : for each process p in s execute A.
  skip         : no-operation.
 ==============================================================================
-==============================================================================
-*/
+==============================================================================*/
 
-/*
-===================================
+
+/*===================================
  TODOs:
 ===================================
-   - remove e_pid(.) for send.
    - while loops
+   - merge two for loops
 ===================================
-===================================
-*/
+===================================*/
+
+replace_proc_id(Proc1, Proc, Rho, Rho1) :-
+	/* Transform all constant assignments for process Proc into mappings for process Proc1 */
+	findall(Proc-Var-Val, avl_member(Proc-Var, Rho, Val), L),
+	  (   foreach(Proc-Var-Val, L),
+	      fromto(Rho, RhoIn, RhoOut, Rho1)
+	  do  avl_delete(Proc-Var, RhoIn, _, RhoIn1),
+	      avl_store(Proc1-Var, RhoIn1, Val, RhoOut)
+	  ).
 
 rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	(
@@ -50,7 +56,6 @@ rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	  ),
 	  avl_store(P-X, Rho, V, Rho1)
 	/* send(p, x, v)*/
-	%TODO: the sends-from info does not need an annotation.
 	; functor(T, send, 3) ->
 	  arg(1, T, P),
 	  arg(2, T, XExp),
@@ -59,8 +64,7 @@ rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	      arg(1, XExp, Q)
 	  ;   functor(XExp, e_var, 1) ->
 	      arg(1, XExp, X),
-	      avl_fetch(P-X, Rho, Q),
-	      format("Q: ~p",[Q])
+	      avl_fetch(P-X, Rho, Q)
 	  ),
 	  (   avl_fetch(P-Q, Gamma, Vs)
 	  ;   Vs=[]
@@ -145,14 +149,6 @@ rewrite_step(T, Gamma, Delta, Rho, T1, Gamma1, Delta1, Rho1) :-
 	  )
 	).
 
-replace_proc_id(Proc1, Proc, Rho, Rho1) :-
-	/* Transform all mappings for process Proc into mappings for process Proc1 */
-	findall(Proc-Var-Val, avl_member(Proc-Var, Rho, Val), L),
-	  (   foreach(Proc-Var-Val, L),
-	      fromto(Rho, RhoIn, RhoOut, Rho1)
-	  do  avl_delete(Proc-Var, RhoIn, _, RhoIn1),
-	      avl_store(Proc1-Var, RhoIn1, Val, RhoOut)
-	  ).
 
 rewrite(T, Gamma, Delta, Rho, T2, Gamma2, Delta2, Rho2) :-
 	(   	T=T2, Gamma=Gamma2, Delta=Delta2, Rho=Rho2
@@ -177,3 +173,26 @@ pp_term(T, S) :-
 	    arg(1, T, P),
 	    arg(2, T, X)
 	).
+
+unit_test :-
+	consult([examples]),
+	format('============================================~n',[]),
+	format('        Running unit tests.~n',[]),
+	format('============================================~n',[]),
+	findall(T-Name, rewrite_query(T, Name), L),
+	current_output(Out),
+	open_null_stream(Null),
+	(   foreach(T-Name, L),
+	    param(Null, Out)
+	do (
+	     
+	     ( set_output(Null),  
+	       rewrite(T, _, _, _) ->
+		 set_output(Out),
+		 format('~p:~20|          \e[32mpassed\e[0m~n', [Name])
+	     ;   set_output(Out),
+		 format('~p:~20|          \e[31mfailed\e[0m~n', [Name])
+	     )
+	   )
+	),
+	format('============================================~n',[]).
