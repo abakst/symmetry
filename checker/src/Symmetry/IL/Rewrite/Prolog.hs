@@ -17,10 +17,13 @@ printProlog ci
 
 rewrite :: P.Pretty a => ConfigInfo a -> Doc
 rewrite ci
-  = term "rewrite" [s0, skip] <> text "."
+  = term "rewrite_query" [text "T", text "Name"]
+            <+> text ":-"
+            <+> text "T" <> equals <> s0 <> text ","
+            <+> text "Name" <> equals <> text "Verify"
+            <> text "."
   where
     s0 = toProlog (config ci)
-    skip = text "skip"
 
 class Prolog a where
   toProlog :: a -> Doc
