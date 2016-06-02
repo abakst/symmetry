@@ -1,5 +1,5 @@
+:- use_module(library(sicstus)).
 /* This module contains various utility predicates */
-
 :- module(misc, [
 		 fresh_pred_sym/1,
 		 get_pairs/2,
@@ -8,7 +8,7 @@
 		 substitute_term_avl/4,
 		 format_atom/3,
 		 copy_instantiate/4
-		], [hidden(true)]).
+		]).
 		 
 :- use_module(library(ordsets)).
 :- use_module(library(terms)).
