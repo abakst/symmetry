@@ -193,7 +193,7 @@ unit_test :-
 	    param(Null, Out)
 	do (
 	     
-	     (   set_output(Null),  
+	     (   set_output(Null),
 	         rewrite(T, _, _, _) ->
 		 set_output(Out),
 		 format('~p:~30|          \e[32mpassed\e[0m~n', [Name])
