@@ -11,7 +11,7 @@
  Language:
 ==============================================================================
  par([A,B,C]) : A || B || C.
- seq([A,B,C]) : A;B;C .
+ seq([A,B,C]) : A; B; C.
  send(p, x, v): p sends v to q.
   | x=e_var(y): send to the pid stored in variable y.
  recv(p, x)   : p receives x.
@@ -30,6 +30,13 @@
    - merge two for loops
 ===================================
 ===================================*/
+
+independent(P, Q, L) :-
+/* Processes P and Q are independent according to list L */
+	(   member((P,Q), L) ->
+			    true
+	;   member((Q,P), L)
+	).
 
 replace_proc_id(Proc1, Proc, Rho, Rho1) :-
 	/* Transform all constant assignments for process Proc into mappings for process Proc1 */
@@ -176,23 +183,23 @@ pp_term(T, S) :-
 
 unit_test :-
 	consult([examples]),
-	format('============================================~n',[]),
-	format('        Running unit tests.~n',[]),
-	format('============================================~n',[]),
-	findall(T-Name, rewrite_query(T, Name), L),
+	format('===================================================~n',[]),
+	format('        Running tests.~n',[]),
+	format('===================================================~n',[]),
+	findall(T-Name, rewrite_query(T, _, Name), L),
 	current_output(Out),
 	open_null_stream(Null),
 	(   foreach(T-Name, L),
 	    param(Null, Out)
 	do (
 	     
-	     ( set_output(Null),  
-	       rewrite(T, _, _, _) ->
+	     (   set_output(Null),  
+	         rewrite(T, _, _, _) ->
 		 set_output(Out),
-		 format('~p:~20|          \e[32mpassed\e[0m~n', [Name])
+		 format('~p:~30|          \e[32mpassed\e[0m~n', [Name])
 	     ;   set_output(Out),
-		 format('~p:~20|          \e[31mfailed\e[0m~n', [Name])
+		 format('~p:~30|          \e[31mfailed\e[0m~n', [Name])
 	     )
 	   )
 	),
-	format('============================================~n',[]).
+	format('===================================================~n',[]).
