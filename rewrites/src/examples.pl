@@ -44,9 +44,9 @@ Simple ping
 
 rewrite_query(T, Ind, Name) :-
 	Ind=[], 
-	P1=seq([send(m,e_pid(Q),m),recv(m,x)]),
+	P1=seq([send(m,e_pid(Q),m), recv(m,x)]),
 	P2=seq([recv(P, id),send(P,e_pid(m),P)]),
-	T=(par([for(Q, s, P1), sym(P, s, P2)])),
+	T=(par([for(m, Q, s, P1), sym(P, s, P2)])),
 	Name='simple ping loop'.
 
 
@@ -58,7 +58,7 @@ rewrite_query(T, Ind, Name) :-
 	Ind=[], 
 	P1=seq([recv(m,id), send(m,e_var(id),m)]),
 	P2=seq([send(P,e_pid(m),P), recv(P, x)]),
-	T=(par([for(_, s, P1), sym(P, s, P2)])),
+	T=(par([for(m, _, s, P1), sym(P, s, P2)])),
 	Name='reverse ping'.
 
 /*===========
@@ -70,7 +70,7 @@ rewrite_query(T, Ind, Name) :-
 	P1A=seq([send(m,e_pid(Q),m)]),
 	P1B=seq([recv(m,x)]),
 	P2=seq([recv(P, id),send(P,e_pid(m),P)]),
-	T=(par([seq([for(Q, s, P1A),for(Q, s, P1B)]), sym(P, s, P2)])),
+	T=(par([seq([for(m, Q, s, P1A),for(m, Q, s, P1B)]), sym(P, s, P2)])),
 	Name='two loops'.
 
 /*============
@@ -82,7 +82,7 @@ rewrite_query(T, Ind, Name) :-
 	P1A=seq([send(m,e_pid(Q), m)]),
 	P1B=seq([recv(m, x)]),
 	P2=seq([recv(P, id), send(P,e_var(id),P)]),
-	T=(par([for(Q, s, P1A), for(Q, s, P1B), sym(P, s, P2)])),
+	T=(par([for(m, Q, s, P1A), for(m, Q, s, P1B), sym(P, s, P2)])),
 	Name='two loops var'.
 
 /*===========
@@ -92,7 +92,7 @@ rewrite_query(T, Ind, Name) :-
 	Ind=[], 
 	P1=seq([send(m,e_pid(Q),m),send(m,e_pid(Q),m),recv(m,id1),recv(m,id2)]),
 	P2=seq([send(P,e_pid(m),P),send(P, e_pid(m), P), recv(P, x1), recv(P, x2)]),
-	T=(par([for(Q, s, P1), sym(P, s, P2)])),
+	T=(par([for(m, Q, s, P1), sym(P, s, P2)])),
 	Name='Double ping'.
 
 
@@ -108,7 +108,7 @@ rewrite_query(T, Ind, Name) :-
 	 P1=seq([send(m, e_pid(Q), m)]),
 	 P2=seq([recv(P, id), send(P,e_pid(n), P)]),
 	 P3=seq([recv(n, x)]),
-	 T=(par([for(Q, s, P1), sym(P, s, P2), for(_, s, P3)])),
+	 T=(par([for(m, Q, s, P1), sym(P, s, P2), for(m, _, s, P3)])),
 	Name='two-party ping'.
 
 /*=========================
@@ -120,5 +120,41 @@ rewrite_query(T, Ind, Name) :-
 	P1=seq([recv(m, id), send(m, e_var(id), m)]),
 	P2=seq([send(P, e_pid(m), P), send(P, e_pid(n), P), recv(P, id)]),
 	P3=seq([recv(n, x)]),
-	T=(par([for(_, s, P1), sym(P, s, P2), for(_, s, P3)])),
+	T=(par([for(m, _, s, P1), sym(P, s, P2), for(n, _, s, P3)])),
 	Name='interleaved two-party ping'.
+
+/*=========================
+    TMP tests
+==========================*/
+    
+test_external(T1, Delta1, Psi1) :-
+	init_independent([(m,n)]),
+	empty_avl(Gamma),
+	empty_avl(Rho),
+	empty_avl(Psi),
+	assert(talkto(p,m)),
+	Delta=[],
+	P1=seq([recv(m, id), send(m, e_var(id), m)]),
+	P2=seq([send(p, e_pid(m), p), send(p, e_pid(n), p), recv(p, id)]),
+	T=par([P1,P2]),
+	rewrite(T, Gamma, Delta, Rho, Psi, skip, Gamma1, Delta1, Rho1, Psi1).
+	
+test_external_simp(T1, Delta1, Psi1) :-
+	init_independent([(m,n)]),
+	empty_avl(Gamma),
+	empty_avl(Rho),
+	empty_avl(Psi),
+	assert(talkto(p,m)),
+	Delta=[],
+	T=seq([send(p, e_pid(n), p)]),
+	rewrite(T, Gamma, Delta, Rho, Psi, skip, Gamma1, Delta1, Rho1, Psi1).
+
+test_external_loop(T1, Delta1, Psi1) :-
+	init_independent([(m,n)]),
+	empty_avl(Gamma),
+	empty_avl(Rho),
+	empty_avl(Psi),
+	P1=seq([recv(m, id), send(m, e_var(id), m)]),
+	P2=seq([send(P, e_pid(m), P), send(P, e_pid(n), P), recv(P, id)]),
+	T=(par([for(m, _, s, P1), sym(P, s, P2)])),
+	rewrite(T, Gamma, Delta, Rho, Psi, skip, Gamma1, Delta1, Rho1, Psi1).
