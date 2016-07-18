@@ -7,12 +7,18 @@
 		 substitute_term/4,
 		 substitute_term_avl/4,
 		 format_atom/3,
-		 copy_instantiate/4
+		 copy_instantiate/4,
+		 negate_int/2, bb_inc/1
 		], [hidden(true)]).
 		 
 :- use_module(library(ordsets)).
 :- use_module(library(terms)).
 :- use_module(library(avl)).
+
+bb_inc(Key) :-
+	bb_get(user:Key, I),
+	I1 is I+1,
+        bb_put(user:Key, I1).
 
 /* Copy T and instantiate Q to V in the new term */
 copy_instantiate(T, Q, V, T1) :-
@@ -76,3 +82,14 @@ format_atom(Format, Arguments, Atom) :-
 	format_to_codes(Format, Arguments, Codes),
 	atom_codes(Atom, Codes).
 
+/*LIA terms: negation */
+
+% Negating A
+
+negate_int(A=B, A=\=B).
+negate_int(A=:=B, A=\=B).
+negate_int(A=\=B, A=B).
+negate_int(A=<B, A>=B+1).
+negate_int(A<B, A>=B).
+negate_int(A>=B, A+1=<B).
+negate_int(A>B, A=<B).

@@ -35,7 +35,7 @@ rewrite_query(T, Ind, Name) :-
 	T= par([M,R,P1,P2]), Name='registry'.
 
 /*====================================
-                Loops:
+           For-loops:
 ====================================*/
 
 /*===========
@@ -93,8 +93,44 @@ rewrite_query(T, Ind, Name) :-
 	P1=seq([send(m,e_pid(Q),m),send(m,e_pid(Q),m),recv(m,id1),recv(m,id2)]),
 	P2=seq([send(P,e_pid(m),P),send(P, e_pid(m), P), recv(P, x1), recv(P, x2)]),
 	T=(par([for(m, Q, s, P1), sym(P, s, P2)])),
-	Name='Double ping'.
+	Name='double ping'.
 
+/*===========================================
+           Nondet/ Iter-loops / while loops:
+===========================================*/
+
+rewrite_query(T, Ind, Name) :-
+	Ind=[],
+	P1=nondet(P, send(P, e_pid(m), v)),
+	P2=recv(m, v),
+	T=(par([P1, P2])),
+	Name='nondet'.
+
+
+rewrite_query(T, Ind, Name) :-
+	Ind=[],
+	P1=nondet(P, send(P, e_pid(m), P)),
+	P2=seq([recv(m, v)]),
+	T=(par([iter(env, k, P1), iter(m, k, P2)])),
+	Name='iter-simple'.
+
+rewrite_query(T, Ind, Name) :-
+	Ind=[],
+	P1=seq([recv(q, id), send(q, e_var(id), 1)]),
+	P2=seq([assign(P, stop, 0), W]),
+	W=while(P, stop=0, seq([send(P, e_pid(q), P), recv(P, stop)])),
+	T=(par([for(q, _, s, P1), sym(P, s, P2)])),
+	Name='work-stealing 2nd-phase'.
+
+
+rewrite_query(T, Ind, Name) :-
+	Ind=[],
+	P1A=seq([recv(q, id), send(q, e_var(id), 0)]),
+	P1B=seq([recv(q, id), send(q, e_var(id), 1)]),
+	P2=seq([assign(P, stop, 0), W]),
+	W=while(P, stop=0, seq([send(P, e_pid(q), P), recv(P, stop)])),
+	T=(par([seq([iter(q, k, P1A), for(q, _, s, P1B)]), sym(P, s, P2)])),
+	Name='work-stealing'.
 
 /*====================================
         Multiple processes:
