@@ -18,7 +18,7 @@
  par([A,B,C])     : A || B || C.
  seq([A,B,C])     : A; B; C.
  send(p, x, v)    : process p sends value v to 
- | x=q            :       - process q.
+  | x=e_pid(q)    :       - process q.
   | x=e_var(y)    :       - the pid stored in variable y.
  recv(p, x)       : process p receives value x.
  recv(p, x, q)    : process p receives value x from process q.
@@ -29,6 +29,7 @@
  while(p,cond,A)  : process p executes A while cond is true.
  nondet(P, A)     : process P is chosen non-deterministically in A.
  assign(p, x, v)  : process p assigns value v to variable x.
+ if(P, Cond, A)   : process p executes A if Cond holds.
  skip             : no-operation.
 ==============================================================================
 ==============================================================================*/
@@ -181,8 +182,18 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Delta1=Delta,
 	  Rho1=Rho,
 	  Psi1=Psi
-	
- 	  /* par([A,B,C,...]) */
+	/* if(P, Cond, A): reduce to A, if Cond holds and skip, otherwise.*/
+	; functor(T, if, 3),
+	  T = if(P, Cond, A),
+	  (   check_cond(Cond, P, Rho) ->
+	      T1=A
+	  ;   negate_int(Cond, NegCond),
+	      check_cond(NegCond, P, Rho) ->
+	      T1=skip
+	  ),
+	  Gamma1=Gamma, Delta1=Delta,
+	  Rho1=Rho, Psi1=Psi
+	/* par([A,B,C,...]) */
 	; functor(T, par, 1) ->
 	  arg(1, T, L),
 	  (   L==[] ->
@@ -240,9 +251,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  TB = iter(_, K, B),
 	  empty_avl(Psi),
 	  rewrite(par(A, B), Gamma, [], Rho, Psi, par(skip, skip), Gamma, Delta2, _, Psi) ->
+	  T1=par(skip, skip),
 	  Gamma1=Gamma, Rho1=Rho, Psi1=Psi,
 	  append(Delta, [iter(env, K, seq(Delta2))], Delta1)
-
 	/* par(for(m, P, s, A), sym(P, s, while(P, s, B))): merge for-loop with while loop. */
 	; functor(T, par, 2),
 	  arg(1, T, TA),
@@ -274,7 +285,6 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      add_external(Psi3, sym(P, S, seq(Ext)), S, Psi1)
 	  ;   Psi1=Psi
 	  )
-
 	/* par(iter(m, k, A), sym(P, s, while(P, S, B))): merge iter-loop with while loop. */
 	; functor(T, par, 2),
 	  arg(1, T, TA),
@@ -395,7 +405,6 @@ rewrite(T, Gamma1, seq(Delta1), Rho1) :-
 	empty_avl(Rho),
 	empty_avl(Psi),
 	Delta=[],
-%	bb_put(while_count, 0),
 	rewrite(T, Gamma, Delta, Rho, Psi, skip, Gamma1, Delta1, Rho1, Psi).
 
 
