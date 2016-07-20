@@ -124,7 +124,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      avl_delete(Q-P, Gamma, _, Gamma1)
 	  ;   avl_store(Q-P, Gamma, Vs, Gamma1)
 	  ),
-	  avl_store(P-X, Rho, V, Rho1),
+	  update_constants(P, X, V, Rho, Rho1),
 	  Psi=Psi1
 	/* send(p, x, v)*/
 	; functor(T, send, 3) ->
@@ -366,6 +366,19 @@ rewrite(T, Gamma, Delta, Rho, Psi, T2, Gamma2, Delta2, Rho2, Psi2) :-
 	;   format('Failed to rewrite term:~p~n' ,[T]), fail
 	).
 
+
+update_constants(P, X, V, Rho, Rho1) :-
+	(   (atomic(X); var(X)),
+	    (atomic(V); var(V)) ->
+	    avl_store(P-X, Rho, V, Rho1)
+	;   functor(X, pair, 2),
+	    functor(V, pair, 2),
+	    X=pair(X1, X2),
+	    V=pair(V1, V2) ->
+	    update_constants(P, X1, V1, Rho, Rho2),
+	    update_constants(P, X2, V2, Rho2, Rho1)
+	;   throw(pair-matching-error(X,V))
+	).
 
 check_cond(Cond, P, Rho) :-
 	/* Check whether condition Cond holds under variable assignment Rho. */
