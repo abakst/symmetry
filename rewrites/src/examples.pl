@@ -174,4 +174,69 @@ rewrite_query(T, Ind, Name) :-
 	T=(par([seq([iter(q, k, P1A), for(q, _, s, P1B)]), sym(P, s, P2), iter(m, k, P3)])),
 	Name='map-reduce'.
 
+/*=============================
+        If-then-else
+=============================*/
+
+
+firewall(T, Delta1, Rho1) :-
+	init_independent([(sv, s)]),
+	empty_avl(Gamma),
+	empty_avl(Rho),
+	empty_avl(Psi),
+	Delta=[],
+	Server=seq([
+		    recv(sv,  pair(id, msg)),
+		    ite(msg=\=bad, send(sv, e_var(id), msg), skip)
+		   ]),
+	Firewall=seq([
+		      recv(fw, pair(id, msg)),
+		      ite(
+			  msg=bad,
+			  send(fw, id, wrong-message),
+			  seq([
+			       send(fw, e_pid(sv), pair(fw, msg)),
+			       recv(fw, sv, retmsg),
+			       send(fw, e_pid(id), retmsg)
+			      ])
+			 )
+		     ]),
+	Client=seq([send(P, fw, pair(P, n)), recv(P, ret)]),
+	T=( par([
+		 while(sv, true, Server),
+		 while(fw, true, Firewall),
+		 sym(P, s, Client)
+		])
+	  ),
+	rewrite(T, Gamma, Delta, Rho, Psi,
+		par([while(sv, true, Server), while(fw, true, Firewall)]),
+		_, Delta1, Rho1, Psi).
+
+concdb(T, Delta1, Rho1) :-
+	init_independent([(q,m)]),
+	empty_avl(Gamma),
+	empty_avl(Rho),
+	empty_avl(Psi),
+	Delta=[],
+	DB=seq([
+		recv(db, pair(act, id)),
+		ite(act=alloc, AllocDB, LookupDB)
+	       ]),
+	AllocDB = ite(
+		     ndet, seq([send(db, e_var(id), free), recv(db, v1)]),
+		     send(db, e_var(id), alloc)
+		    ),
+	LookupDB = send(db, e_var(id), val),
+	Client=seq([
+		ite(ndet, assign(P, act, lookup), assign(P, act, alloc)),
+		send(P, db, pair(act,P)),
+		ite(act=alloc, AllocC, LookupC)
+	       ]),
+	AllocC= seq([
+		     recv(P, msg),
+		     ite(msg=free, send(P, e_pid(db), v3), skip)
+		    ]),
+	LookupC= recv(P, val),
+	T=(par([while(db, true, DB), sym(P, s, Client)])),
+	rewrite(T, Gamma, Delta, Rho, Psi, while(db, true, DB), _, Delta1, Rho1, Psi).
 
