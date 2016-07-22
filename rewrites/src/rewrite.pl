@@ -10,38 +10,45 @@
 			     ]
 	     ).
 
+
 :- dynamic independent/2, talkto/2.
 
 /*==============================================================================
  Language:
-==============================================================================
- par([A,B,C])     : A || B || C.
- seq([A,B,C])     : A; B; C.
- send(p, x, v)    : process p sends value v to 
-  | x=e_pid(q)    :       - process q.
-  | x=e_var(y)    :       - the pid stored in variable y.
- recv(p, x)       : process p receives value x.
- recv(p, x, q)    : process p receives value x from process q.
- sym(P, S, A)     : composition of symmetric processes p in set s with source A.
-                    s must be distinct from process ids.
- for(m, P, S, A)  : process m executes A for each process p in s.
- iter(p, k, A)    : process p executes A k-times.
- while(p,cond,A)  : process p executes A while cond is true.
- nondet(P, A)     : process P is chosen non-deterministically in A.
- assign(p, x, v)  : process p assigns value v to variable x.
- if(P, Cond, A)   : process p executes A if Cond holds.
- skip             : no-operation.
+================================================================================
+ par([A,B,C])        : A || B || C.
+ seq([A,B,C])        : A; B; C.
+ send(p, x, v)       : process p sends value v to 
+  | x=e_pid(q)       :       - process q.
+  | x=e_var(y)       :       - the pid stored in variable y.
+ recv(p, x)          : process p receives value x.
+ recv(p, x, q)       : process p receives value x from process q.
+ sym(P, S, A)        : composition of symmetric processes p in set s with source A.
+                       s must be distinct from process ids.
+ for(m, P, S, A)     : process m executes A for each process p in s.
+ iter(p, k, A)       : process p executes A k-times.
+ while(p, cond, A)   : process p executes A while cond is true.
+ nondet(P, A)        : process P is chosen non-deterministically in A.
+ assign(p, x, v)     : process p assigns value v to variable x.
+ ite(P, Cond, A, B)  : process p executes A if Cond holds and B, otherwise.
+ if(P, Cond, A)      : Short for ite(P, Cond, A, skip).
+ skip                : no-operation.
+ pair(x, y)          : pair of values x and y.
+
+Terms are expected to be of the form par([ seq([..,]), ...]) .
 ==============================================================================
 ==============================================================================*/
 
 
 /*===================================
  TODOs:
-===================================
-   - fix nondet.
+   - ite
+   - fix check_cond, ie. fail gracefully
    - receive from.
+   - fix nondet.
+   - cleanup loop-rules.
    - send/receive permissions.
-===================================
+   - check rho assignments.
 ===================================*/
 
 replace_proc_id(Proc1, Proc, Rho, Rho1) :-
@@ -193,6 +200,21 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ),
 	  Gamma1=Gamma, Delta1=Delta,
 	  Rho1=Rho, Psi1=Psi
+	/* par(seq([ite(P, Cond, A, B), C]), D): reduce both par(A,C) and par(B, C) to skip. */
+	/*TODO: keep assignments in rho that are occur on both branches.*/
+	; functor(T, par, 2),
+	  T=par(TA, D),
+	  functor(TA, seq, 1),
+	  TA=seq([ITE, C]),
+	  functor(ITE, ite, 4),
+	  here(1),
+	  ITE=ite(P, Cond, A, B),
+	  rewrite(par([seq([A,C]),D]), Gamma, Delta, Rho, Psi, skip, _, DeltaA, _, Psi),
+	  rewrite(par([seq([B,C]),D]), Gamma, Delta, Rho, Psi, skip, _, DeltaB, _, Psi) ->
+	  append(Delta, [ite(Cond, seq(DeltaA), seq(DeltaB))], Delta1),
+	  empty_avl(Rho1),
+	  empty_avl(Gamma1),
+	  T1=par(skip, skip)	  
 	/* par([A,B,C,...]) */
 	; functor(T, par, 1) ->
 	  arg(1, T, L),
