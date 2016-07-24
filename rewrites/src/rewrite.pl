@@ -1,12 +1,11 @@
 :- use_module(library(avl)).
 :- use_module(library(lists)).
-:- use_module(library(clpq)).
 :- use_module(library(terms)).
 :- use_module(library(ordsets)).
 :- use_module('lib/misc.pl', [ format_atom/3, fresh_pred_sym/1,
 			       substitute_term/4,substitute_term_avl/4,
 			       copy_instantiate/4,get_ord_pairs/2,
-			       negate_int/2, bb_inc/1
+			       negate/2, bb_inc/1
 			     ]
 	     ).
 
@@ -183,7 +182,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	/* while(p, cond, A): remove while if cond doesn't hold. */
 	; functor(T, while, 3),
 	  T= while(P, Cond, _),
-	  negate_int(Cond, NegCond),
+	  negate(Cond, NegCond),
 	  check_cond(NegCond, P, Rho) ->
 	  T1=skip,
 	  Gamma1=Gamma,
@@ -195,13 +194,13 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  T=if(P, Cond, A),
 	  T1=ite(P, Cond, A, skip),
 	  Gamma1=Gamma, Delta1=Delta,
-	  Rho1=Rho, Psi1=Psi	
+	  Rho1=Rho, Psi1=Psi
 	/* ite(P, Cond, A, B): reduce to A, if Cond holds and B, if not Cond holds.*/
 	; functor(T, ite, 4),
 	  T = ite(P, Cond, A, B),
 	  (   check_cond(Cond, P, Rho) ->
 	      T1=A
-	  ;   negate_int(Cond, NegCond),
+	  ;   negate(Cond, NegCond),
 	      check_cond(NegCond, P, Rho) ->
 	      T1=B
 	  ),
@@ -212,16 +211,15 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	; functor(T, par, 2),
 	  T=par(TA, D),
 	  functor(TA, seq, 1),
-	  TA=seq([ITE, C]),
+	  TA=seq([ITE|C]),
 	  functor(ITE, ite, 4),
-	  here(1),
 	  ITE=ite(P, Cond, A, B),
-	  rewrite(par([seq([A,C]),D]), Gamma, Delta, Rho, Psi, skip, _, DeltaA, _, Psi),
-	  rewrite(par([seq([B,C]),D]), Gamma, Delta, Rho, Psi, skip, _, DeltaB, _, Psi) ->
+	  rewrite(par([seq([A|C]),D]), Gamma, Delta, Rho, Psi, skip, _, DeltaA, _, Psi),
+	  rewrite(par([seq([B|C]),D]), Gamma, Delta, Rho, Psi, skip, _, DeltaB, _, Psi) ->
 	  append(Delta, [ite(Cond, seq(DeltaA), seq(DeltaB))], Delta1),
 	  empty_avl(Rho1),
 	  empty_avl(Gamma1),
-	  T1=par(skip, skip)	  
+	  T1=par(skip, skip)  
 	/* par([A,B,C,...]) */
 	; functor(T, par, 1) ->
 	  arg(1, T, L),
@@ -300,7 +298,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  copy_instantiate(B, P, Proc, B1),
 	  set_talkto(M, Proc),
 	  rewrite(par(A, B1), Gamma, [], Rho2, Psi, par(skip, skip), Gamma, Delta2, Rho3, Psi2),
-	  negate_int(Cond, NegCond),
+	  negate(Cond, NegCond),
 	  check_cond(NegCond, Proc, Rho3) ->
 	  clear_talkto,
 	  T1=par(skip, skip),
@@ -433,7 +431,7 @@ check_cond(Cond, P, Rho) :-
 	    true
 	;   substitute_constants(Cond, P, Rho, Cond1),
 	    %Check wether the formula Cond1 holds.
-	    catch({Cond1}, _, fail)
+	    catch(Cond1, _, fail)
 	).
 
 clear_talkto :-
@@ -451,14 +449,13 @@ init_independent(L) :-
 	    assert(independent(Q,P))
 	).
 
-rewrite(T, Gamma1, seq(Delta1), Rho1) :-
+rewrite(T, Ind, Gamma1, seq(Delta1), Rho1) :-
+	init_independent(Ind),
 	empty_avl(Gamma),
 	empty_avl(Rho),
 	empty_avl(Psi),
 	Delta=[],
 	rewrite(T, Gamma, Delta, Rho, Psi, skip, Gamma1, Delta1, Rho1, Psi).
-
-
 
 pp_term(T, S) :-
 	/* TODO */
@@ -482,10 +479,8 @@ unit_test :-
 	(   foreach(T-Name-Ind, L),
 	    param(Null, Out)
 	do (
-	     
-	     (   init_independent(Ind),
-	         set_output(Null),
-	         rewrite(T, _, _, _) ->
+	     (  set_output(Null),
+	         rewrite(T, Ind, _, _, _) ->
 		 set_output(Out),
 		 format('~p:~30|          \e[32mpassed\e[0m~n', [Name])
 	     ;   set_output(Out),

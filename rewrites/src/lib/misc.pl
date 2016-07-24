@@ -8,7 +8,7 @@
 		 substitute_term_avl/4,
 		 format_atom/3,
 		 copy_instantiate/4,
-		 negate_int/2, bb_inc/1
+		 negate/2, bb_inc/1
 		], [hidden(true)]).
 		 
 :- use_module(library(ordsets)).
@@ -86,10 +86,7 @@ format_atom(Format, Arguments, Atom) :-
 
 % Negating A
 
-negate_int(A=B, A=\=B).
-negate_int(A=:=B, A=\=B).
-negate_int(A=\=B, A=B).
-negate_int(A=<B, A>=B+1).
-negate_int(A<B, A>=B).
-negate_int(A>=B, A+1=<B).
-negate_int(A>B, A=<B).
+negate(A=B, A\==B).
+negate(A==B, A\==B).
+negate(A\==B, A==B).
+negate(A=\=B, A==B).
