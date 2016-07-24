@@ -108,14 +108,13 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  T=par(L),
 	  avl_domain(Psi, [P]),
 	  \+(talkto(_,_)) ->
-	  avl_fetch(P, Psi, [Ext]),
-	  append(L, [Ext], L1),
+	  avl_fetch(P, Psi, Ext),
+	  append(L, [seq(Ext)], L1),
 	  T1=par(L1),
 	  Gamma1=Gamma,
 	  Delta1=Delta,
 	  Rho1=Rho,
 	  empty_avl(Psi1)
-
 	/* TODO: external recv-from */
 	/* TODO: recv-from */
 
@@ -143,11 +142,13 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ;   functor(XExp, e_var, 1) ->
 	      arg(1, XExp, X),
 	      avl_fetch(P-X, Rho, Q)
+	  ;   throw(parse-pid-error(XExp))
 	  ),
 	  (   avl_fetch(P-Q, Gamma, Vs)
 	  ;   Vs=[]
 	  ),
-	  append(Vs, [V], Vs1),
+	  substitute_constants(V, P, Rho, V1),
+	  append(Vs, [V1], Vs1),
 	  avl_store(P-Q, Gamma, Vs1, Gamma1),
 	  T1=skip,
 	  Delta1=Delta,
@@ -189,14 +190,20 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Delta1=Delta,
 	  Rho1=Rho,
 	  Psi1=Psi
-	/* if(P, Cond, A): reduce to A, if Cond holds and skip, otherwise.*/
+	/* if(P, Cond, A): syntactic sugar for ite(P, Cond, A, skip).*/
 	; functor(T, if, 3),
-	  T = if(P, Cond, A),
+	  T=if(P, Cond, A),
+	  T1=ite(P, Cond, A, skip),
+	  Gamma1=Gamma, Delta1=Delta,
+	  Rho1=Rho, Psi1=Psi	
+	/* ite(P, Cond, A, B): reduce to A, if Cond holds and B, if not Cond holds.*/
+	; functor(T, ite, 4),
+	  T = ite(P, Cond, A, B),
 	  (   check_cond(Cond, P, Rho) ->
 	      T1=A
 	  ;   negate_int(Cond, NegCond),
 	      check_cond(NegCond, P, Rho) ->
-	      T1=skip
+	      T1=B
 	  ),
 	  Gamma1=Gamma, Delta1=Delta,
 	  Rho1=Rho, Psi1=Psi
@@ -402,22 +409,31 @@ update_constants(P, X, V, Rho, Rho1) :-
 	;   throw(pair-matching-error(X,V))
 	).
 
-check_cond(Cond, P, Rho) :-
-	/* Check whether condition Cond holds under variable assignment Rho. */
-	(   Cond==true ->
-	    true
-	;   avl_domain(Rho, Dom),
-	    (   foreach(Q-Var, Dom),
-		fromto(Cond, In, Out, Cond1),
+here(X) :- X=1.
+
+substitute_constants(T, P, Rho, T1) :-
+	/*
+	In term T substitute all variable bindings defined in Rho to
+	produce term T1.
+	*/
+	avl_domain(Rho, Dom),
+	(   foreach(Q-Var, Dom),
+		fromto(T, In, Out, T1),
 		param(Rho, P)
 	    do  (  Q==P ->
 		    avl_fetch(P-Var, Rho, Val),
 		    substitute_term(Val, Var, In, Out)
 		;   In=Out
 		)
-	    ),
-	    % TODO: this breaks if not all values are instantiated.
-	    {Cond1}
+	).
+
+check_cond(Cond, P, Rho) :-
+	/* Check whether condition Cond holds under variable assignment Rho. */
+	(   Cond==true ->
+	    true
+	;   substitute_constants(Cond, P, Rho, Cond1),
+	    %Check wether the formula Cond1 holds.
+	    catch({Cond1}, _, fail)
 	).
 
 clear_talkto :-
