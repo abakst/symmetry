@@ -208,16 +208,20 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	/*TODO: keep assignments in rho that are occur on both branches.*/
 	; functor(T, par, 2),
 	  T=par(TA, D),
-	  functor(TA, seq, 1),
-	  TA=seq([ITE|C]),
-	  functor(ITE, ite, 4),
-	  ITE=ite(P, Cond, A, B),
-	  rewrite(par([seq([A|C]),D]), Gamma, Delta, Rho, Psi, skip, _, DeltaA, _, Psi),
-	  rewrite(par([seq([B|C]),D]), Gamma, Delta, Rho, Psi, skip, _, DeltaB, _, Psi) ->
+	  (   functor(TA, seq, 1)->
+	      TA=seq([ITE|C]),
+	      functor(ITE, ite, 4),
+	      ITE=ite(P, Cond, A, B)
+	  ;   functor(TA, ite, 4) ->
+	      TA=ite(P, Cond, A, B),
+	      C=[]
+	  ),
+	  rewrite(par([seq([A|C]),D]), Gamma, [], Rho, Psi, skip, _, DeltaA, _, Psi),
+	  rewrite(par([seq([B|C]),D]), Gamma, [], Rho, Psi, skip, _, DeltaB, _, Psi) ->
 	  append(Delta, [ite(Cond, seq(DeltaA), seq(DeltaB))], Delta1),
 	  empty_avl(Rho1),
 	  empty_avl(Gamma1),
-	  T1=par(skip, skip)  
+	  T1=par(skip, skip)
 	/* par([A,B,C,...]) */
 	; functor(T, par, 1) ->
 	  arg(1, T, L),
