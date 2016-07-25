@@ -17,11 +17,13 @@
 ================================================================================
  par([A,B,C])        : A || B || C.
  seq([A,B,C])        : A; B; C.
- send(p, x, v)       : process p sends value v to 
+ send(p, x, v)       : process p sends value v to
   | x=e_pid(q)       :       - process q.
   | x=e_var(y)       :       - the pid stored in variable y.
- recv(p, x)          : process p receives value x.
- recv(p, x, q)       : process p receives value x from process q.
+ recv(p, v)          : process p receives value v.
+ recv(p, x, v)       : process p receives value v from 
+  | x=e_pid(q)       :       - process q.
+  | x=e_var(y)       :       - the pid stored in variable y.
  sym(P, S, A)        : composition of symmetric processes p in set s with source A.
                        s must be distinct from process ids.
  for(m, P, S, A)     : process m executes A for each process p in s.
@@ -68,7 +70,8 @@ add_external(Psi, T, P, Psi1) :-
 	
 
 rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
-	/*     T:    Process term.
+	/*
+	       T:    Process term.
 	   Gamma:    Environment containing message buffer for each process pair.
 	   Delta:    Prefix of rewritten communication.
 	     Rho:    Map from variables to constants.
@@ -114,16 +117,17 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Delta1=Delta,
 	  Rho1=Rho,
 	  empty_avl(Psi1)
-	/* TODO: external recv-from */
-	/* TODO: recv-from */
-
-	/* recv(p, x) */
-	; functor(T, recv, 2),
-	  arg(1, T, P),
-	  atomic(P),
+	/* recv(p, x) and recv(p, PidExp, x): receive if there's a pending message. */
+	; (   functor(T, recv, 2),
+	      T=recv(P, X),
+	      atomic(P)
+	  ;   functor(T, recv, 3),
+	      T=recv(P, PidExp, X),
+	      atomic(P),
+	      parse_pid_exp(PidExp, P, Rho, Q)
+	  ),
 	  avl_member(Q-P, Gamma, [V|Vs]) ->
 	  T1=skip,
-	  arg(2, T, X),	  
 	  append(Delta, [assign(P, X, V)], Delta1),
 	  (   Vs==[] ->
 	      avl_delete(Q-P, Gamma, _, Gamma1)
@@ -131,18 +135,12 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ),
 	  update_constants(P, X, V, Rho, Rho1),
 	  Psi=Psi1
-	/* send(p, x, v)*/
+	/* send(p, x, v) */
 	; functor(T, send, 3) ->
 	  arg(1, T, P),
-	  arg(2, T, XExp),
+	  arg(2, T, PidExp),
 	  arg(3, T, V),
-	  (   functor(XExp, e_pid, 1) ->
-	      arg(1, XExp, Q)
-	  ;   functor(XExp, e_var, 1) ->
-	      arg(1, XExp, X),
-	      avl_fetch(P-X, Rho, Q)
-	  ;   throw(parse-pid-error(XExp))
-	  ),
+	  parse_pid_exp(PidExp, P, Rho, Q),
 	  (   avl_fetch(P-Q, Gamma, Vs)
 	  ;   Vs=[]
 	  ),
@@ -393,6 +391,20 @@ rewrite(T, Gamma, Delta, Rho, Psi, T2, Gamma2, Delta2, Rho2, Psi2) :-
 	;   format('Failed to rewrite term:~p~n' ,[T]), fail
 	).
 
+
+parse_pid_exp(PidExp, P, Rho, Q) :-
+	/*
+	If PidExp is of the form e_pid(q), return q.
+	If PidExp is of the form e_var(x) return rho(p, x).
+        Throws an exception otherwise.
+	*/
+	(   functor(PidExp, e_pid, 1) ->
+	    arg(1, PidExp, Q)
+	;   functor(PidExp, e_var, 1) ->
+	    arg(1, PidExp, X),
+	    avl_fetch(P-X, Rho, Q)
+	;   throw(parse-pid-error(PidExp))
+	).
 
 update_constants(P, X, V, Rho, Rho1) :-
 	(   (atomic(X); var(X)),
