@@ -225,6 +225,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  arg(1, T, L),
 	  (   L==[] ->
 	      T1=skip, Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi=Psi1
+	  ;   L = [A] ->
+	      T1=A, Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi=Psi1
 	  /* rewrite single expression */
 	  ;   select(A, L, LR),
 	      (   A==skip->
@@ -281,37 +283,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  T1=par(skip, skip),
 	  Gamma1=Gamma, Rho1=Rho, Psi1=Psi,
 	  append(Delta, [iter(env, K, seq(Delta2))], Delta1)
-	/* par(for(m, P, s, A), sym(P, s, while(P, s, B))): merge for-loop with while loop. */
-	; functor(T, par, 2),
-	  arg(1, T, TA),
-	  arg(2, T, TB),
-	  functor(TA, for, 4),
-	  functor(TB, sym, 3),
-	  TA = for(M, _, S, A),
-	  TB = sym(P, S, W),
-	  functor(W, while, 3),
-	  W = while(P, Cond, B),
-	  empty_avl(Psi),
-	  fresh_pred_sym(Proc),
-	  replace_proc_id(Proc, S, Rho, Rho2),
-	  check_cond(Cond, Proc, Rho2),
-	  copy_instantiate(B, P, Proc, B1),
-	  set_talkto(M, Proc),
-	  rewrite(par(A, B1), Gamma, [], Rho2, Psi, par(skip, skip), Gamma, Delta2, Rho3, Psi2),
-	  negate(Cond, NegCond),
-	  check_cond(NegCond, Proc, Rho3) ->
-	  clear_talkto,
-	  T1=par(skip, skip),
-	  Gamma1=Gamma,
-	  substitute_term(P, Proc, Delta2, Delta3),
-	  append(Delta, [for(P, S ,Delta3)], Delta1),
-	  replace_proc_id(S, Proc, Rho3, Rho1),
-	  % External
-	  (   avl_delete(Proc, Psi2, Ext0, Psi3) ->
-	      substitute_term(P, Proc, Ext0, Ext),
-	      add_external(Psi3, sym(P, S, seq(Ext)), S, Psi1)
-	  ;   Psi1=Psi
-	  )
+
 	/* par(iter(m, k, A), sym(P, s, while(P, S, B))): merge iter-loop with while loop. */
 	; functor(T, par, 2),
 	  arg(1, T, TA),
@@ -368,6 +340,23 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      add_external(Psi3, sym(P, S, seq(Ext)), S, Psi1)
 	  ;   Psi1=Psi
 	  )
+	/*
+	par(A, while(P, Cond, B)): consume A.
+	*/
+	% TODO: remainder term
+	; functor(T, par, 2),
+	  arg(1, T, A),
+	  arg(2, T, TB),
+	  functor(TB, while, 3),
+	  TB=while(P, Cond, B),
+	  check_cond(Cond, P, Rho),
+	  empty_avl(Psi),
+	  rewrite(par(A, B), Gamma, [], Rho, Psi, par(skip, skip), Gamma, Delta2, Rho1, Psi) ->
+	  T1=par(skip, TB),
+	  append(Delta, [Delta2], Delta1),
+	  Gamma1=Gamma,
+	  Psi1=Psi
+
 	  /* par(A, B): rewrite ordered pairs. */
 	; functor(T, par, 2) ->
 	  arg(1, T, A),
