@@ -43,12 +43,10 @@ Terms are expected to be of the form par([ seq([..,]), ...]) .
 
 /*===================================
  TODOs:
-   - ite
-   - fix check_cond, ie. fail gracefully
-   - receive from.
-   - fix nondet.
-   - cleanup loop-rules.
+   - Cleanup loop-rules.
    - send/receive permissions.
+   - Pretty printer.
+   - Fix nondet.
    - check rho assignments.
 ===================================*/
 
@@ -341,7 +339,6 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      add_external(Psi3, iter(env, K, nondet(P, seq(Ext))), S, Psi1)
 	  ;   Psi1=Psi
 	  )
-
 	/* par(for(m, P, s, A), sym(Q, s, B)): merge for-loop with parallel composition. */  
 	; functor(T, par, 2),
 	  arg(1, T, TA),
@@ -385,8 +382,6 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      T1=par(seq([C1|Cs]), B1)
 	  )
 	).
-
-
 
 rewrite(T, Gamma, Delta, Rho, Psi, T2, Gamma2, Delta2, Rho2, Psi2) :-
 	(   	T=T2, Gamma=Gamma2, Delta=Delta2, Rho=Rho2, Psi= Psi2
@@ -442,11 +437,13 @@ substitute_constants(T, P, Rho, T1) :-
 	).
 
 check_cond(Cond, P, Rho) :-
-	/* Check whether condition Cond holds under variable assignment Rho. */
+	/*
+	Check whether condition Cond holds under
+	variable assignment Rho.
+	*/
 	(   Cond==true ->
 	    true
 	;   substitute_constants(Cond, P, Rho, Cond1),
-	    %Check wether the formula Cond1 holds.
 	    catch(Cond1, _, fail)
 	).
 
@@ -458,7 +455,10 @@ set_talkto(P, Q) :-
 	assert(talkto(Q,P)).
 
 init_independent(L) :-
-	/* L=[(m,n),..] : processes m and n are independent.*/
+	/*
+	L=[(m,n),..] : processes m and n
+	are independent.
+	*/
 	retractall(independent(_,_)),
 	(   foreach((P,Q), L)
 	do  assert(independent(P,Q)),
