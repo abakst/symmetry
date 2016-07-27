@@ -43,9 +43,10 @@ Terms are expected to be of the form par([ seq([..,]), ...]) .
 
 /*===================================
  TODOs:
+   - Pretty printer.
+   - Implement race check.
    - Cleanup loop-rules.
    - send/receive permissions.
-   - Pretty printer.
    - Fix nondet.
    - check rho assignments.
 ===================================*/
@@ -110,6 +111,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	*/
 	; functor(T, par, 1),
 	  T=par(L),
+	  nonvar(Psi),
 	  avl_domain(Psi, [P]),
 	  \+(talkto(_,_)) ->
 	  avl_fetch(P, Psi, Ext),
@@ -312,7 +314,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  TA = iter(_, K, A),
 	  TB = iter(_, K, B),
 	  empty_avl(Psi),
-	  rewrite(par(A, B), Gamma, [], Rho, Psi, par(skip, skip), Gamma, Delta2, _, Psi)->
+	  mk_pair(A, B, Pair),
+	  rewrite(Pair, Gamma, [], Rho, Psi, par(skip, skip), Gamma, Delta2, _, Psi)->
 	  T1=par(skip, skip),
 	  Gamma1=Gamma, Rho1=Rho, Psi1=Psi,
 	  append(Delta, [iter(env, K, seq(Delta2))], Delta1)
@@ -331,7 +334,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  copy_instantiate(B, P, Proc, B1),
 	  replace_proc_id(Proc, S, Rho, Rho2),
 	  set_talkto(M, Proc),
-	  rewrite(par(A, B1), Gamma, [], Rho2, Psi, par(skip, B1), Gamma, Delta2, _, Psi2)->
+	  mk_pair(A, B1, Pair),
+	  rewrite(Pair, Gamma, [], Rho2, Psi, par(skip, B1), Gamma, Delta2, _, Psi2)->
 	  clear_talkto,
 	  T1 = par(skip, TB),
 	  Gamma1=Gamma,
@@ -359,7 +363,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  copy_instantiate(A, P, Proc, A1),
 	  copy_instantiate(B, Q, Proc, B1),
 	  set_talkto(M, Proc),
-	  rewrite(par(A1, B1), Gamma, [], Rho2, Psi, par(skip, C), Gamma, Delta2, Rho3, Psi2) ->
+          mk_pair(A1, B1, Pair),
+	  rewrite(Pair, Gamma, [], Rho2, Psi, par(skip, C), Gamma, Delta2, Rho3, Psi2) ->
 	  clear_talkto,
 	  substitute_term(Q, Proc, C, C1),
 	  T1=par(skip, sym(Q, S, C1)),
@@ -384,7 +389,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  TB=while(P, Cond, B),
 	  check_cond(Cond, P, Rho),
 	  empty_avl(Psi),
-	  rewrite(par(A, B), Gamma, [], Rho, Psi, par(skip, skip), Gamma, Delta2, Rho1, Psi1) ->
+          mk_pair(A, B, Pair),
+	  rewrite(Pair, Gamma, [], Rho, Psi, par(skip, skip), Gamma, Delta2, Rho1, Psi1) ->
 	  T1=par(skip, TB),
 	  append(Delta, [Delta2], Delta1),
 	  Gamma1=Gamma
@@ -408,10 +414,22 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 rewrite(T, Gamma, Delta, Rho, Psi, T2, Gamma2, Delta2, Rho2, Psi2) :-
 	(   	T=T2, Gamma=Gamma2, Delta=Delta2, Rho=Rho2, Psi= Psi2
 	;   rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) ->
+	    sanity_check([T1, Gamma1, Delta1, Rho1, Psi1]),
 	    rewrite(T1, Gamma1, Delta1, Rho1, Psi1, T2, Gamma2, Delta2, Rho2, Psi2)
 	;   format('Failed to rewrite term:~p~n' ,[T]), fail
 	).
 
+mk_pair(A, B, Pair) :-
+	(   Pair=par(A, B)
+	;   Pair=par(B, A)
+	).
+
+sanity_check(L) :-
+	(   foreach(X, L)
+	do  nonvar(X)->
+	    true
+	;   throw(parameter_not_instantiated(X))
+	).
 
 parse_pid_exp(PidExp, P, Rho, Q) :-
 	/*
