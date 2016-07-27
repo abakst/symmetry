@@ -348,6 +348,34 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ;   Psi1=Psi
 	  )
 	/*
+	par(while(m, Cond, A), sym(Q, s, B)): merge for-loop with parallel composition.
+	*/
+	; functor(T, par, 2),
+	  arg(1, T, TA),
+	  arg(2, T, TB),
+	  functor(TA, while, 3),
+	  functor(TB, sym, 3),
+	  TA=while(M, Cond, A),
+	  TB=sym(P, S, B),
+	  empty_avl(Psi),
+	  fresh_pred_sym(Proc),
+	  replace_proc_id(Proc, S, Rho, Rho2),
+	  copy_instantiate(B, P, Proc, B1),
+	  set_talkto(M, Proc),
+	  mk_pair(A, B1, Pair),
+	  rewrite(Pair, Gamma, [], Rho2, Psi, par(skip, skip), Gamma, Delta2, Rho3, Psi2)->
+	  clear_talkto,
+	  T1=par(TA, skip),
+	  replace_proc_id(S, Proc, Rho3, Rho1),
+	  Gamma1=Gamma,
+	  substitute_term(P, Proc, Delta2, Delta3),
+	  append(Delta, [for(P, S , seq(Delta3))], Delta1),
+	  (   avl_delete(Proc, Psi2, Ext0, Psi3) ->
+	      substitute_term(P, Proc, Ext0, Ext),
+	      add_external(Psi3, sym(P, S, seq(Ext)), S, Psi1)
+	  ;   Psi1=Psi
+	  )
+	/*
 	par(for(m, P, s, A), sym(Q, s, B)): merge for-loop with parallel composition.
 	*/
 	; functor(T, par, 2),
