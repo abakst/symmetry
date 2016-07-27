@@ -203,7 +203,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	if(P, Cond, A): syntactic sugar for ite(P, Cond, A, skip).
 	*/
 	; functor(T, if, 3),
-	  T=if(P, Cond, A),
+	  T=if(P, Cond, A)->
 	  T1=ite(P, Cond, A, skip),
 	  Gamma1=Gamma, Delta1=Delta,
 	  Rho1=Rho, Psi1=Psi
@@ -217,7 +217,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ;   negate(Cond, NegCond),
 	      check_cond(NegCond, P, Rho) ->
 	      T1=B
-	  ),
+	  )->
 	  Gamma1=Gamma, Delta1=Delta,
 	  Rho1=Rho, Psi1=Psi
 	/*
@@ -235,11 +235,12 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      C=[]
 	  ),
 	  rewrite(par([seq([A|C]),D]), Gamma, [], Rho, Psi, skip, _, DeltaA, _, Psi),
-	  rewrite(par([seq([B|C]),D]), Gamma, [], Rho, Psi, skip, _, DeltaB, _, Psi) ->
+	  rewrite(par([seq([B|C]),D]), Gamma, [], Rho, Psi, skip, _, DeltaB, _, Psi)->
 	  append(Delta, [ite(Cond, seq(DeltaA), seq(DeltaB))], Delta1),
 	  empty_avl(Rho1),
 	  empty_avl(Gamma1),
-	  T1=par(skip, skip)
+	  T1=par(skip, skip),
+	  Psi1=Psi
 	/*
 	par([A,B,C,...])
 	*/
@@ -255,7 +256,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ;   select(A, L, LR),
 	      (   A==skip->
 		  T1=par(LR), Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi=Psi1
-	      ;   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1) ->
+	      ;   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1)->
 		  T1=par([A1|LR])
 	      )
 	  /*
@@ -264,7 +265,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ;   list_to_ord_set(L, OL),
 	      get_ord_pairs(OL, Pairs),
 	      select(TL-TR, Pairs, _),
-	      rewrite_step(par(TL, TR), Gamma, Delta, Rho, Psi, T2, Gamma1, Delta1, Rho1, Psi1) ->
+	      rewrite_step(par(TL, TR), Gamma, Delta, Rho, Psi, T2, Gamma1, Delta1, Rho1, Psi1)->
 	      list_to_ord_set([TL,TR], Ts),
 	      ord_subtract(OL, Ts, Ts1),
 	      T2=par(T2A,T2B),
@@ -282,7 +283,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ;   L=[A|B],
 	      (  A==skip ->
 		  T1=seq(B),Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi=Psi1
-	      ;   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1) ->
+	      ;   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1)->
 		  T1=seq([A1|B])
 	      )
 	  )
@@ -311,7 +312,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  TA = iter(_, K, A),
 	  TB = iter(_, K, B),
 	  empty_avl(Psi),
-	  rewrite(par(A, B), Gamma, [], Rho, Psi, par(skip, skip), Gamma, Delta2, _, Psi) ->
+	  rewrite(par(A, B), Gamma, [], Rho, Psi, par(skip, skip), Gamma, Delta2, _, Psi)->
 	  T1=par(skip, skip),
 	  Gamma1=Gamma, Rho1=Rho, Psi1=Psi,
 	  append(Delta, [iter(env, K, seq(Delta2))], Delta1)
@@ -330,7 +331,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  copy_instantiate(B, P, Proc, B1),
 	  replace_proc_id(Proc, S, Rho, Rho2),
 	  set_talkto(M, Proc),
-	  rewrite(par(A, B1), Gamma, [], Rho2, Psi, par(skip, B1), Gamma, Delta2, _, Psi2) ->
+	  rewrite(par(A, B1), Gamma, [], Rho2, Psi, par(skip, B1), Gamma, Delta2, _, Psi2)->
 	  clear_talkto,
 	  T1 = par(skip, TB),
 	  Gamma1=Gamma,
@@ -395,7 +396,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  arg(2, T, B),
 	  (   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1)->
 	      T1=par(A1, B)
-	  ;   rewrite_step(B, Gamma, Delta, Rho, Psi, B1, Gamma1, Delta1, Rho1, Psi1) ->
+	  ;   rewrite_step(B, Gamma, Delta, Rho, Psi, B1, Gamma1, Delta1, Rho1, Psi1)->
 	      T1=par(A, B1)
 	  ;   functor(A, seq, 1),
 	      A=seq([C|Cs]),
