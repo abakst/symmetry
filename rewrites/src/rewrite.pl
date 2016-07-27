@@ -487,13 +487,13 @@ init_independent(L) :-
 	    assert(independent(Q,P))
 	).
 
-rewrite(T, Ind, Gamma1, seq(Delta1), Rho1) :-
+rewrite(T, Rem, Ind, Gamma1, seq(Delta1), Rho1) :-
 	init_independent(Ind),
 	empty_avl(Gamma),
 	empty_avl(Rho),
 	empty_avl(Psi),
 	Delta=[],
-	rewrite(T, Gamma, Delta, Rho, Psi, skip, Gamma1, Delta1, Rho1, Psi).
+	rewrite(T, Gamma, Delta, Rho, Psi, Rem, Gamma1, Delta1, Rho1, Psi).
 
 pp_term(T, S) :-
 	/* TODO */
@@ -511,14 +511,14 @@ unit_test :-
 	format('===================================================~n',[]),
 	format('        Running tests.~n',[]),
 	format('===================================================~n',[]),
-	findall(T-Name-Ind, rewrite_query(T, Ind, Name), L),
+	findall(T-Rem-Name-Ind, rewrite_query(T, Rem, Ind, Name), L),
 	current_output(Out),
 	open_null_stream(Null),
-	(   foreach(T-Name-Ind, L),
+	(   foreach(T-Rem-Name-Ind, L),
 	    param(Null, Out)
 	do (
 	     (  set_output(Null),
-	         rewrite(T, Ind, _, _, _) ->
+	         rewrite(T, Rem, Ind, _, _, _) ->
 		 set_output(Out),
 		 format('~p:~30|          \e[32mpassed\e[0m~n', [Name])
 	     ;   set_output(Out),
