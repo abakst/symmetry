@@ -76,7 +76,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
              Psi:    Remainder term given as map from process to list of actions.
 	*/
 	(
-	  /* assign(p, x, v): p assigns v to x. */
+	  /*
+	  assign(p, x, v): p assigns v to x.
+	  */
 	  functor(T, assign, 3),
 	  T=assign(P, X, V),
 	  atomic(P)->
@@ -85,7 +87,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  avl_store(P-X, Rho, V, Rho1),
 	  Gamma1=Gamma,
 	  Psi1=Psi
-	  /* external send */
+	  /*
+	  external send
+	  */
 	; functor(T, send, 3),
 	  arg(1, T, P),
 	  arg(2, T, X),
@@ -115,7 +119,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Delta1=Delta,
 	  Rho1=Rho,
 	  empty_avl(Psi1)
-	/* recv(p, x) and recv(p, PidExp, x): receive if there's a pending message. */
+	/*
+	recv(p, x) and recv(p, PidExp, x): receive if there's a pending message.
+	*/
 	; (   functor(T, recv, 2),
 	      T=recv(P, X),
 	      atomic(P)
@@ -133,7 +139,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ),
 	  update_constants(P, X, V, Rho, Rho1),
 	  Psi=Psi1
-	/* send(p, x, v) */
+	/*
+	send(p, x, v)
+	*/
 	; functor(T, send, 3) ->
 	  arg(1, T, P),
 	  arg(2, T, PidExp),
@@ -149,7 +157,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Delta1=Delta,
 	  Rho1=Rho,
 	  Psi=Psi1
-	/* sym(P, S, A): reduce A in sym(P, S, A)  */
+	/*
+	sym(P, S, A): reduce A in sym(P, S, A)
+	*/
 	; functor(T, sym, 3),
 	  T=sym(P, S, A),
 	  empty_avl(Psi),
@@ -167,7 +177,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      append(Delta, [for(P, S ,Delta3)], Delta1)
 	  ),
 	  Psi1=Psi
-	/* sym(P, S, A): reduce sym(P, S, A)  */
+	/*
+	sym(P, S, A): reduce sym(P, S, A)
+	*/
 	; functor(T, sym, 3),
 	  T=sym(P, S, A),
 	  \+contains_var(P,A),
@@ -175,7 +187,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  T1=skip,
 	  Gamma1=Gamma,
 	  Psi1=Psi
-	/* while(p, cond, A): remove while if cond doesn't hold. */
+	/*
+	while(p, cond, A): remove while if cond doesn't hold.
+	*/
 	; functor(T, while, 3),
 	  T= while(P, Cond, _),
 	  negate(Cond, NegCond),
@@ -185,13 +199,17 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Delta1=Delta,
 	  Rho1=Rho,
 	  Psi1=Psi
-	/* if(P, Cond, A): syntactic sugar for ite(P, Cond, A, skip).*/
+	/*
+	if(P, Cond, A): syntactic sugar for ite(P, Cond, A, skip).
+	*/
 	; functor(T, if, 3),
 	  T=if(P, Cond, A),
 	  T1=ite(P, Cond, A, skip),
 	  Gamma1=Gamma, Delta1=Delta,
 	  Rho1=Rho, Psi1=Psi
-	/* ite(P, Cond, A, B): reduce to A, if Cond holds and B, if not Cond holds.*/
+	/*
+	ite(P, Cond, A, B): reduce to A, if Cond holds and B, if not Cond holds.
+	*/
 	; functor(T, ite, 4),
 	  T = ite(P, Cond, A, B),
 	  (   check_cond(Cond, P, Rho) ->
@@ -202,7 +220,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ),
 	  Gamma1=Gamma, Delta1=Delta,
 	  Rho1=Rho, Psi1=Psi
-	/* par(seq([ite(P, Cond, A, B), C]), D): reduce both par(A,C) and par(B, C) to skip. */
+	/*
+	par(seq([ite(P, Cond, A, B), C]), D): reduce both par(A,C) and par(B, C) to skip.
+	*/
 	/*TODO: keep assignments in rho that are occur on both branches.*/
 	; functor(T, par, 2),
 	  T=par(TA, D),
@@ -220,21 +240,27 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  empty_avl(Rho1),
 	  empty_avl(Gamma1),
 	  T1=par(skip, skip)
-	/* par([A,B,C,...]) */
+	/*
+	par([A,B,C,...])
+	*/
 	; functor(T, par, 1) ->
 	  arg(1, T, L),
 	  (   L==[] ->
 	      T1=skip, Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi=Psi1
 	  ;   L = [A] ->
 	      T1=A, Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi=Psi1
-	  /* rewrite single expression */
+	  /*
+	  rewrite single expression
+	  */
 	  ;   select(A, L, LR),
 	      (   A==skip->
 		  T1=par(LR), Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi=Psi1
 	      ;   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1) ->
 		  T1=par([A1|LR])
 	      )
-	  /* rewrite ordered pairs of expressions */
+	  /*
+	  rewrite ordered pairs of expressions
+	  */
 	  ;   list_to_ord_set(L, OL),
 	      get_ord_pairs(OL, Pairs),
 	      select(TL-TR, Pairs, _),
@@ -244,7 +270,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      T2=par(T2A,T2B),
 	      T1=par([T2A,T2B|Ts1])
 	  )
-	  /* seq([A|B]) */
+	  /*
+	  seq([A|B])
+	  */
 	; functor(T, seq, 1) ->
 	  arg(1, T, L),
 	  (   L == [] ->
@@ -258,7 +286,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 		  T1=seq([A1|B])
 	      )
 	  )
-	/* nondet(P, A): instantiate P to a fresh constant. */
+	/*
+	nondet(P, A): instantiate P to a fresh constant.
+	*/
 	; functor(T, nondet, 2) ->
 	  T = nondet(P, A),
 	  fresh_pred_sym(Proc),
@@ -270,7 +300,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	/**********************
 	        Loops
 	**********************/
-	/* par(iter(p, k, A), iter(q, k, B) ): merge two iter loops. */
+	/*
+	par(iter(p, k, A), iter(q, k, B) ): merge two iter loops.
+	*/
 	; functor(T, par, 2),
 	  arg(1, T, TA),
 	  arg(2, T, TB),
