@@ -237,11 +237,11 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      TA=ite(P, Cond, A, B),
 	      C=[]
 	  ),
-	  rewrite(par([seq([A|C]),D]), Gamma, [], Rho, Psi, skip, _, DeltaA, _, Psi),
-	  rewrite(par([seq([B|C]),D]), Gamma, [], Rho, Psi, skip, _, DeltaB, _, Psi)->
+	  rewrite(par([seq([A|C]),D]), Gamma, [], Rho, Psi, skip, Gamma, DeltaA, _, Psi),
+	  rewrite(par([seq([B|C]),D]), Gamma, [], Rho, Psi, skip, Gamma, DeltaB, _, Psi)->
 	  append(Delta, [ite(Cond, seq(DeltaA), seq(DeltaB))], Delta1),
 	  empty_avl(Rho1),
-	  empty_avl(Gamma1),
+	  Gamma1=Gamma,
 	  T1=par(skip, skip),
 	  Psi1=Psi
 	/*
@@ -260,7 +260,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      (   A==skip->
 		  T1=par(LR), Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi=Psi1
 	      ;   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1)->
-		  T1=par([A1|LR])
+		  select(A, L, A1, L1),
+		  T1=par(L1)
 	      )
 	  /*
 	  rewrite ordered pairs of expressions
@@ -362,8 +363,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  fresh_pred_sym(Proc),
 	  replace_proc_id(Proc, S, Rho, Rho2),
 	  copy_instantiate(B, P, Proc, B1),
-	  set_talkto(M, Proc),
+	  set_talkto(M, S),
 	  mk_pair(A, B1, Pair),
+	  here(1),
 	  rewrite(Pair, Gamma, [], Rho2, Psi, par(skip, skip), Gamma, Delta2, Rho3, Psi2)->
 	  clear_talkto,
 	  T1=par(TA, skip),
@@ -371,9 +373,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Gamma1=Gamma,
 	  substitute_term(P, Proc, Delta2, Delta3),
 	  append(Delta, [for(P, S , seq(Delta3))], Delta1),
-	  (   avl_delete(Proc, Psi2, Ext0, Psi3) ->
-	      substitute_term(P, Proc, Ext0, Ext),
-	      add_external(Psi3, sym(P, S, seq(Ext)), S, Psi1)
+	  (   avl_delete(M, Psi2, Ext, Psi3) ->
+	      add_external(Psi3, sym(_, M, seq(Ext)), S, Psi1)
 	  ;   Psi1=Psi
 	  )
 	/*
@@ -486,8 +487,6 @@ update_constants(P, X, V, Rho, Rho1) :-
 	    update_constants(P, X2, V2, Rho2, Rho1)
 	;   throw(pair-matching-error(X,V))
 	).
-
-here(X) :- X=1.
 
 substitute_constants(T, P, Rho, T1) :-
 	/*
