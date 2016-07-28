@@ -442,12 +442,29 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	).
 
 rewrite(T, Gamma, Delta, Rho, Psi, T2, Gamma2, Delta2, Rho2, Psi2) :-
-	(   	T=T2, Gamma=Gamma2, Delta=Delta2, Rho=Rho2, Psi= Psi2
+	(   match(T, T2),
+	    %T=T2,
+	    Gamma=Gamma2, Delta=Delta2, Rho=Rho2, Psi= Psi2
 	;   rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) ->
 	    sanity_check([T1, Gamma1, Delta1, Rho1, Psi1]),
 	    rewrite(T1, Gamma1, Delta1, Rho1, Psi1, T2, Gamma2, Delta2, Rho2, Psi2)
 	;   format('Failed to rewrite term:~p~n' ,[T]), fail
 	).
+
+
+match(T, T1) :-
+	/*
+	Try to match T and T1 by permuting the elements of L in par(L).
+	*/
+	(   T=T1 ->
+	    true
+	;   functor(T, par, 1),
+	    functor(T1, par, 1),
+	    T=par(L),
+	    T1=par(L1),
+	    permutation(L, L1)
+	).
+
 
 mk_pair(A, B, Pair) :-
 	(   Pair=par(A, B)
