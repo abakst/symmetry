@@ -173,6 +173,60 @@ rewrite_query(T, skip, Ind, Name) :-
 	T=(par([for(m, _, s, P1), sym(P, s, P2), for(n, _, s, P3)])),
 	Name='interleaved two-party ping'.
 
+/*===========================
+  Smaller tests geared
+  towards specific rules
+=============================*/
+
+rewrite_query(T, skip, Ind, Name) :-
+	Ind=[],
+	T=(par([send(q, e_pid(p), pair(p, test)), recv(p, pair(id,m))])),
+	Name='simple pair'.
+
+rewrite_query(T, skip, Ind, Name) :-
+	Ind=[],
+	T=(par([send(q, e_pid(p), pair(p, test)), recv(p, e_pid(q), pair(id,m))])),
+	Name='simple receive-from'.
+
+
+rewrite_query(T, skip, Ind, Name) :-
+	Ind=[],
+	Client = seq([
+		      ite(p, ndet, assign(p, act, lookup), assign(p, act, alloc)),
+		      send(p, e_pid(sv), pair(act, p))
+		     ]),
+	Server=seq([recv(sv, pair(act, id))]),
+	T=(par([Client, Server])),
+	Name='simple ite'.
+
+
+rewrite_query(T, Rem, Ind, Name) :-
+	Ind=[],
+	DB=seq([  recv(db, id),
+		  send(db, e_var(id), res)
+	       ]),
+	Client=
+	     seq([
+		  send(P, e_pid(db), P),
+		  recv(P, v)
+		 ]),
+	     T=(par([for(db, _, s, DB), sym(P, s, while(P, true, Client))])),
+	     Rem=sym(P, s, while(P, true, Client)),
+	     Name='simple for-while'.
+
+rewrite_query(T, Rem, Ind, Name) :-
+	Ind=[],
+	DB=seq([  recv(db, id),
+		  send(db, e_var(id), res)
+	       ]),
+	Client=seq([
+		    send(P, e_pid(db), P),
+		    recv(P, v)
+		   ]),
+	T=(par([while(db, true, DB), sym(P, s, Client)])),
+	Name='simple_while_in_proc',
+	Rem=while(db, true, DB).
+
 /*=========================
         Map-reduce
 ==========================*/
@@ -221,186 +275,36 @@ rewrite_query(T, Rem, Ind, Name) :-
 	Rem=while(db, true, Database),
 	Name='concdb'.
 
+/*========
+ Firewall
+==========*/
 
-/*=============================
-              TMP
-=============================*/
-
-
-simple_pair(T, Delta1, Rho1) :-
-	empty_avl(Gamma),
-	empty_avl(Rho),
-	empty_avl(Psi),
-	Delta=[],
-	T=(par([send(q, e_pid(p), pair(p, test)), recv(p, pair(id,m))])),
-	rewrite(T, Gamma, Delta, Rho, Psi, skip, _, Delta1, Rho1, Psi).
-
-simple_receive_from(T, Delta1, Rho1) :-
-	empty_avl(Gamma),
-	empty_avl(Rho),
-	empty_avl(Psi),
-	Delta=[],
-	T=(par([send(q, e_pid(p), pair(p, test)), recv(p, e_pid(q), pair(id,m))])),
-	rewrite(T, Gamma, Delta, Rho, Psi, skip, _, Delta1, Rho1, Psi).
-
-simple_ite(T, Delta1, Rho1) :-
-	empty_avl(Gamma),
-	empty_avl(Rho),
-	empty_avl(Psi),
-	Delta=[],
-	Client = seq([
-		      ite(p, ndet, assign(p, act, lookup), assign(p, act, alloc)),
-		      send(p, e_pid(sv), pair(act, p))
-		     ]),
-	Server=seq([recv(sv, pair(act, id))]),
-	T=(par([Client, Server])),
-	rewrite(T, Gamma, Delta, Rho, Psi, skip, _, Delta1, Rho1, Psi).
-
-
-
-ite_test(T, Delta1, Rho1) :-
-	empty_avl(Gamma),
-	empty_avl(Rho),
-	empty_avl(Psi),
-	Delta=[],
-	Client = seq([
-		      ite(P, ndet, assign(P, act, alloc), assign(P, act, lookup)),
-		      send(P, e_pid(db), pair(act, P)),
-		      ite(P, act=alloc,
-			  seq([
-			       recv(P, msg),
-			       ite(P, msg=free, send(P, e_pid(db), acc), skip)
-			      ]),
-			  recv(P, v))
-		     ]),
-	Database=seq([
-		      recv(db, pair(act, id)),
-		      ite(  db, act=alloc,
-			    ite(db, ndet,
-				seq([
-				     send(db, e_var(id), free),
-				     recv(db, e_var(id), _)
-				    ]),
-				send(db, e_var(id), allocated)
-			       ),
-			    send(db, e_var(id), val)
-			 )
-		     ]),
-	T=(par([sym(P, s, Client),  while(db, true, Database)])),
-	rewrite(T, Gamma, Delta, Rho, Psi, while(db, true, Database), _, Delta1, Rho1, Psi).
-
-
-map_reduce(T, Delta1, Rho1) :-
-	empty_avl(Gamma),
-	empty_avl(Rho),
-	empty_avl(Psi),
-	Delta=[],
-	init_independent([(q,m)]),
-	P1A=seq([recv(q, id), send(q, e_var(id), 0)]),
-	P1B=seq([recv(q, id), send(q, e_var(id), 1)]),
-	P2=seq([assign(P, stop, 0), W]),
-	W=while(P, stop=0, seq([send(P, e_pid(q), P), recv(P, stop),
-				if(P, stop=0, send(P, e_pid(m), P))])),
-	P3=seq([recv(m, id)]),
-	T=(par([seq([iter(q, k, P1A), for(q, _, s, P1B)]), sym(P, s, P2), iter(m, k, P3)])),
-	rewrite(T, Gamma, Delta, Rho, Psi, skip, _, Delta1, Rho1, Psi).
-
-
-simple_for_while(T, Delta1, Rho1) :-
-	empty_avl(Gamma),
-	empty_avl(Rho),
-	empty_avl(Psi),
-	Delta=[],
-	DB=seq([  recv(db, id),
-		  send(db, e_var(id), res)
-	       ]),
-	Client=
-	     seq([
-		  send(P, e_pid(db), P),
-		  recv(P, v)
-		 ]),
-	T=(par([for(db, _, s, DB), sym(P, s, while(P, true, Client))])),
-	rewrite(T, Gamma, Delta, Rho, Psi, sym(P, s, while(P, true, Client)), _, Delta1, Rho1, Psi).
-
-simple_while_in_proc(T, Delta1, Rho1) :-
-	empty_avl(Gamma),
-	empty_avl(Rho),
-	empty_avl(Psi),
-	Delta=[],
-	DB=seq([  recv(db, id),
-		  send(db, e_var(id), res)
-	       ]),
-	Client=
-	     seq([
-		  send(P, e_pid(db), P),
-		  recv(P, v)
-		 ]),
-	T=(par([while(db, true, DB), sym(P, s, Client)])),
-	rewrite(T, Gamma, Delta, Rho, Psi, while(db, true, DB), _, Delta1, Rho1, Psi).
-
-	
-/*=============================
-        If-then-else
-=============================*/
-
-firewall(T, Delta1, Rho1) :-
-	init_independent([(sv, s)]),
-	empty_avl(Gamma),
-	empty_avl(Rho),
-	empty_avl(Psi),
-	Delta=[],
+rewrite_query(T, Rem, Ind, Name) :-
+	Ind=[(sv, s)],
 	Server=seq([
 		    recv(sv,  pair(id, msg)),
-		    ite(msg=\=bad, send(sv, e_var(id), msg), skip)
+		    ite(sv, msg\==bad, send(sv, e_var(id), msg), skip)
 		   ]),
 	Firewall=seq([
 		      recv(fw, pair(id, msg)),
-		      ite(
+		      ite(fw,
 			  msg=bad,
-			  send(fw, id, wrong-message),
+			  send(fw, e_var(id), wrong_message),
 			  seq([
 			       send(fw, e_pid(sv), pair(fw, msg)),
-			       recv(fw, sv, retmsg),
-			       send(fw, e_pid(id), retmsg)
+			       recv(fw, e_pid(sv), retmsg),
+			       send(fw, e_var(id), retmsg)
 			      ])
 			 )
 		     ]),
-	Client=seq([send(P, fw, pair(P, n)), recv(P, ret)]),
+	Client=seq([send(P, e_pid(fw), pair(P, m)), recv(P, ret)]),
 	T=( par([
 		 while(sv, true, Server),
 		 while(fw, true, Firewall),
 		 sym(P, s, Client)
 		])
 	  ),
-	rewrite(T, Gamma, Delta, Rho, Psi,
-		par([while(sv, true, Server), while(fw, true, Firewall)]),
-		_, Delta1, Rho1, Psi).
+	Rem=par([while(sv, true, Server), while(fw, true, Firewall)]),
+	Name='firewall'.
 
-concdb(T, Delta1, Rho1) :-
-	init_independent([(q,m)]),
-	empty_avl(Gamma),
-	empty_avl(Rho),
-	empty_avl(Psi),
-	Delta=[],
-	DB=seq([
-		recv(db, pair(act, id)),
-		ite(act=alloc, AllocDB, LookupDB)
-	       ]),
-	AllocDB = ite(
-		     ndet, seq([send(db, e_var(id), free), recv(db, v1)]),
-		     send(db, e_var(id), alloc)
-		    ),
-	LookupDB = send(db, e_var(id), val),
-	Client=seq([
-		ite(ndet, assign(P, act, lookup), assign(P, act, alloc)),
-		send(P, db, pair(act,P)),
-		ite(act=alloc, AllocC, LookupC)
-	       ]),
-	AllocC= seq([
-		     recv(P, msg),
-		     ite(msg=free, send(P, e_pid(db), v3), skip)
-		    ]),
-	LookupC= recv(P, val),
-	T=(par([while(db, true, DB), sym(P, s, Client)])),
-	rewrite(T, Gamma, Delta, Rho, Psi, while(db, true, DB), _, Delta1, Rho1, Psi).
 
