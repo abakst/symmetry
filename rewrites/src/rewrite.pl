@@ -36,10 +36,9 @@
  skip                : no-operation.
  pair(x, y)          : pair of values x and y.
 
-Terms are expected to be of the form par([ seq([..,]), ...]) .
+Terms are expected to be of the form par([ seq([..,]), ...]).
 ==============================================================================
 ==============================================================================*/
-
 
 /*===================================
  TODOs:
@@ -47,6 +46,7 @@ Terms are expected to be of the form par([ seq([..,]), ...]) .
    - Implement race check.
    - Cleanup loop-rules.
    - send/receive permissions.
+   - conditionals: variables vs constants.
    - Fix nondet.
    - check rho assignments.
 ===================================*/
@@ -89,14 +89,15 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Gamma1=Gamma,
 	  Psi1=Psi
 	  /*
-	  external send
+	  external send/recv-from.
 	  */
-	; functor(T, send, 3),
+	; (   functor(T, send, 3)
+	  ;   functor(T, recv, 3)
+	  ),
 	  arg(1, T, P),
 	  arg(2, T, X),
 	  atomic(P),
-	  functor(X, e_pid, 1),
-	  arg(1, X, Q),
+	  parse_pid_exp(X, P, Rho, Q),
 	  talkto(P, M),
 	  independent(Q, M) ->
 	  T1=skip,
