@@ -35,9 +35,9 @@ rewrite_query(T, skip, Ind, Name) :-
 	 P2=seq([send(p1, e_pid(p0), p1), recv(p1,x1)]),
 	 T=(par([P1,P2])), Name='send first'.
 
-/*===========
-"Registry":
-===========*/
+/*===================
+"Registry 2proc":
+====================*/
 
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[], 
@@ -45,7 +45,7 @@ rewrite_query(T, skip, Ind, Name) :-
 	R=seq([recv(r, x1),recv(r, x2),send(r,e_pid(m),a),recv(r, x3)]),
 	P1=seq([recv(p1, x1),send(p1,e_var(x1),p1)]),
 	P2=seq([recv(p2, x1),send(p2,e_var(x1),p2)]),
-	T= par([M,R,P1,P2]), Name='registry'.
+	T= par([M,R,P1,P2]), Name='registry 2-proc'.
 
 /*==============
   For-loops:
@@ -306,5 +306,29 @@ rewrite_query(T, Rem, Ind, Name) :-
 	  ),
 	Rem=par([while(sv, true, Server), while(fw, true, Firewall)]),
 	Name='firewall'.
+
+
+/*========
+ Registry
+ ==========*/
+
+rewrite_query(T, skip, [(m,r)], Name) :-
+	Master=seq([
+		    for(m, P, s, send(m, e_pid(P), r)),
+		    recv(m, e_pid(r), _),
+		    send(m, e_pid(r), m)
+		   ]),
+	Registry=seq([
+		      for(r, _, s, recv(r, id)),
+		      send(r, e_pid(m), _),
+		      recv(r, e_pid(m), id)
+		     ]),
+	Procs=sym(P, s, seq([
+			     recv(P, id),
+			     send(P, e_var(id), P)
+			    ])
+		 ),
+	T=par([Master, Registry, Procs]),
+	Name='registry'.
 
 

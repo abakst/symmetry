@@ -9,7 +9,6 @@
 			     ]
 	     ).
 
-
 :- dynamic independent/2, talkto/2.
 
 /*==============================================================================
@@ -365,7 +364,6 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  copy_instantiate(B, P, Proc, B1),
 	  set_talkto(M, S),
 	  mk_pair(A, B1, Pair),
-	  here(1),
 	  rewrite(Pair, Gamma, [], Rho2, Psi, par(skip, skip), Gamma, Delta2, Rho3, Psi2)->
 	  clear_talkto,
 	  T1=par(TA, skip),
@@ -557,17 +555,6 @@ rewrite(T, Rem, Ind, Gamma1, seq(Delta1), Rho1) :-
 	empty_avl(Psi),
 	Delta=[],
 	rewrite(T, Gamma, Delta, Rho, Psi, Rem, Gamma1, Delta1, Rho1, Psi).
-
-pp_term(T, S) :-
-	/* TODO */
-	(   functor(T, recv, 2) ->
-	    arg(1, T, P),
-	    arg(2, T, X),
-	    format_atom('~p: ~p<-recv()', [P,X], S)
-	;   functor(T, send, 3) ->
-	    arg(1, T, P),
-	    arg(2, T, X)
-	).
 
 unit_test :-
 	consult([examples]),
