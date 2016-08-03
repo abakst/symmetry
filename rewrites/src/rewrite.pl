@@ -132,11 +132,11 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      T=recv(P, X),
 	      atomic(P)
 	  ;   functor(T, recv, 3),
+	      here(1),
 	      T=recv(P, PidExp, X),
 	      atomic(P),
 	      parse_pid_exp(PidExp, P, Rho, Q0),
-	      (   symset(Q, Q0)->
-		  true
+	      (   symset(Q, Q0)
 	      ;   Q=Q0
 	      )
 	  ),
@@ -304,6 +304,10 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	; functor(T, nondet, 2) ->
 	  T = nondet(P, A),
 	  fresh_pred_sym(Proc),
+	  (   symset(P, S) ->
+	      assert(symset(Proc, S))
+	  ;   true
+	  ),
 	  copy_instantiate(A, P, Proc, T1),
 	  Gamma1=Gamma,
 	  Delta1=Delta,
@@ -354,8 +358,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  append(Delta, [iter(env, K , nondet(P, seq(Delta3)))], Delta1),
 	  Rho1=Rho,
 	  (   avl_delete(Proc, Psi2, Ext0, Psi3) ->
-	      substitute_term(P, Proc, Ext0, Ext),
-	      add_external(Psi3, iter(env, K, nondet(P, seq(Ext))), S, Psi1)
+	      substitute_term(Fresh, Proc, Ext0, Ext),
+	      add_external(Psi3, iter(S, K, nondet(Fresh, seq(Ext))), S, Psi1),
+	      assert(symset(Fresh, S))
 	  ;   Psi1=Psi
 	  )
 	/*
@@ -560,6 +565,7 @@ init_independent(L) :-
 	    assert(independent(Q,P))
 	).
 
+here(X) :- X=1.
 cleanup :-
 	clear_talkto,
 	retractall(independent(_,_)),
