@@ -8,7 +8,8 @@
 		 substitute_term_avl/4,
 		 format_atom/3,
 		 copy_instantiate/4,
-		 negate/2, bb_inc/1
+		 negate/2, bb_inc/1,
+		 reset_pred_sym/0
 		], [hidden(true)]).
 :- use_module(library(codesio)).
 :- use_module(library(ordsets)).
@@ -65,6 +66,9 @@ get_ord_pairs(Set, Pairs) :-
 	do  true
 	),
 	ord_subtract(Product, Diag, Pairs).
+
+reset_pred_sym :-
+	bb_put(sym_num, 0).
 
 fresh_pred_sym(Sym) :-
 	(  bb_get(sym_num, N) ->

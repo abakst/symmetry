@@ -5,7 +5,8 @@
 :- use_module('lib/misc.pl', [ format_atom/3, fresh_pred_sym/1,
 			       substitute_term/4,substitute_term_avl/4,
 			       copy_instantiate/4,get_ord_pairs/2,
-			       negate/2, bb_inc/1
+			       negate/2, bb_inc/1,
+			       reset_pred_sym/0
 			     ]
 	     ).
 
@@ -570,7 +571,8 @@ cleanup :-
 	clear_talkto,
 	retractall(independent(_,_)),
 	retractall(talkto(_,_)),
-	retractall(symset(_,_)).
+	retractall(symset(_,_)),
+	reset_pred_sym.
 
 rewrite(T, Rem, Ind, Gamma1, seq(Delta1), Rho1) :-
 	init_independent(Ind),
@@ -602,7 +604,7 @@ unit_test :-
 	     format_result(catch(check_race_freedom(T, _), _, fail), Race),
 	     format_result(rewrite(T, Rem, Ind, _, _, _), Rewrite),
 	     set_output(Out),
-	     format('~p:~30|~t~p~t~20+~t~p~t~55|~n', [Name,Rewrite,Race])
+	     format('~p:~30|~t~p~t~20+~t~p~t~50|~n', [Name,Rewrite,Race])
 	   )
 	),
 	format('=====================================================~n',[]).
