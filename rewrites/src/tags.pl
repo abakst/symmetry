@@ -36,6 +36,7 @@ Recursively traverses T and transforms each send S into tag(S, Tag), where Tag i
 		true
 	    ;   X=e_var(_) ->
 		true
+	    ;  throw(parse-pid-error(X))
 	    ),
 	    sub_sym_set(P, Proc, P1),
 	    sub_sym_set(Q, Proc, Q1),
@@ -78,6 +79,7 @@ Tag each receive with all tags on the appropriate channel.
 		true
 	    ;   X=e_var(_) ->
 		true
+	    ;  throw(parse-pid-error(X))
 	    ),
 	    sub_sym_set(Q, Proc, Q1),
 	    findall(Tags, (tags(Q1-P1,Tags), Q1\=P1), Tagsets),
@@ -99,6 +101,31 @@ Tag each receive with all tags on the appropriate channel.
 	    )
 	).
 
+check_tags(T) :-
+/*
+Checks if all receive tag-sets either
+ a)  consist of a single tag or
+ b)  constist of tags from the same process and that process is not symmetric.
+*/
+	(   simple(T) ->
+	    true
+	;   functor(T, tag, 2),
+	    T=tag(Rec, Tags),
+	    functor(Rec, recv, _) ->
+	    (   Tags=[Tag],
+		atom(Tag)->
+		true
+	    ;   (   foreach(Tag, Tags),
+		    param(Proc, T)
+		do  proc(Tag, Proc)->
+		    \+sym_set(Proc)
+		;   throw(race-condition(T))
+		)
+	    )
+	;   (   foreacharg(Arg, T)
+	    do  check_tags(Arg)
+	    )
+	).
 
 sub_sym_set(P, Proc, P1) :-
 	/*
@@ -117,4 +144,5 @@ tag_term(T, T2)	:-
 
 check_race_freedom(T, T1) :-
 	tag_term(T, T1),
+	portray_clause(T1),
 	check_tags(T1).

@@ -10,7 +10,7 @@
 		 copy_instantiate/4,
 		 negate/2, bb_inc/1
 		], [hidden(true)]).
-		 
+:- use_module(library(codesio)).
 :- use_module(library(ordsets)).
 :- use_module(library(terms)).
 :- use_module(library(avl)).
