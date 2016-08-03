@@ -9,6 +9,8 @@
 			     ]
 	     ).
 
+:- use_module('tags.pl', [check_race_freedom/2]).
+
 :- dynamic independent/2, talkto/2.
 
 /*==============================================================================

@@ -1,10 +1,14 @@
+:- module(tags, [
+		 fresh_pred_sym/1,
+		 tag_recvs/3,
+		 check_tags/1,
+		 tag_term/2,
+		 check_race_freedom/2
+		 ], [hidden(true)]).
+
 :- use_module(library(ordsets)).
 :- use_module(library(terms)).
-
-:- use_module('lib/misc.pl', [
-			      fresh_pred_sym/1
-			     ]
-	     ).
+:- use_module('lib/misc.pl', [ fresh_pred_sym/1]).
 
 /*
 tag(a, t): action a has tag t.
