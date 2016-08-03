@@ -38,7 +38,8 @@ rewrite_query(T, skip, Ind, Name) :-
 /*===================
 "Registry 2proc":
 ====================*/
-
+/*
+--contains a race.
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[], 
 	M=seq([send(m,e_pid(p1),r),send(m,e_pid(p2),r),recv(m,x1),send(m,e_pid(r),m)]),
@@ -46,7 +47,7 @@ rewrite_query(T, skip, Ind, Name) :-
 	P1=seq([recv(p1, x1),send(p1,e_var(x1),p1)]),
 	P2=seq([recv(p2, x1),send(p2,e_var(x1),p2)]),
 	T= par([M,R,P1,P2]), Name='registry 2-proc'.
-
+*/
 /*==============
   For-loops:
 ==============*/
@@ -104,8 +105,8 @@ rewrite_query(T, skip, Ind, Name) :-
 
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[], 
-	P1=seq([send(m,e_pid(Q),m),send(m,e_pid(Q),m),recv(m,id1),recv(m,id2)]),
-	P2=seq([send(P,e_pid(m),P),send(P, e_pid(m), P), recv(P, x1), recv(P, x2)]),
+	P1=seq([send(m,e_pid(Q),m),send(m,e_pid(Q),m),recv(m,id1)]),
+	P2=seq([send(P,e_pid(m),P), recv(P, x1), recv(P, x2)]),
 	T=(par([for(m, Q, s, P1), sym(P, s, P2)])),
 	Name='double ping'.
 
@@ -169,7 +170,7 @@ rewrite_query(T, skip, Ind, Name) :-
 	Ind=[(m,n)],
 	P1=seq([recv(m, id), send(m, e_var(id), m)]),
 	P2=seq([send(P, e_pid(m), P), send(P, e_pid(n), P), recv(P, id)]),
-	P3=seq([recv(n, x)]),
+	P3=seq([recv(n, e_pid(s), x)]),
 	T=(par([for(m, _, s, P1), sym(P, s, P2), for(n, _, s, P3)])),
 	Name='interleaved two-party ping'.
 
@@ -238,7 +239,7 @@ rewrite_query(T, skip, Ind, Name) :-
 	P2=seq([assign(P, stop, 0), W]),
 	W=while(P, stop=0, seq([send(P, e_pid(q), P), recv(P, stop),
 				if(P, stop=0, send(P, e_pid(m), P))])),
-	P3=seq([recv(m, id)]),
+	P3=seq([recv(m, e_pid(s), id)]),
 	T=(par([seq([iter(q, k, P1A), for(q, _, s, P1B)]), sym(P, s, P2), iter(m, k, P3)])),
 	Name='map-reduce'.
 
@@ -286,7 +287,7 @@ rewrite_query(T, Rem, Ind, Name) :-
 		    ite(sv, msg\==bad, send(sv, e_var(id), msg), skip)
 		   ]),
 	Firewall=seq([
-		      recv(fw, pair(id, msg)),
+		      recv(fw, e_pid(s), pair(id, msg)),
 		      ite(fw,
 			  msg=bad,
 			  send(fw, e_var(id), wrong_message),
@@ -297,7 +298,7 @@ rewrite_query(T, Rem, Ind, Name) :-
 			      ])
 			 )
 		     ]),
-	Client=seq([send(P, e_pid(fw), pair(P, m)), recv(P, ret)]),
+	Client=seq([send(P, e_pid(fw), pair(P, m)), recv(P, e_pid(fw), ret)]),
 	T=( par([
 		 while(sv, true, Server),
 		 while(fw, true, Firewall),
@@ -319,7 +320,7 @@ rewrite_query(T, skip, [(m,r)], Name) :-
 		    send(m, e_pid(r), m)
 		   ]),
 	Registry=seq([
-		      for(r, _, s, recv(r, id)),
+		      for(r, _, s, recv(r, e_pid(s), id)),
 		      send(r, e_pid(m), _),
 		      recv(r, e_pid(m), id)
 		     ]),
