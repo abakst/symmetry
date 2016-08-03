@@ -11,7 +11,9 @@
 
 :- use_module('tags.pl', [check_race_freedom/2]).
 
-:- dynamic independent/2, talkto/2.
+:- dynamic independent/2, /* independent(p,q): processes p and q are independent.*/
+	talkto/2,     /* talkto(p,q): p and q are communicating, all other procs are external. */
+	symset/2.    /* symset(p, S): process p belongs to the set of symmetric processes S. */
 
 /*==============================================================================
  Language:
@@ -132,7 +134,11 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ;   functor(T, recv, 3),
 	      T=recv(P, PidExp, X),
 	      atomic(P),
-	      parse_pid_exp(PidExp, P, Rho, Q)
+	      parse_pid_exp(PidExp, P, Rho, Q0),
+	      (   symset(Q, Q0)->
+		  true
+	      ;   Q=Q0
+	      )
 	  ),
 	  avl_member(Q-P, Gamma, [V|Vs]) ->
 	  T1=skip,
@@ -336,10 +342,12 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  fresh_pred_sym(Proc),
 	  copy_instantiate(B, P, Proc, B1),
 	  replace_proc_id(Proc, S, Rho, Rho2),
+	  assert(symset(Proc, S)),
 	  set_talkto(M, Proc),
 	  mk_pair(A, B1, Pair),
 	  rewrite(Pair, Gamma, [], Rho2, Psi, par(skip, B1), Gamma, Delta2, _, Psi2)->
 	  clear_talkto,
+	  retract(symset(Proc, S)),
 	  T1 = par(skip, TB),
 	  Gamma1=Gamma,
 	  substitute_term(P, Proc, Delta2, Delta3),
@@ -365,9 +373,11 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  replace_proc_id(Proc, S, Rho, Rho2),
 	  copy_instantiate(B, P, Proc, B1),
 	  set_talkto(M, S),
+	  assert(symset(Proc, S)),
 	  mk_pair(A, B1, Pair),
 	  rewrite(Pair, Gamma, [], Rho2, Psi, par(skip, skip), Gamma, Delta2, Rho3, Psi2)->
 	  clear_talkto,
+	  retract(symset(Proc, S)),
 	  T1=par(TA, skip),
 	  replace_proc_id(S, Proc, Rho3, Rho1),
 	  Gamma1=Gamma,
@@ -392,10 +402,12 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  replace_proc_id(Proc, S, Rho, Rho2),
 	  copy_instantiate(A, P, Proc, A1),
 	  copy_instantiate(B, Q, Proc, B1),
+          assert(symset(Proc, S)),
 	  set_talkto(M, Proc),
           mk_pair(A1, B1, Pair),
 	  rewrite(Pair, Gamma, [], Rho2, Psi, par(skip, C), Gamma, Delta2, Rho3, Psi2) ->
 	  clear_talkto,
+          retract(symset(Proc, S)),
 	  substitute_term(Q, Proc, C, C1),
 	  T1=par(skip, sym(Q, S, C1)),
 	  replace_proc_id(S, Proc, Rho3, Rho1),
@@ -450,7 +462,6 @@ rewrite(T, Gamma, Delta, Rho, Psi, T2, Gamma2, Delta2, Rho2, Psi2) :-
 	    rewrite(T1, Gamma1, Delta1, Rho1, Psi1, T2, Gamma2, Delta2, Rho2, Psi2)
 	;   format('Failed to rewrite term:~p~n' ,[T]), fail
 	).
-
 
 match(T, T1) :-
 	/*
@@ -544,11 +555,16 @@ init_independent(L) :-
 	L=[(m,n),..] : processes m and n
 	are independent.
 	*/
-	retractall(independent(_,_)),
 	(   foreach((P,Q), L)
 	do  assert(independent(P,Q)),
 	    assert(independent(Q,P))
 	).
+
+cleanup :-
+	clear_talkto,
+	retractall(independent(_,_)),
+	retractall(talkto(_,_)),
+	retractall(symset(_,_)).
 
 rewrite(T, Rem, Ind, Gamma1, seq(Delta1), Rho1) :-
 	init_independent(Ind),
@@ -576,8 +592,9 @@ unit_test :-
 	    param(Null, Out)
 	do (
 	     set_output(Null),
-	     format_result(rewrite(T, Rem, Ind, _, _, _), Rewrite),
+	     cleanup,
 	     format_result(catch(check_race_freedom(T, _), _, fail), Race),
+	     format_result(rewrite(T, Rem, Ind, _, _, _), Rewrite),
 	     set_output(Out),
 	     format('~p:~30|~t~p~t~20+~t~p~t~55|~n', [Name,Rewrite,Race])
 	   )
