@@ -4,7 +4,7 @@
 		 check_tags/1,
 		 tag_term/2,
 		 check_race_freedom/2
-		 ], [hidden(true)]).
+		 ], [hidden(false)]).
 
 :- use_module(library(ordsets)).
 :- use_module(library(terms)).
@@ -116,13 +116,14 @@ Checks if all receive tag-sets either
 	;   functor(T, tag, 2),
 	    T=tag(Rec, Tags),
 	    functor(Rec, recv, _) ->
-	    (   Tags=[Tag],
-		atom(Tag)->
+	    T=tag(Rec, Tags),
+	    (   Tags=[Tag]->
 		true
 	    ;   (   foreach(Tag, Tags),
 		    param(Proc, T)
-		do  proc(Tag, Proc)->
-		    \+sym_set(Proc)
+		do  proc(Tag, Proc),
+		    \+sym_set(Proc) ->
+		    true
 		;   throw(race-condition(T))
 		)
 	    )

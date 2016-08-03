@@ -558,24 +558,28 @@ rewrite(T, Rem, Ind, Gamma1, seq(Delta1), Rho1) :-
 	Delta=[],
 	rewrite(T, Gamma, Delta, Rho, Psi, Rem, Gamma1, Delta1, Rho1, Psi).
 
+format_result(Goal, Res) :-
+	(   Goal->
+	    Res='\e[32mpassed\e[0m'
+	;   Res='\e[31mfailed\e[0m'
+	).
+
 unit_test :-
 	consult([examples]),
-	format('===================================================~n',[]),
-	format('        Running tests.~n',[]),
-	format('===================================================~n',[]),
+	format('=====================================================~n',[]),
+	format('~p:~30|~t~p~t~10+~t~p~t~50|~n', ['Name','rewrite','race-check']),
+	format('=====================================================~n',[]),
 	findall(T-Rem-Name-Ind, rewrite_query(T, Rem, Ind, Name), L),
 	current_output(Out),
 	open_null_stream(Null),
 	(   foreach(T-Rem-Name-Ind, L),
 	    param(Null, Out)
 	do (
-	     (  set_output(Null),
-	         rewrite(T, Rem, Ind, _, _, _) ->
-		 set_output(Out),
-		 format('~p:~30|          \e[32mpassed\e[0m~n', [Name])
-	     ;   set_output(Out),
-		 format('~p:~30|          \e[31mfailed\e[0m~n', [Name])
-	     )
+	     set_output(Null),
+	     format_result(rewrite(T, Rem, Ind, _, _, _), Rewrite),
+	     format_result(catch(check_race_freedom(T, _), _, fail), Race),
+	     set_output(Out),
+	     format('~p:~30|~t~p~t~20+~t~p~t~55|~n', [Name,Rewrite,Race])
 	   )
 	),
-	format('===================================================~n',[]).
+	format('=====================================================~n',[]).
