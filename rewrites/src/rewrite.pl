@@ -603,9 +603,9 @@ format_result(Goal, Res) :-
 
 unit_test :-
 	consult([examples]),
-	format('=====================================================~n',[]),
-	format('~p:~30|~t~p~t~10+~t~p~t~50|~n', ['Name','rewrite','race-check']),
-	format('=====================================================~n',[]),
+	format('================================================================~n',[]),
+	format('~p:~30|~p~t~10+~p~t~13+~p~t~70|~n', ['Name','rewrite','race-check','time']),
+	format('================================================================~n',[]),
 	findall(T-Rem-Name-Ind, rewrite_query(T, Rem, Ind, Name), L),
 	current_output(Out),
 	open_null_stream(Null),
@@ -614,10 +614,13 @@ unit_test :-
 	do (
 	     set_output(Null),
 	     cleanup,
+	     statistics(runtime, [T0|_]),
 	     format_result(catch(check_race_freedom(T, _), _, fail), Race),
 	     format_result(rewrite(T, Rem, Ind, _, _, _), Rewrite),
+	     statistics(runtime, [T1|_]),
+	     Time is (T1-T0),
 	     set_output(Out),
-	     format('~p:~30|~t~p~t~20+~t~p~t~50|~n', [Name,Rewrite,Race])
+	     format('~p:~t~30|~p~t~21+~p~t~18+~t~d~3+~t ms~50|~n', [Name,Rewrite,Race,Time])
 	   )
 	),
-	format('=====================================================~n',[]).
+	format('================================================================~n',[]).
