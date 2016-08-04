@@ -251,21 +251,21 @@ rewrite_query(T, Rem, Ind, Name) :-
 	Ind=[],
 	Client = seq([
 		      ite(P, ndet, assign(P, act, alloc), assign(P, act, lookup)),
-		      send(P, e_pid(db), pair(act, P)),
+		      send(P, e_pid(db), query, pair(act, P)),
 		      ite(P, act=alloc,
 			  seq([
 			       recv(P, msg),
-			       ite(P, msg=free, send(P, e_pid(db), acc), skip)
+			       ite(P, msg=free, send(P, e_pid(db), value, acc), skip)
 			      ]),
 			  recv(P, v))
 		     ]),
 	Database=seq([
-		      recv(db, pair(act, id)),
+		      recv(db, e_pid(s), query, pair(act, id)),
 		      ite(  db, act=alloc,
 			    ite(db, ndet,
 				seq([
 				     send(db, e_var(id), free),
-				     recv(db, e_var(id), _)
+				     recv(db, e_var(id), value, _)
 				    ]),
 				send(db, e_var(id), allocated)
 			       ),
