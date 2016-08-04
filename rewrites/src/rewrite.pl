@@ -24,10 +24,12 @@
  send(p, x, v)       : process p sends value v to
   | x=e_pid(q)       :       - process q.
   | x=e_var(y)       :       - the pid stored in variable y.
+send(p, x, type, v)  : send a message of type "type".
  recv(p, v)          : process p receives value v.
  recv(p, x, v)       : process p receives value v from 
   | x=e_pid(q)       :       - process q.
   | x=e_var(y)       :       - the pid stored in variable y.
+ recv(p, x, type, v) : receive messages of type "type", only.
  sym(P, S, A)        : composition of symmetric processes p in set s with source A.
                        s must be distinct from process ids.
  for(m, P, S, A)     : process m executes A for each process p in s.
@@ -46,13 +48,14 @@ Terms are expected to be of the form par([ seq([..,]), ...]).
 
 /*===================================
  TODOs:
-   - Pretty printer.
-   - Implement race check.
+   - recv(p, q, type, v) as primitive, derive others
+   - same for send.
    - Cleanup loop-rules.
    - send/receive permissions.
    - conditionals: variables vs constants.
    - Fix nondet.
    - check rho assignments.
+   - Pretty printer.
 ===================================*/
 
 replace_proc_id(Proc1, Proc, Rho, Rho1) :-
@@ -127,21 +130,10 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Rho1=Rho,
 	  empty_avl(Psi1)
 	/*
-	recv(p, x) and recv(p, PidExp, x): receive if there's a pending message.
+	recv: receive if there's a pending message.
 	*/
-	; (   functor(T, recv, 2),
-	      T=recv(P, X),
-	      atomic(P)
-	  ;   functor(T, recv, 3),
-	      here(1),
-	      T=recv(P, PidExp, X),
-	      atomic(P),
-	      parse_pid_exp(PidExp, P, Rho, Q0),
-	      (   symset(Q, Q0)
-	      ;   Q=Q0
-	      )
-	  ),
-	  avl_member(Q-P, Gamma, [V|Vs]) ->
+	; parse_recv(T, Rho, P, Q, Type, X),
+	  avl_member(Q-P, Gamma, [V-Type|Vs]) ->
 	  T1=skip,
 	  append(Delta, [assign(P, X, V)], Delta1),
 	  (   Vs==[] ->
@@ -153,16 +145,17 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	/*
 	send(p, x, v)
 	*/
-	; functor(T, send, 3) ->
-	  arg(1, T, P),
-	  arg(2, T, PidExp),
-	  arg(3, T, V),
+	; (   functor(T, send, 3) ->
+	      T= send(P, PidExp, V)
+	  ;   functor(T, send, 4) ->
+	      T= send(P, PidExp, Type, V)
+	  ),
 	  parse_pid_exp(PidExp, P, Rho, Q),
 	  (   avl_fetch(P-Q, Gamma, Vs)
 	  ;   Vs=[]
 	  ),
 	  substitute_constants(V, P, Rho, V1),
-	  append(Vs, [V1], Vs1),
+	  append(Vs, [V1-Type], Vs1),
 	  avl_store(P-Q, Gamma, Vs1, Gamma1),
 	  T1=skip,
 	  Delta1=Delta,
@@ -495,6 +488,27 @@ sanity_check(L) :-
 	;   throw(parameter_not_instantiated(X))
 	).
 
+parse_recv(T, Rho, P, Q, Type, V) :-
+/*
+recv(p, q, type, v): p receives a message v of type "type" from process q.
+*/
+	(   (   functor(T, recv, 2)->
+		T=recv(P, V)
+	    ;	functor(T, recv, 3)->
+		T=recv(P, PidExp, V)
+	    ;   functor(T, recv, 4) ->
+		T=recv(P, PidExp, Type, V)
+	    ),
+	    atomic(P),
+	    (   nonvar(PidExp) ->
+		parse_pid_exp(PidExp, P, Rho, Q0),
+		(   symset(Q, Q0)
+		;   Q=Q0
+		)
+	    ;   true
+	    )
+	).
+
 parse_pid_exp(PidExp, P, Rho, Q) :-
 	/*
 	If PidExp is of the form e_pid(q), return q.
@@ -566,7 +580,6 @@ init_independent(L) :-
 	    assert(independent(Q,P))
 	).
 
-here(X) :- X=1.
 cleanup :-
 	clear_talkto,
 	retractall(independent(_,_)),

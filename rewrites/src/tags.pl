@@ -18,11 +18,13 @@ tag(a, t): action a has tag t.
 	                Tags were sent on channel P-Q.
 		     */
 	proc/2,      /* proc(Tag, Proc): Tag "Tag" belongs to process p. */
+	type/2,      /* type(Tag, Type): Tag "Tag" belongs to a send of type "Type".  */
 	sym_set/1.   /* sym_set(S): S is a set of symmetric processes. */
 
 cleanup :-
 	retractall(tags(_,_)),
 	retractall(proc(_,_)),
+	retractall(type(_,_)),
 	retractall(sym_set(_)).
 
 
@@ -32,10 +34,16 @@ Recursively traverses T and transforms each send S into tag(S, Tag), where Tag i
 */
 	(   simple(T) ->
 	    T1=T
-	;   functor(T, send, 3) ->
-	    T=send(P, X, _),
+	;   (   functor(T, send, 3) ->
+		T=send(P, X, _)
+	    ;   functor(T, send, 4) ->
+		T=send(P, X, Type, _)
+	    ) ->
 	    fresh_pred_sym(Tag),
-	    T1=tag(T, Tag),
+	    (   nonvar(Type)->
+		assert(type(Tag, Type))
+	    ;   true
+	    ),
 	    (   X=e_pid(Q) ->
 		true
 	    ;   X=e_var(_) ->
@@ -45,7 +53,8 @@ Recursively traverses T and transforms each send S into tag(S, Tag), where Tag i
 	    sub_sym_set(P, Proc, P1),
 	    sub_sym_set(Q, Proc, Q1),
 	    assert(proc(Tag, P1)),
-	    assert(tags(P1-Q1, [Tag]))
+	    assert(tags(P1-Q1, Tag)),
+	    T1=tag(T, Tag)
 	;   functor(T, sym, 3) ->
 	    T=sym(P, S, A),
 	    assert(sym_set(S)),
@@ -63,7 +72,6 @@ Recursively traverses T and transforms each send S into tag(S, Tag), where Tag i
 	    do  tag_sends(Arg, Proc, Arg1)
 	    )
 	).
-
 tag_recvs(T, Proc, T1) :-
 /*
 Tag each receive with all tags on the appropriate channel.
@@ -73,11 +81,13 @@ Tag each receive with all tags on the appropriate channel.
 	;   functor(T, recv, 2) ->
 	    T=recv(P, _),
 	    sub_sym_set(P, Proc, P1),
-	    findall(Tags, (tags(Q-P1,Tags), Q\=P1), Tagsets),
-	    ord_union(Tagsets, Tagset),
-	    T1=tag(T, Tagset)
-	;   functor(T, recv, 3) ->
-	    T=recv(P, X, _),
+	    findall(Tag, (tags(Q-P1,Tag), Q\=P1), Tags),
+	    T1=tag(T, Tags)
+	;   (   functor(T, recv, 3) ->
+		T=recv(P, X, _)
+	    ;   functor(T, recv, 4) ->
+		T=recv(P, X, Type, _)
+	    ),
 	    sub_sym_set(P, Proc, P1),
 	    (   X=e_pid(Q) ->
 		true
@@ -86,9 +96,8 @@ Tag each receive with all tags on the appropriate channel.
 	    ;  throw(parse-pid-error(X))
 	    ),
 	    sub_sym_set(Q, Proc, Q1),
-	    findall(Tags, (tags(Q1-P1,Tags), Q1\=P1), Tagsets),
-	    ord_union(Tagsets, Tagset),
-	    T1=tag(T, Tagset)
+	    findall(Tag, (tags(Q1-P1,Tag), Q1\=P1, (nonvar(Type)->type(Tag, Type);true)), Tags)->
+	    T1=tag(T, Tags)
 	;   functor(T, sym, 3) ->
 	    T=sym(P, S, A),
 	    tag_recvs(A, var(P, S), A1),
@@ -131,7 +140,6 @@ Checks if all receive tag-sets either
 	    do  check_tags(Arg)
 	    )
 	).
-
 sub_sym_set(P, Proc, P1) :-
 	/*
 	If P belongs to a symmetric set S, then P1=S, and P1=P, otherwise.
