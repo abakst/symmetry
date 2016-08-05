@@ -63,7 +63,6 @@ rewrite_query(T, skip, Ind, Name) :-
 	T=(par([for(m, Q, s, P1), sym(P, s, P2)])),
 	Name='simple ping loop'.
 
-
 /*===========
 Reverse ping
 ===========*/
@@ -308,7 +307,6 @@ rewrite_query(T, Rem, Ind, Name) :-
 	Rem=par([while(sv, true, Server), while(fw, true, Firewall)]),
 	Name='firewall'.
 
-
 /*========
  Registry
  ==========*/
@@ -333,3 +331,58 @@ rewrite_query(T, skip, [(m,r)], Name) :-
 	Name='registry'.
 
 
+
+/*===========
+ Lock-server
+ =============*/
+
+ rewrite_query(T, Res, [], Name) :-
+	 Client= seq([
+		     assign(P, stop, 0),
+		     while(P, stop=0,
+			   seq([
+				send(P, e_pid(sv), lock, P),
+				recv(P, e_pid(sv), ack),
+				ite(P, ndet,
+				    assign(P, act, get),
+				    ite(P, ndet,
+					assign(P, act, put),
+					assign(P, act, unlock)
+				       )
+				   ),
+				send(P, e_pid(sv), action, pair(act,P)),
+				ite(P, act=get,
+				    recv(P, v),
+				    ite(P, act=unlock,
+					assign(P, stop, 1),
+					skip
+				       )
+				   )
+			       ])
+			  )
+		    ]),
+	 Server=
+	 while(sv, true,
+	       seq([
+		     assign(sv, locked, 0),
+		     ite(sv, locked=0,
+			 seq([
+			      recv(sv, e_pid(s), lock, id),
+			      assign(sv, locked, 1),
+			      send(sv, e_var(id), ack)
+			     ]),
+			 skip
+			),
+		     recv(sv, e_pid(s), action, pair(msg,id)),
+		     ite(sv, msg=get,
+			 send(sv, e_var(id), v),
+			 ite(sv, msg=unlock,
+			     assign(sv, lock, 0),
+			     skip
+			    )
+			)
+		   ])
+	      ),
+	 T=par([Server,  sym(P, s, Client)]),
+	 Res=Server,
+	 Name='lock-server'.
