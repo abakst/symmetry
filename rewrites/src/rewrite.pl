@@ -524,9 +524,10 @@ parse_pid_exp(PidExp, P, Rho, Q) :-
 	).
 
 update_constants(P, X, V, Rho, Rho1) :-
-	(   (atomic(X); var(X)),
-	    (atomic(V); var(V)) ->
+	(   (atomic(X),atomic(V)) ->
 	    avl_store(P-X, Rho, V, Rho1)
+	;   (var(X); var(V)) ->
+	    Rho1=Rho
 	;   functor(X, pair, 2),
 	    functor(V, pair, 2),
 	    X=pair(X1, X2),
