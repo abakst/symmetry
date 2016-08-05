@@ -48,11 +48,11 @@ Terms are expected to be of the form par([ seq([..,]), ...]).
 
 /*===================================
  TODOs:
+   - conditionals: variables vs constants.
    - recv(p, q, type, v) as primitive, derive others
    - same for send.
    - Cleanup loop-rules.
    - send/receive permissions.
-   - conditionals: variables vs constants.
    - Fix nondet.
    - check rho assignments.
    - Pretty printer.
@@ -369,6 +369,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  TB=sym(P, S, B),
 	  empty_avl(Psi),
 	  fresh_pred_sym(Proc),
+	  check_cond(Cond, M, Rho),
 	  replace_proc_id(Proc, S, Rho, Rho2),
 	  copy_instantiate(B, P, Proc, B1),
 	  set_talkto(M, S),
@@ -524,9 +525,9 @@ parse_pid_exp(PidExp, P, Rho, Q) :-
 	).
 
 update_constants(P, X, V, Rho, Rho1) :-
-	(   (atomic(X),atomic(V)) ->
+	(   atomic(V) ->
 	    avl_store(P-X, Rho, V, Rho1)
-	;   (var(X); var(V)) ->
+	;   var(V) ->
 	    Rho1=Rho
 	;   functor(X, pair, 2),
 	    functor(V, pair, 2),
