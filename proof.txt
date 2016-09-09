@@ -1,0 +1,57 @@
+Thm:
+ If Γ,Δ,Ψ,P ~> Γ',Δ',Ψ',P' then,
+   ∀ E, (such that wf...)
+   If <[[Γ]], Δ;(E | P | [[Ψ]])> ---> DL, then
+      <[[Γ']], Δ';(E | P' | [[Ψ]])> ---> DL.
+
+Proof: by induction on derivation of - ~> -, splitting cases on
+last step.
+
+- P = recv.
+By the form of the rule,
+
+Γ[(p,q) := m:M],Δ,Ψ,x := recvFrom(p) ~> Γ,Δ;x := m,Ψ,skip.
+
+Let E s.t.
+  < [[ Γ[(p,q) := m:M] ]],Δ;E | Ψ |x := recvFrom(p) > ~A~> DL
+To show:
+  < [[ Γ ]],Δ;x := m;E | Ψ |skip > ~B~> DL
+
+The prefix of A must be all of Δ (single thread). In the remainder, E
+| Ψ |x := recvFrom(p), recvFrom(p) is a left mover (by lemma
+recvs-are-left-movers). So any halted state reachable must also be
+reachable from the state after immediately executing the recvFrom,
+which gives us the program we wish to show.
+
+- P = send.
+Same reasoning as recv (send is always a left mover).
+
+- P = parallel compose.
+Assume:
+ Γ,Δ,Ψ,P ~> Γ',Δ',Ψ',P' and
+ [[ Γ,Δ,Ψ,P ]] < [[ Γ',Δ',Ψ',P' ]]. Then
+ ∀ E,
+   < [[ Γ ]], Δ;(Ψ | P | E) > ~~> DL implies
+   < [[ Γ' ]], Δ',(Ψ' | P' | E) >.
+We need to show that
+ ∀ E,
+   < [[ Γ ]], Δ;(Ψ | P | A | E) > ~~> DL implies
+   < [[ Γ' ]], Δ',(Ψ' | P' | A | E) >
+
+ which follows by instantiating the IH with (E := E | A).
+
+- P = transitive
+Assume:
+
+ Γ,Δ,Ψ,P ~> Γ',Δ',Ψ',P' and
+ Γ',Δ',Ψ',P' ~> Γ'',Δ'',Ψ'',P'' and
+ [[ Γ,Δ,Ψ,P ]] < [[ Γ'',Δ'',Ψ'',P'' ]].
+
+- P = recvFrom(S)
+Assume:
+ Γ,Δ,Ψ,x := recvFrom(S)|Π(S): Q ~>
+  Γ,Δ;p* := * in S,Ψ,x := recvFrom(p)|p*: Q|Π(S\p*): Q.
+
+Suppose that
+ [[ Γ,Δ,Ψ,x := recvFrom(S)|Π(S): Q|E]]
+reaches a DL, and let T be the halting trace.
