@@ -2,6 +2,11 @@ flags: {}
 packages:
 - ./liquid-fixpoint
 - '.'
-extra-deps: []
+extra-deps:
+- dotgen-0.4.2
+- fgl-visualize-0.1.0.1
+- intern-0.9.1.4
+- located-base-0.1.1.0
+- plugins-1.5.5.0
 compiler-check: newer-minor
 resolver: lts-5.3
