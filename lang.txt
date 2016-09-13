@@ -125,9 +125,9 @@ A||B,G,D,X ~~> C,G,(D;D' ∪ D''),X''
 
 Thm:
  If Γ,Δ,Ψ,P ~~> Γ',Δ',Ψ',P' then,
-   ∀ E,X, (such that (1)wf...& (2)small...)
-   If <[[Γ]], Δ;(E | P;X | [[Ψ]])> ---> DL, then
-      <[[Γ']], Δ';(E | P';X | [[Ψ]])> ---> DL.
+   ∀ E, (such that (1)wf...& (2)small...)
+   If <[[Γ]], Δ;(E | P | [[Ψ]])> ---> DL, then
+      <[[Γ']], Δ';(E | P' | [[Ψ]])> ---> DL.
 
  Where [[Γ]] = "message buffers in Γ"
        [[Ψ]] = "parallel composition of domain of Ψ"
