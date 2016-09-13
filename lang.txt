@@ -124,7 +124,7 @@ A||B,G,D,X ~~> C,G,(D;D' ∪ D''),X''
 ## Main Theorem
 
 Thm:
- If Γ,Δ,Ψ,P ~~> Γ',Δ',Ψ',P' then,
+ If P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ' then,
    ∀ E, (such that (1)wf...& (2)small...)
    If <[[Γ]], Δ;(E | P | [[Ψ]])> ---> DL, then
       <[[Γ']], Δ';(E | P' | [[Ψ]])> ---> DL.
@@ -170,8 +170,8 @@ Assume [[ Γ ]], Δ;([[Ψ[p:=T]]] | p:send(q,m) | E ~T~> DL.
 
 - P = parallel compose.
 Assume:
- Γ,Δ,Ψ,P ~> Γ',Δ',Ψ',P' and
- [[ Γ,Δ,Ψ,P ]] < [[ Γ',Δ',Ψ',P' ]]. Then
+ P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
+ [[ P,Γ,Δ,Ψ ]] < [[ P',Γ',Δ',Ψ' ]]. Then
  ∀ E,
    < [[ Γ ]], Δ;(Ψ | P | E) > ~~> DL implies
    < [[ Γ' ]], Δ',(Ψ' | P' | E) >.
@@ -185,17 +185,18 @@ We need to show that
 - P = transitive
 Assume:
 
- Γ,Δ,Ψ,P ~> Γ',Δ',Ψ',P' and
- Γ',Δ',Ψ',P' ~> Γ'',Δ'',Ψ'',P'' and
- [[ Γ,Δ,Ψ,P ]] < [[ Γ'',Δ'',Ψ'',P'' ]].
+ P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
+ P',Γ',Δ',Ψ' ~> P'',Γ'',Δ'',Ψ''
+ Thus by simple application of the IH,
+ [[ P,Γ,Δ,Ψ ]] < [[ P'',Γ'',Δ'',Ψ'' ]].
 
-- P = recvFrom(S)
+- P = recvFrom(*)
 Assume:
- Γ,Δ,Ψ,x := recvFrom(*)|Π(S'): Q ~>
-  Γ,Δ;p* := * in S,Ψ,x := recvFrom(p)|p*: Q|Π(S\p*): Q.
+ x := recvFrom(*)|Π(S'): Q,Γ,Δ,Ψ ~>
+  x := recvFrom(p)|p*: Q|Π(S\p*): Q,Γ,Δ;p* := * in S,Ψ.
 
 Suppose that
- [[ Γ,Δ,Ψ,x := recvFrom(*)|Π(S'): Q|E]]
+ [[ x := recvFrom(*)|Π(S'): Q|E],Γ,Δ,Ψ]
 reaches a DL, and let T be the halting trace.
 
 By assumption (well-tagged programs), for every recv, either
