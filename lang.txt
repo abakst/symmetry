@@ -202,12 +202,15 @@ By assumption (well-tagged programs), for every recv, either
 a single concrete sender sends matching messages or one of a
 set of processes (S) sends a matching message from a single
 syntactic send. Let p* be the sender.
+
 - Case: p* is not in S. But this is not possible, since the first argument
 of the send() is equal to `m` (and the program is well-tagged).
+
 - Case: p* is in S \ S'. So p* must be in E. But by hypothesis, if p*: B'
 is in E then B' < B. This means that a message sent from p* came from
 a location *other* than the send() preceding B, which violates the assumption
 that all messages sent from a symmetric set come from a single syntactic send.
+
 - Case: p* is in S'. Then the rewritten program reaches the same halted states
 as the input program, as p* ranges over all of the elements of S' and the
 recvFrom is a left-mover.
