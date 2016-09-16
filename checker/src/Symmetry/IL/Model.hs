@@ -46,13 +46,19 @@ initSched = "sched0"
 nondet    = "nonDet"
 nondetRange = "nonDetRange"
 
-mapGetFn, mapPutFn, vecGetFn, vecPutFn :: String
-mapGetFn = "get"
-mapPutFn = "put"
-vecGetFn = "getVec"
-vec2DGetFn = "getVec2D"
-vecPutFn = "setVec"
-vec2DPutFn = "setVec2D"
+vectorFileName = "SymVector"
+mapFileName    = "SymMap"
+
+--mapGetFn, mapPutFn, vecGetFn, vecPutFn :: String
+mapGetFn     = mapFileName    ++ ".get"
+mapPutFn     = mapFileName    ++ ".put"
+vecGetFn     = vectorFileName ++ ".getVec"
+vec2DGetFn   = vectorFileName ++ ".getVec2D"
+vecPutFn     = vectorFileName ++ ".setVec"
+vec2DPutFn   = vectorFileName ++ ".setVec2D"
+emptyVecFn   = vectorFileName ++ ".emptyVec"
+emptyVec2DFn = vectorFileName ++ ".emptyVec2D"
+
 
 -- Generating Names                    
 prefix :: String -> String -> String

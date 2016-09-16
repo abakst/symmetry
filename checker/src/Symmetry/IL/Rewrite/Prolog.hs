@@ -7,6 +7,8 @@ import           Symmetry.IL.ConfigInfo
 import           Text.PrettyPrint
 import qualified Text.PrettyPrint.Leijen as P hiding ((<$>))
 
+import Debug.Trace
+
 printProlog :: P.Pretty a => ConfigInfo a -> String
 printProlog ci
   = renderStyle style{mode = LeftMode} (protocol $$ prolog)
@@ -40,8 +42,11 @@ term :: String -> [Doc] -> Doc
 term p xs
   = text p <> tupled xs
 
-unhandled :: P.Pretty a => a -> b
-unhandled x = error ("prolog " ++ show (P.pretty x))
+--unhandled :: P.Pretty a => a -> b
+--unhandled x = error ("prolog error " ++ )
+unhandled :: P.Pretty a => a -> Doc
+unhandled x = trace t (text "/*" <+> text t <+> text "*/")
+              where t = show $ P.pretty x
 
 instance Prolog Pid where
   toProlog (PConc n)

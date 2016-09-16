@@ -22,7 +22,6 @@ import           Symmetry.IL.Model.HaskellSpec ( initSpecOfConfig
                                                , defaultVisitor
                                                , StateFieldVisitor(..)
                                                )
-  
 ---------------------------------
 -- Wrapper type for Haskell code
 ---------------------------------
@@ -773,7 +772,7 @@ initialCall ci =
       call = metaFunction runState (vExp initState : bufs ++ [initSchedCall] ++ ss)
       ss = ifQC ci emptyListCon
       bufs = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
-      emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
+      emptyVec p = vExp $ if isAbs p then emptyVec2DFn else emptyVecFn
       initSchedCall = metaFunction initSched [vExp initState]
 
 transitionRules :: ConfigInfo a -> RuleState -> String
@@ -845,7 +844,8 @@ printHaskell ci rs = unlines [ header
                        , "module SymVerify where"
                        , "import Data.Set"
                        , "import SymVector"
-                       , "import SymMap"
+                       , "import SymMap hiding (singleton)"
+                       , "import qualified SymMap (singleton)"
                        , "import SymBoilerPlate"
                        ] ++ (if isQC ci then [] else ["import Language.Haskell.Liquid.Prelude"])
 
@@ -939,7 +939,7 @@ runTestDecl ci =
   where pvarn n    = pvar $ name n
         varn n     = Var . UnQual $ name n
         args       = [PTuple Boxed [pvarn "s"]]
-        emptyVec p = vExp $ if isAbs p then "emptyVec2D" else "emptyVec"
+        emptyVec p = vExp $ if isAbs p then emptyVec2DFn else emptyVecFn
         -- turn buffers into empty vectors
         bufs       = [ emptyVec p | p <- pids ci, _ <- tyMap ci ]
         -- runState s ... plist []
