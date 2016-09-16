@@ -4,10 +4,11 @@ statements:
 s ::= send(e1,e2)      -- send e2 to e1
     | x := recvFrom(*) -- recv message from any process, bind to x
     | x := recvFrom(p) -- recv message from the pid p, bind to x
+    | x := *           -- nondet assign
     | for (i : I): s   -- iteration over collection
     | while (e): s     -- iteration
     | s;s              -- sequence
-    | s + s            -- nondet choice
+    | s + s            -- nondet choice???
 
 proc ::= p: s          -- process p runs s
 
@@ -65,13 +66,13 @@ A||B,G,D,X ~~> skip||C,G,D',X'
 ------------------------------------
 while (e) A || B,G,D,X ~~> C,G,D',X'
 
-While-continue:
+While-continue: [lift X and D]
 D  |= e
 D' |= e
 C < B
-A || B,G,D,X ~~> skip || C,G,D',X'
+A || B,G,D,X ~~> skip || C,G,D;D',X'
 ----------------------------------------------------
-while (e): A || B,G,D,X ~~> while(e): A || C,G,D',X'
+while (e): A || B,G,D,X ~~> while(e): A || C,G,D;D',X'
 
 Iter-repeat:
 p:A||q:B,G,D,X ~~> skip||q:B,G,(D;D'),X'[p:=Tp][q:=Tq]
@@ -105,8 +106,8 @@ unfold-recv:
 p* fresh
 G ⊢ ∅ ⊂ P' ⊆ P
 ------------------------------------------
-m: x := recvFrom(*) || Π(p:P')send(m,v)B(p),G,D,X
-~~> m: x := recvFrom(p*) || B(p*) || Π(p:P'\{p*})send(m,v);B(p),G,D;p*:=*;x:=v,X
+m: x := recvFrom(*) || Π(p:P')B(p),G,D,X
+~~> m: x := recvFrom(p*) || B(p*) || Π(p:P'\{p*})B(p),G,D;p*:=*;X
 
 ## Ext
 
@@ -127,7 +128,7 @@ Thm:
  If P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ' then,
    ∀ E, (such that (1)wf...& (2)small...)
    If <[[Γ]], Δ;(E | P | [[Ψ]])> ---> DL, then
-      <[[Γ']], Δ';(E | P' | [[Ψ]])> ---> DL.
+      <[[Γ']], Δ';(E | P' | [[Ψ']])> ---> DL.
 
  Where [[Γ]] = "message buffers in Γ"
        [[Ψ]] = "parallel composition of domain of Ψ"
@@ -140,6 +141,7 @@ Thm:
  Additional assumptions:
    -P is well-tagged (all recvs tagged either from a single loc in a symmetric set, or
     from a single concrete proc)
+   -E's are well-tagged, sub-P's are well-tagged
 
 ## Proof
 
@@ -167,6 +169,11 @@ Two possible rules: send:
 Same reasoning as recv (send is always a left mover).
 Ext:
 Assume [[ Γ ]], Δ;([[Ψ[p:=T]]] | p:send(q,m) | E ~T~> DL.
+
+- compose-seq
+Assume:
+ P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
+ T ∈ [[Γ],(E | P;B | [[Ψ]])] deadlocks.
 
 - P = parallel compose.
 Assume:
