@@ -7,12 +7,19 @@
 		 substitute_term/4,
 		 substitute_term_avl/4,
 		 format_atom/3,
-		 copy_instantiate/4
-		]).
-		 
+		 copy_instantiate/4,
+		 negate/2, bb_inc/1,
+		 reset_pred_sym/0
+		], [hidden(true)]).
+:- use_module(library(codesio)).
 :- use_module(library(ordsets)).
 :- use_module(library(terms)).
 :- use_module(library(avl)).
+
+bb_inc(Key) :-
+	bb_get(user:Key, I),
+	I1 is I+1,
+        bb_put(user:Key, I1).
 
 /* Copy T and instantiate Q to V in the new term */
 copy_instantiate(T, Q, V, T1) :-
@@ -60,6 +67,9 @@ get_ord_pairs(Set, Pairs) :-
 	),
 	ord_subtract(Product, Diag, Pairs).
 
+reset_pred_sym :-
+	bb_put(sym_num, 0).
+
 fresh_pred_sym(Sym) :-
 	(  bb_get(sym_num, N) ->
 	    true
@@ -76,3 +86,11 @@ format_atom(Format, Arguments, Atom) :-
 	format_to_codes(Format, Arguments, Codes),
 	atom_codes(Atom, Codes).
 
+/*LIA terms: negation */
+
+% Negating A
+
+negate(A=B, A\==B).
+negate(A==B, A\==B).
+negate(A\==B, A==B).
+negate(A=\=B, A==B).
