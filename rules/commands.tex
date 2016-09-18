@@ -1,0 +1,48 @@
+%%
+\newcommand{\pidLit}[1]{#1}
+\newcommand{\setLit}[1]{\mathsf{#1}}
+%% Sets
+\newcommand{\pidSet}{\mathsf{PID}}
+\newcommand{\idents}{\mathsf{Identifier}}
+
+%% Statements
+\newcommand{\nop}{\mathtt{skip}}
+\newcommand{\assign}[2]{#1 \mathrel{\texttt{:=}} #2}
+\newcommand{\send}[2]{\mathtt{send(}#1\mathtt{,}#2\mathtt{)}}
+\newcommand{\recvFrom}[2]{\assign{#1}{\mathtt{recv(}#2\mathtt{)}}}
+\newcommand{\recvWC}{\mathtt{*}}
+\newcommand{\foreach}[3]{\mathtt{for(}#1:#2\mathtt{)}\mathtt{:} #3}
+\newcommand{\while}[2]{\mathtt{while(}#1\mathtt{)}\mathtt{:} #2}
+\newcommand{\alt}{\;|\;}
+\newcommand{\nondet}[1]{#1 \leftarrow \mathtt{*}}
+
+%% Proc
+\newcommand{\unfolded}[1]{\tilde{#1}}
+\newcommand{\emptyProc}{\varepsilon}
+\newcommand{\proc}[2]{#1 \triangleright #2}
+% \newcommand{\iterPar}[3]{\Pi(#1 : #2): #3}
+\newcommand{\iterPar}[3]{\proc{#1{:}{#2}}#3}
+\newcommand{\inPar}{\mathrel{\|}}
+%% \newcommand{\minusProc}[1]{\setminus\{#1\}}
+\newcommand{\minusProc}[1]{_{#1}}
+
+%% Rewrite State
+\newcommand{\indep}[2]{#1 \perp #2}
+\newcommand{\semEntails}{\vDash}
+\newcommand{\fresh}[1]{#1\ \mathit{fresh}}
+
+\newcommand{\msgseq}[2]{#1{\cdot}#2}
+\newcommand{\extmap}[2]{[#1 \mapsto #2]}
+\newcommand{\ctxmeta}{\ensuremath{\Gamma}\xspace}
+\newcommand{\tracemeta}{\ensuremath{\Delta}\xspace}
+\newcommand{\extmeta}{\ensuremath{\Psi}\xspace}
+
+\newcommand{\rewriteName}[1]{\textbf{(#1)}}
+\newcommand{\rewriteRule}[3]{\inferrule[#1]{#2}{#3}}
+\newcommand{\rewriteStep}[2]{#1 \rewriteRel #2}
+\newcommand{\rewriteState}[4]{#1, \langle #2, #3, #4 \rangle}
+\newcommand{\rewriteRel}{\mathrel{\rightsquigarrow}}
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: "main.tex"
+%%% End:

@@ -1,0 +1,321 @@
+\begin{figure*}[!b]
+\begin{gather*}
+  \rewriteRule{Send}{}
+  {\rewriteStep{\rewriteState{\proc{\pidLit{p}}{\send{\pidLit{q}}{n}}}
+                             {\ctxmeta \extmap{(\pidLit{p},\pidLit{q})}{m}}
+                             {\tracemeta}
+                             {\extmeta}}
+               {\rewriteState{\proc{\pidLit{p}}{\nop}}
+                             {\ctxmeta \extmap{(\pidLit{p},\pidLit{q})}{\msgseq{m}{n}}}
+                             {\tracemeta}
+                             {\extmeta}}}
+  \\
+  %%%%%%%%%%%%%%%%%%%%%%
+  \rewriteRule{Recv}{}
+  {\rewriteStep{\rewriteState{\proc{\pidLit{q}}{\recvFrom{x}{\pidLit{p}}}}
+                             {\ctxmeta \extmap{(\pidLit{p},\pidLit{q})}{\msgseq{m}{n}}}
+                             {\tracemeta}
+                             {\extmeta}}
+               {\rewriteState{\proc{\pidLit{q}}{\nop}}
+                             {\ctxmeta \extmap{(\pidLit{p},\pidLit{q})}{n}}
+                             {\tracemeta;\assign{x}{m}}
+                             {\extmeta}}}
+  \\
+\end{gather*}
+\caption{Left-Mover Rules}
+\end{figure*}
+
+\begin{figure}
+\begin{gather*}
+  %%%%%%%%%%%%%%%%%%%%%%
+  \rewriteRule{Const}{
+    \tracemeta \semEntails x = v
+  }{
+    \rewriteStep
+      {\rewriteState{P(x)}{\ctxmeta}{\tracemeta}{\extmeta}}
+      {\rewriteState{P(v)}{\ctxmeta}{\tracemeta}{\extmeta}}
+  }
+  \\
+  %%%%%%%%%%%%%%%%%%%%%%
+  \rewriteRule{Sequence}{
+    \rewriteStep
+      {\rewriteState{P}{\ctxmeta}{\tracemeta}{\extmeta}}
+      {\rewriteState{P'}{\ctxmeta'}{\tracemeta'}{\extmeta'}}
+  }{
+    \rewriteStep
+      {\rewriteState{P;Q}{\ctxmeta}{\tracemeta}{\extmeta}}
+      {\rewriteState{P';Q}{\ctxmeta'}{\tracemeta'}{\extmeta'}}
+  }
+  \\
+  %%%%%%%%%%%%%%%%%%%%%%
+  \rewriteRule{Parallel}{
+    \rewriteStep
+      {\rewriteState{P}{\ctxmeta}{\tracemeta}{\extmeta}}
+      {\rewriteState{P'}{\ctxmeta'}{\tracemeta'}{\extmeta'}}
+  }{
+    \rewriteStep
+      {\rewriteState{P \inPar Q}{\ctxmeta}{\tracemeta}{\extmeta}}
+      {\rewriteState{P' \inPar Q}{\ctxmeta'}{\tracemeta'}{\extmeta'}}
+  }
+\end{gather*}
+\caption{Structural Rules}
+\end{figure}
+
+\begin{figure*}
+\begin{gather*}
+  %%%%%%%%%%%%%%%%%%%%%%
+  \rewriteRule{Repeat}{
+    \rewriteStep
+      {\rewriteState{\proc{\pidLit{p}}{s} \inPar \iterPar{i}{I}{t(i)}}{\ctxmeta}{\tracemeta}{\extmeta}}
+      {\rewriteState
+         {
+          \proc{\unfolded{\i}}{t(\unfolded{\i})}
+          \inPar 
+          \iterPar{i}{I\minusProc{\unfolded{\i}}}{t(i)}
+         }
+         {\ctxmeta}
+         {\tracemeta;\tracemeta'(\unfolded{\i})}
+         {\extmeta'\extmap{\unfolded{\i}}{u(\unfolded{\i})}}}
+     }{ 
+       \rewriteStep
+         {\rewriteState
+          {\proc{\pidLit{p}}{s}
+            \inPar 
+            \iterPar{i}{I}{t(i)}}{\ctxmeta}{\tracemeta}{\extmeta}}
+         {\rewriteState
+           {\iterPar{i}{I}{t(i)}}
+           {\ctxmeta}
+           {\tracemeta;\nondet{i};\tracemeta'}
+           {\extmeta'\extmap{I}{\nondet{i};u(i)}}}
+     }
+  \\
+  %%%%%%%%%%%%%%%%%%%%%%
+  \rewriteRule{Unfold-Send}{
+    \ctxmeta \vdash \unfolded{\i} \in I
+  }{
+    \rewriteStep{
+      \rewriteState
+        {\proc{\pidLit{p}}{\send{\unfolded{\i}}{m}} \inPar
+         \iterPar{i}{I}{Q(i)}}
+        {\ctxmeta}{\tracemeta}{\extmeta}
+    }{
+      \rewriteState
+        {\proc{\pidLit{p}}{\send{\unfolded{\i}}{m}} \inPar
+         \proc{\unfolded{\i}}{Q(\unfolded{\i})}
+         \inPar
+         \iterPar{i}{I\minusProc{\unfolded{\i}}}{Q(i)} 
+        }
+        {\ctxmeta}{\tracemeta}{\extmeta}
+    }
+  }
+  \\
+  %%%%%%%%%%%%%%%%%%%%%%
+  \rewriteRule{Unfold-Recv}{
+    \fresh{j}\\
+    \ctxmeta \vdash \emptyset \subset I' \subseteq I
+  }{
+    \rewriteStep{
+      \rewriteState{
+        \proc{\pidLit{p}}{\recvFrom{x}{\recvWC}}
+        \inPar
+        \iterPar{i}{I}{Q(i)}
+      }{\ctxmeta}{\tracemeta}{\extmeta}
+    }{
+      \rewriteState{
+        \proc{\pidLit{p}}{\recvFrom{x}{j}}
+        \inPar
+        Q(j)
+        \inPar
+        \iterPar{i}{I\minusProc{j}}{Q(i)}
+      }{\ctxmeta}{\tracemeta}{\extmeta}
+    }
+  }
+\end{gather*}
+\caption{Unfolding Rules}
+\end{figure*}
+
+\begin{figure*}
+\begin{gather*}
+  %%%%%%%%%%%%%%%%%%%%%% 
+  \rewriteRule{External-FIXME}
+  {
+a \equiv \send{p}{e} \text{ or } a \equiv \recvFrom{x}{r} \text { and } \ctxmeta \vdash \indep{q}{r}}
+  { 
+    \rewriteStep{
+      \rewriteState{\proc{p}{a}}
+                   {\ctxmeta}
+                   {\tracemeta}
+                   {\extmeta}
+    }{
+      \rewriteState{\proc{p}{\nop}}
+                   {\ctxmeta}
+                   {\tracemeta}
+                   {\extmeta\extmap{p}{\extmeta(p);a}}
+    }
+  }
+  \\
+  %%%%%%%%%%%%%%%%%%%%%% 
+  \rewriteRule{Compose-Ext}
+  {
+    \rewriteStep{
+      \rewriteState{P}{\ctxmeta}{\tracemeta}{\extmeta}
+    }{
+      \rewriteState{P'}{\ctxmeta}{\tracemeta;\tracemeta'}{\extmeta'}
+    }\\
+    %%
+    \rewriteStep{
+      \rewriteState{Q \inPar \extmeta'}{\ctxmeta}{\tracemeta}{\extmeta'}
+    }{
+      \rewriteState{\nop}{\ctxmeta}{\tracemeta;\tracemeta''}{\extmeta''}
+    }\\
+  }
+  {
+    \rewriteStep{
+      \rewriteState{P \inPar Q}{\ctxmeta}{\tracemeta}{\extmeta}
+    }{
+      \rewriteState{P'}{\ctxmeta}{\tracemeta;(\tracemeta' \cup \tracemeta'')}{\extmeta''}
+    }
+  }
+\end{gather*}
+\caption{Residual Processes}
+\end{figure*}
+
+\begin{figure*}
+\begin{gather*}
+  \rewriteRule{Foreach-Proc}
+  {\fresh{\pidLit{i},I} \\
+   \hat\tracemeta = \foreach{j}{J\setminus{I}}{\tracemeta'(j)}\\
+   \hat{\ctxmeta} = \ctxmeta \sqcup \emptyset \subset I \subseteq J 
+                             \sqcup i \in I \qquad
+   t' \sqsubset t\\
+   \rewriteStep{
+     \rewriteState{\proc{\pidLit{p}}{s(j)} \inPar
+                   \iterPar{j}{J}{t(j)}}
+                  {\hat\ctxmeta}{\tracemeta;\hat{\tracemeta}}{\extmeta}
+   }{
+     \rewriteState{\proc{\pidLit{k}}{t'(\pidLit{k})} 
+                   \inPar
+                   \iterPar{j}{J\minusProc{\pidLit{k}}}{t(j)}}
+                  {\hat\ctxmeta}{\tracemeta;\hat{\tracemeta};\tracemeta'(\pidLit{k})}{\extmeta'\extmap{\pidLit{k}}{s(\pidLit{k})}}
+   }
+ }
+ {
+   \rewriteStep{
+     \rewriteState{\proc{\pidLit{p}}{\foreach{j}{J}{P(j)}} \inPar
+                   \iterPar{j}{J}{t(j)}}
+                 {\ctxmeta}{\tracemeta}{\extmeta}
+   }{
+     \rewriteState{\iterPar{j}{J}{t'(j)}}
+                  {\ctxmeta}{\tracemeta;\foreach{j}{J}{\tracemeta'(j)}}
+                  {\extmeta'\extmap{J}{\iterPar{j}{J}{s(j)}}}
+   }
+ }\\
+ %%%%%%%%%%%%%%%%%%%%%% 
+ \rewriteRule{Iter-repeat}
+ {
+   \rewriteStep{
+     \rewriteState
+       {\proc{p}{s} \inPar \proc{q}{t}}
+       {\ctxmeta}{\tracemeta}{\extmeta}
+   }{
+     \rewriteState
+       {\proc{q}{t}}{\ctxmeta}{\tracemeta;\tracemeta'}
+       {\extmeta'\extmap{p}{s_p}\extmap{q}{s_q}}
+   }
+ }
+ {
+   \rewriteStep{
+     \rewriteState
+       {\proc{p}{\foreach{i}{I}{s}} \inPar \proc{q}{t}}
+       {\ctxmeta}{\tracemeta}{\extmeta}
+   }{
+     \rewriteState
+       {\proc{q}{t}}{\ctxmeta}{\tracemeta;\foreach{i}{I}{\tracemeta'}}
+       {\extmeta'\extmap{p}{\foreach{i}{I}{s_p}}\extmap{q}{\foreach{i}{I}{s_q}}}
+   }
+ }\\
+ %%%%%%%%%%%%%%%%%%%%%% 
+ \rewriteRule{Iter-match}
+ {
+   \rewriteStep{
+     \rewriteState
+      {\proc{p}{s} \inPar \proc{q}{t}}
+      {\ctxmeta}{\tracemeta}{\extmeta}
+   }{
+     \rewriteState
+      {\emptyProc}
+      {\ctxmeta}{\tracemeta;\tracemeta'}{\extmeta'\extmap{p}{s_p}\extmap{q}{s_q}}
+   }
+ }
+ {
+   \rewriteStep{
+     \rewriteState
+      {\proc{p}{\foreach{i}{I}{s}} \inPar \proc{q}{\foreach{i}{I}{t}}}
+      {\ctxmeta}{\tracemeta}{\extmeta}
+    }{
+     \rewriteState
+      {\nop}
+      {\ctxmeta}{\tracemeta;\foreach{i}{I}{\tracemeta'}}
+      {\extmeta'\extmap{p}{\foreach{i}{I}{s_p}}\extmap{q}{\foreach{i}{I}{s_q}}}
+    }
+ }\\
+ %%%%%%%%%%%%%%%%%%%%%% 
+ \rewriteRule{While-Exit}
+ {
+   \tracemeta \semEntails e \\ \tracemeta' \semEntails \lnot e \\
+   \rewriteStep{
+     \rewriteState
+     {\proc{p}{s} \inPar \proc{q}{t}}
+     {\ctxmeta}{\tracemeta}{\extmeta}
+   }{
+     \rewriteState
+     {\proc{q}{t'}}
+     {\ctxmeta}{\tracemeta'}{\extmeta'}
+   }
+ }
+ {
+   \rewriteStep{
+     \rewriteState
+     {\proc{p}{\while{e}{s}} \inPar \proc{q}{t}}
+     {\ctxmeta}{\tracemeta}{\extmeta}
+   }{
+     \rewriteState
+     {\proc{q}{t'}}
+     {\ctxmeta}{\tracemeta'}{\extmeta'}
+   }
+ }\\
+ %%%%%%%%%%%%%%%%%%%%%% 
+ \rewriteRule{While-Continue}
+ {
+   \tracemeta \semEntails e \\
+   \tracemeta' \semEntails e \\
+   t' \sqsubset t\\
+   \rewriteStep{
+     \rewriteState
+     {\proc{p}{s} \inPar \proc{q}{t}}
+     {\ctxmeta}{\tracemeta}{\extmeta}
+   }{
+     \rewriteState
+     {\proc{q}{t'}}
+     {\ctxmeta}{\tracemeta'}
+     {\extmeta'\extmap{p}{s_p}\extmap{q}{s_q}}
+   }
+ }
+ {
+   \rewriteStep{
+     \rewriteState
+     {\proc{p}{\while{e}{s}} \inPar \proc{q}{t'}}
+     {\ctxmeta}{\tracemeta}{\extmeta}
+   }{
+     \rewriteState
+     {\proc{p}{\while{e}{s}} \inPar \proc{q}{t'}}
+     {\ctxmeta}{\tracemeta'}{\extmeta'}
+   }
+ }
+\end{gather*}
+\caption{Loops}
+\end{figure*}
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: "main.tex"
+%%% End:

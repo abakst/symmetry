@@ -1,0 +1,29 @@
+\begin{figure}[h!]
+\[
+\begin{array}{rcl}
+p & \in &\pidSet\\
+x,X & \in &\idents\\
+\end{array}
+\]
+\[
+\begin{array}{rcl}
+  s & ::=  & \nop \\
+    & \alt & \send{x}{y} \\
+    & \alt & \recvFrom{x}{p} \\
+    & \alt & \recvFrom{x}{\recvWC} \\
+    & \alt & \foreach{x}{X}{s} \\
+    & \alt & s;s \\
+    \\ 
+  P & ::=  & \emptyProc \\
+    &      & \proc{p}{s}\\
+    & \alt & \iterPar{x}{X}{s}\\
+    & \alt & \iterPar{x}{{X}\minusProc{p}}{s}\\
+    & \alt & P \inPar P
+\end{array}
+\]
+\caption{Language Syntax}
+\end{figure}
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: "main"
+%%% End:

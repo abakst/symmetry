@@ -2,34 +2,40 @@
 
 \usepackage{framed}
 \usepackage{fullpage}
+\usepackage{xspace}
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{amsfonts}
 \usepackage{mathpartir}
-\usepackage{xspace}
+\usepackage{mathtools}
+
+\newcommand{\setcard}[1]{\left\vert{#1}\right\vert}
 
 \newcommand{\inferrewrite}[2]{\ensuremath{\inferrule{#1}{#2}}}
 \newcommand{\rewrite}[6]{#1,#2,#3 \mathrel{\longrightarrow} #4,#5,#6}
+\newcommand{\rewriteinv}[4]{#1,#2,#3 \vdash #4}
 \newcommand{\mover}[2]{{#1}\,:\,\mathbb{#2}\xspace}
-\newcommand{\parpipe}{\mathrel{\|}}
+\newcommand{\parpipe}{\mathrel{\parallel}}
 \newcommand{\for}[3]{\mathsf{for} (#1 : #2) \{#3\}}
 \newcommand{\while}[2]{\mathsf{while} (#1) \{#2\}}
 \newcommand{\parp}[2]{{#1}\parpipe{#2}}
-\newcommand{\symm}[3]{\Pi{#1}:{#2}.\;#3}
+\newcommand{\symm}[3]{\Pi_{{#1 \in #2}}\ #3}
 
-\newcommand{\unfolded}[1]{#1^{*}}
+\newcommand{\unfolded}[1]{#1'}
 \newcommand{\reduced}[1]{#1_{\bot}}
 
 \newcommand{\fn}[1]{\mathsf{#1}}
 \newcommand{\chan}[1]{\fn{chan}(#1)}
 
-\newcommand{\sub}[3]{#1[#3/#2]}
-\newcommand{\emptytrace}{\epsilon}
+\newcommand{\sub}[2]{[#2/#1]}
+\newcommand{\emptytrace}{\varepsilon}
 \newcommand{\var}[1]{\mathtt{#1}}
 \newcommand{\stmt}[2]{#1\,\triangleright\,\mathtt{#2}}
 \newcommand{\recv}[2]{\stmt{#1}{#2 := recv}()}
 \newcommand{\send}[3]{\stmt{#1}{send}(#2,#3)}
 \newcommand{\assert}[1]{\mathtt{assert}\;#1}
+\newcommand{\fold}[2]{#2 \leftarrow #2 \uplus \{#1\}} %%{\fn{fold}(#1,#2)}
+\newcommand{\unfold}[2]{#2 \leftarrow #2 \setminus \{#1\}}
 
 \newcommand{\ctx}{\Gamma}
 \newcommand{\trace}{\Delta}
@@ -37,8 +43,8 @@
 \begin{document}
 
 \newif\ifconc
-%%\conctrue
-\concfalse
+\conctrue
+%%\concfalse
 
 \begin{framed}
 \textsc{Primitive Operations}
@@ -73,6 +79,31 @@
           {\emptytrace}
 }
 \]
+
+\[
+\inferrule[Unfold]{
+  \trace \vDash \unfolded{i} \in I
+}{
+  \rewrite{\ctx}{\trace}
+          {\symm{i}{I}{P(i)}}
+          {\ctx}{\trace;\unfold{\unfolded{i}}{I}}
+          {\parp{P(\unfolded{i})}{\symm{i}{I}{P(i)}}}
+}
+\]
+
+\[
+\inferrule[Fold]{
+  \forall{i \in I},\,
+    \trace \vDash \var{x}_i = \var{x}_{\unfolded{i}}
+}{
+  \rewrite{\ctx}
+          {\trace}
+          {\parp{P(\unfolded{i})}{\symm{i}{I}{P(i)}}}
+          {\ctx}
+          {\trace;\fold{\unfolded{i}}{I}}
+          {\symm{i}{I}{P(i)}}
+}
+\]
 \end{framed}
 
 \begin{framed}
@@ -95,24 +126,24 @@
   }
 \]
 
-\[
-  \inferrule[Symm-Prefix]{
-    \rewrite{\ctx}
-            {\trace}
-            {\parp{P(\unfolded{i});Q(\unfolded{i})}{P(\reduced{i});Q(\reduced{i})}}
-            {\ctx}
-            {\trace'}
-            {\parp{P(\unfolded{i})}{P(\reduced{i})};
-             \parp{Q(\unfolded{i})}{Q(\reduced{i})}}
-  }{
-    \rewrite{\ctx}
-            {\trace}
-            {\symm{i}{I}{P(i);Q(i)}}
-            {\ctx}
-            {\trace'}
-            {\symm{i}{I}{P(i)};\symm{i}{I}{Q(i)}}
-  }
-\]
+% \[
+%   \inferrule[Symm-Prefix???]{
+%     \rewrite{\ctx}
+%             {\trace}
+%             {\parp{P(\unfolded{i});Q(\unfolded{i})}{P(\reduced{i});Q(\reduced{i})}}
+%             {\ctx}
+%             {\trace'}
+%             {(\parp{P(\unfolded{i})}{P(\reduced{i})});
+%              (\parp{Q(\unfolded{i})}{Q(\reduced{i})})}
+%   }{
+%     \rewrite{\ctx}
+%             {\trace}
+%             {\symm{i}{I}{P(i);Q(i)}}
+%             {\ctx}
+%             {\trace'}
+%             {\symm{i}{I}{P(i)};\symm{i}{I}{Q(i)}}
+%   }
+% \]
 \[
   \inferrule[Framing] {
     \rewrite{\ctx}
@@ -147,22 +178,89 @@
 % \rewrite{\ctx}{P}{\emptytrace}{\ctx}{S;Q}
 % }
 \]
+\[
+\inferrule[While-Continue]
+{}
+{\rewrite{\ctx}{\trace}{\while{B}{P}}
+         {\ctx}{\trace}{\assert{B};P;\while{B}{P}}}
+\]
+
+\[
+\inferrule[While-Exit]
+{}
+{\rewrite{\ctx}{\trace}{\while{B}{P}}
+         {\ctx}{\trace}{\assert{B};P;\assert{\neg{B}}}}
+\]
 \end{framed}
 
 \begin{framed}
-\textsc{Iteration}
+\noindent\textsc{Iteration}
+
+\[
+  \inferrule[Invariant]
+  {
+    \unfolded{i},\, I',\, \textit{fresh}\\
+    I' \subseteq I\\
+    \\\\
+    % \psi \equiv \varphi(I',J') \wedge \unfolded{i} \in I \wedge \unfolded{i} \notin I'\\
+    % \trace \vDash \varphi(\emptyset,\emptyset)\\
+    % \trace;\trace' \vDash \psi \Rightarrow \varphi(I'\cup\{\unfolded{i}\},J'\cup{J_\delta})\\
+    % \rewrite{\ctx}{\trace}
+    %         {\parp{P(\unfolded{i})}
+    %               {\symm{j}{J}{Q(j)}}}
+    %         {\ctx}{\trace'(\unfolded{i})}
+    %         {\parp{\emptytrace}
+    %           {\parp{\symm{j}{J\setminus{J'}}{Q(j)}}
+    %             {\symm{j}{J'}{Q'(j)}}}}\\
+    \rewrite{\ctx}{\trace;\for{i}{I'}{\trace'(i)}}
+            {\parp{P(\unfolded{i})}
+                  {\parp{\symm{j}{J}{Q(j)}}
+                        {\symm{j}{J'}{Q'(j)}}}}
+            {\ctx}{\trace'(\unfolded{i})}
+            {\parp{\emptytrace}
+              {\parp{\symm{j}{J}{Q(j)}}
+                {\symm{j}{J'}{Q'(j)}}}}\\
+  }
+  {
+  \rewriteinv{\ctx}
+             {\trace}
+          {\parp{\for{i}{I}{P(i)}}
+                {\parp{\symm{j}{J}{Q(j)}}
+                  {\symm{j}{J'}{Q'(j)}}}}
+          {\trace'(i)}
+  }
+\]
+\[
+\inferrule[Update-Collection]
+{
+  \rewriteinv{\ctx}
+          {\trace}
+          {\parp{\for{i}{I}{P(i)}}
+                {\symm{j}{J}{Q(j);Q'(j)}}}
+          {\trace'(i)}\\
+}
+{
+  \rewrite{\ctx}{\trace}
+          {\parp{\for{i}{I}{P(i)}}
+                {\symm{j}{J}{Q(j)}}}
+          {\ctx}{\trace;\for{i}{I}{\trace'(i)}}
+          {\parp{\emptytrace}{\parp{\symm{i}{J}{Q(j)}}
+                                   {\symm{i}{J'}{Q'(j)}}}}
+}
+\]
+\iffalse
 \[
 \inferrule[Strong-Update]
 {
   \unfolded{i} \textit{fresh}\\
   \rewrite{\ctx}{\trace}{\parp{P(\unfolded{i})}{Q(\unfolded{i})}}
-          {\ctx}{\trace \uplus \trace'}{\emptytrace}
+          {\ctx}{\ifconc \trace;\trace' \else \trace \uplus \trace' \fi}{\emptytrace}
 }
 {
  \rewrite{\ctx}
          {\trace}
          {\parp{\for{i}{I}{P(i)}}
-               {\for{j}{I}{Q(j)}}}
+               {\symm{i}{I}{Q(i)}}}
          {\ctx}
          {\ifconc \trace;\for{i}{I}{\sub{\trace'}{\unfolded{i}}{i}} \else 
            \trace
@@ -173,22 +271,25 @@
 \]
 
 \[
-\inferrule[Fuse-Loop-2]
+\inferrule[Weak-Update]
 {
   \unfolded{i} \textit{fresh}\\
-  \rewrite{\ctx}{\trace        }{\parp{P(\unfolded{i})}{Q(\unfolded{i})}}
-          {\ctx}{\ifconc \trace;\trace' \else \trace \uplus \trace' \fi}{\emptytrace}\\
-  \ifconc
-  \else
-  \trace'' = \{ x(i) \mapsto c \mid x_{\unfolded{i}} \mapsto c \in \trace'
- \}
-  \fi
+  \rewrite{\ctx}
+          {\trace}
+          {\parp{P(\unfolded{i})}{Q}}
+          {\ctx}
+          {\ifconc \trace;\trace' \else \trace \uplus \trace' \fi}
+          {\parp{\emptytrace}{Q}}\\
+          \ifconc
+          \else
+          \trace'' = \{ x(i) \mapsto c \mid x_{\unfolded{i}} \mapsto c \in \trace'
+          \fi
 }
 {
  \rewrite{\ctx}
          {\trace}
          {\parp{\for{i}{I}{P(i)}}
-               {\symm{j}{I}{Q(j)}}}
+               {\symm{j}{J}{Q(j)}}}
          {\ctx}
          {\ifconc \trace;\for{i}{I}{\sub{\trace'}{\unfolded{i}}{i}} \else
           \trace \uplus \trace''
@@ -196,9 +297,11 @@
          {\emptytrace}
 }
 \]
+\fi
 \end{framed}
+
 \end{document}
 %%% Local Variables:
 %%% mode: latex
-%%% TeX-master: t
+%%% TeX-master: "main.tex"
 %%% End:

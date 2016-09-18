@@ -1,0 +1,44 @@
+\documentclass{article}
+
+\usepackage{framed}
+\usepackage{fullpage}
+\usepackage{xspace}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{mathpartir}
+\usepackage{mathtools}
+\usepackage{paralist}
+
+\newtheorem{lemma}{Lemma}
+\newtheorem{definition}{Definition}
+
+\newcommand{\abs}[1]{#1_{\alpha}}
+\newcommand{\recv}[3]{\mathsf{recv}_{(#1,#2,#3)}}
+
+\begin{document}
+\section{Correctness Lemmas}
+%
+\begin{definition}[Symmetry-breaking expression]
+  Let $t$ be a transition of the graph $G$, and $x$ and $y$ be
+  variables. Say that $t$ breaks the symmetry of $x$ and $y$ in $G$
+  if, for a state $s$ in $G$ where $t$ is enabled and any automorphism on $h$ on $s$,
+  
+\end{definition}
+%
+\begin{lemma}[Eager Receive]
+  Let $\abs{s}$ be a state of $\abs{G}$. 
+  %
+  Suppose the transition $\recv{p}{x}{\phi}$ is enabled in $\abs{s}$.
+  %
+  Further suppose that for all $x'$ defined in $\abs{s}$ of the same sort as
+  $x$ is not referenced by any transition in the continuation of 
+
+\end{lemma}
+
+
+\end{document}
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:
