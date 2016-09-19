@@ -1,24 +1,25 @@
 \begin{figure}[h!]
 \[
-\begin{array}{rcl}
+\begin{array}{rclr}
 p & \in &\pidSet\\
 x,X & \in &\idents\\
 \end{array}
 \]
 \[
-\begin{array}{rcl}
-  s & ::=  & \nop \\
-    & \alt & \send{x}{y} \\
-    & \alt & \recvFrom{x}{p} \\
-    & \alt & \recvFrom{x}{\recvWC} \\
-    & \alt & \foreach{x}{X}{s} \\
-    & \alt & s;s \\
+\begin{array}{rclr}
+  s & ::=  & \nop & \text{skip} \\
+    & \alt & \send{x}{y} & \text{send message} \\
+    & \alt & \recvFrom{x}{p} & \text{receive from PID} \\
+    & \alt & \recvFrom{x}{\recvWC} & \text{wildcard receive} \\
+    & \alt & \foreach{x}{X}{s} & \text{iteration} \\
+    & \alt & \while{e}{s} & \text{loops} \\
+    & \alt & s;s & \text{sequence} \\
     \\ 
-  P & ::=  & \emptyProc \\
-    &      & \proc{p}{s}\\
-    & \alt & \iterPar{x}{X}{s}\\
-    & \alt & \iterPar{x}{{X}\minusProc{p}}{s}\\
-    & \alt & P \inPar P
+  P & ::=  & \emptyProc  & \text{empty process} \\
+    &      & \proc{p}{s} & \text{single process} \\
+    & \alt & \iterPar{x}{X}{s} & \text{iterated parallel processes}\\
+    & \alt & \iterPar{x}{{X}\minusProc{p}}{s} & \text{X minus p} \\
+    & \alt & P \inPar P & \text{parallel composition}
 \end{array}
 \]
 \caption{Language Syntax}
