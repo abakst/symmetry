@@ -115,6 +115,13 @@ copyIncludes opt d =
                         , copyWeb
                         ]
 
+
+copyPrologFiles :: FilePath -> IO ()
+copyPrologFiles d =
+  forM_ ["rewrite.pl", "tags.pl", "lib/misc.pl"] $ \f ->
+    do f' <- getDataFileName ("rewrites" </> "src" </> f)
+       copyFile f' (d </> f)
+
 runLiquid :: Bool -> FilePath -> FilePath -> IO Bool
 runLiquid verb fp cwd
   = runCmd verb "Running Verifier" cwd cmd
@@ -149,6 +156,8 @@ run1Cfg opt outd cfg
 
        when (optRewrite opt) $ do
          createDirectoryIfMissing True outd
+         createDirectoryIfMissing True (outd </> "lib")
+         copyPrologFiles outd
          writeFile (outd </> "symverify.pl") p
 
        runVerifier opt outd

@@ -1,4 +1,3 @@
-:- use_module(library(sicstus)).
 /* This module contains various utility predicates */
 :- module(misc, [
 		 fresh_pred_sym/1,
