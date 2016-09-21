@@ -57,9 +57,7 @@ format_result_rule      = mkQuery "format_result" 2
 format_rule             = mkQuery "format" 2
 catch_rule              = mkQuery "catch" 3
 
--- rewrite rules
-par_rule     = mkQuery "par"    1 -- par([A,B,C])
-seq_rule     = mkQuery "seq"    1 -- seq([A,B,C])
+-- imported rewrite rules
 send_rule    = mkQuery "send"   3 -- send(p, x, v)
 send_t_rule  = mkQuery "send"   4 -- send(p, x, type, v)
 recv_rule    = mkQuery "recv"   2 -- recv(p, v)
@@ -75,6 +73,12 @@ ite_rule     = mkQuery "ite"    4 -- ite(P, Cond, A, B)
 if_rule      = mkQuery "if"     3 -- if(P, Cond, A)
 skip_rule    = mkQuery "skip"   0  -- skip
 pair_rule    = mkQuery "pair"   2 -- pair(x, y)
+
+-- make sure that argument is a single list
+par_rule l@[PLList _] = mkQuery "par" 1 l -- par([A,B,C])
+par_rule _            = error "prolog function 'par' takes a single list as argument"
+seq_rule l@[PLList _] = mkQuery "seq" 1 l -- seq([A,B,C])
+seq_rule _            = error "prolog function 'seq' takes a single list as argument"
 
 -- other helper functions  
 set_rule      = mkQuery "set"      1
@@ -126,11 +130,8 @@ rewrite :: P.Pretty a => ConfigInfo a -> PrologStmt
 rewrite ci
   = PLRule "rewrite_query"
            [PLVar "T", PLVar "Name"]
-           $ PLAnd [ PLAsgn (PLVar "T") s0
+           $ PLAnd [ PLAsgn (PLVar "T") $ toPrologExpr (config ci)
                    , PLAsgn (PLVar "Name") (PLTerm "verify") ]
-  where
-    s0 = toPrologExpr (config ci)
-    --s0 = PLNull
 
 -- -----------------------------------------------------------------------------
 -- Symmetry to PrologExpr
@@ -200,6 +201,7 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
       who = toPrologExpr p
   toPrologExpr (p, Block{blkBody = body})
     = seq_rule [PLList $ (toPrologExpr . (p,)) <$> body]
+
   toPrologExpr stmt@(p, Iter{iterVar = v, iterSet = s, iterBody = b})
     = unhandled stmt
   -- toPrologExpr (p, Iter{iterVar = v, iterSet = s, iterBody = b})
@@ -208,6 +210,7 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
   --     i = toPrologExpr v
   --     is = toPrologExpr s
   --     body = toPrologExpr (p, b)
+
   toPrologExpr p  = unhandled p
 
 instance P.Pretty a => ToPrologExpr (Config a) where
