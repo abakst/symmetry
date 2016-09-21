@@ -67,12 +67,10 @@ data Label = LL | RL | VL Var
 data Type = TUnit | TInt | TString | TPid | TPidMulti | TProd Type Type | TSum Type Type
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
-data Pat = PUnit
-           | PInt Var
-           | PPid Var
-           | PProd Pat Pat
-           | PSum  Pat Pat
-             deriving (Ord, Eq, Read, Show, Typeable, Data)
+data Pat = PBase Var
+         | PProd Var Pat Pat
+         | PSum  Var Pat Pat
+           deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data Pred = ILBop Op ILExpr ILExpr
           | ILAnd Pred Pred
@@ -182,7 +180,7 @@ data Stmt a = Skip { annot :: a }
                     , annot  :: a
                     }
 
-            | Recv  { rcvMsg :: (Type, Var)
+            | Recv  { rcvMsg :: (Type, Pat)
                     , annot  :: a
                     }
 
@@ -277,7 +275,7 @@ unboundVars s
     bound   = nub $ everything (++) (mkQ [] go) s
     absIdx  = nub $ everything (++) (mkQ [] goAbs) s
     go :: Data a => Stmt a -> [Var]
-    go (Recv (_,x) _) = [x]
+    go (Recv (_,x) _) = vars x
     go (i@Iter {})    = [iterVar i]
     go (i@Choose {})  = [chooseVar i]
     go (i@Case {})    = [caseLPat i, caseRPat i]
@@ -296,7 +294,7 @@ unboundSets s
     isSetVar _           = False
     boundSetVars         = nub $ everything (++) (mkQ [] go) s
     go :: Data a => Stmt a -> [Set]
-    go (Recv (_, V x) _)= [S x] -- TODO
+    go (Recv (_, p) _)= [S x | V x <- vars p] -- TODO
     go _                 = []
 
 endLabels :: (Data a, Typeable a) => Stmt a -> [LVar]
@@ -504,11 +502,11 @@ instance Pretty ILExpr where
   pretty (EProj2 e) = text "π₂" <> parens (pretty e)
 
 instance Pretty Pat where
-  pretty (PUnit )      = text "()"
-  pretty (PInt v)      = text "int" <+> pretty v
-  pretty (PPid v)      = text "pid" <+> pretty v
-  pretty (PSum p1 p2)  = parens (pretty p1 <+> text "+" <+> pretty p2)
-  pretty (PProd p1 p2) = parens (pretty p1 <+> text "*" <+> pretty p2)
+  -- pretty (PUnit )      = text "()"
+  pretty (PBase v)      = pretty v
+  -- pretty (PPid v)      = text "pid" <+> pretty v
+  pretty (PSum t p1 p2) = parens (pretty t <+> text "?" <+> pretty p1 <+> text "+" <+> pretty p2)
+  pretty (PProd t p1 p2)  = parens (pretty t <+> text "@" <+> pretty p1 <+> text "*" <+> pretty p2)
 
 instance Pretty Type where
   pretty TUnit     = text "()"

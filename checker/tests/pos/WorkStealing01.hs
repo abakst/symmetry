@@ -54,6 +54,7 @@ workQueueProcess =
                      lam $ \n -> do doN "l1" n allotWork
                                     -- app (fixM fix_loopInf) tt
 
+                                    -- Deadlocks:
                                     forever $ do slavePid <- recv
                                                  send slavePid mkTerm
                        
@@ -91,7 +92,7 @@ mainProc = lam $ \k -> lam $ \n -> exec $ do r <- newRMulti
 
 
 main :: IO ()
-main = checkerMain (app (app mainProc (int 2)) (int 2))
+main = checkerMain (app (app mainProc arb) arb)
 
 
 

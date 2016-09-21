@@ -197,24 +197,52 @@ instance ToPrologExpr ILExpr where
   toPrologExpr e          = unhandled e
 
 toPrologExprMsg         :: ILExpr -> PrologExpr
-toPrologExprMsg EUnit    = PLTerm "e_tt"
-toPrologExprMsg (EVar x) = toPrologExpr x
-toPrologExprMsg (EPid p) = toPrologExpr p -- TODO: Is this really an exception ?
-toPrologExprMsg e        = toPrologExpr e
+toPrologExprMsg EUnit     = PLTerm "e_tt"
+toPrologExprMsg (EVar x)  = toPrologExpr x
+toPrologExprMsg (EPid p)  = toPrologExpr p -- TODO: Is this really an exception ?
+toPrologExprMsg (ELeft e) = mkLeft $ toPrologExprMsg e
+toPrologExprMsg (ERight e) = mkRight $ toPrologExprMsg e
+toPrologExprMsg e         = toPrologExpr e
+
+prologRecv :: (Type, Pat) -> PrologExpr
+prologRecv (_, p)
+  = toPrologExpr p
+
+instance ToPrologExpr Pat where    
+  toPrologExpr (PSum t (PProd x _ _) (PProd y _ _))
+    = pair_rule [toPrologExpr t, toPrologExpr x]
+  toPrologExpr (PSum t (PBase x) (PBase y))
+    = pair_rule [toPrologExpr t, toPrologExpr x]
+  toPrologExpr (PProd _ x y)
+    = pair_rule [toPrologExpr x, toPrologExpr y]
+  toPrologExpr (PBase x)
+    = toPrologExpr x
+
+instance ToPrologExpr Type where
+  toPrologExpr TUnit        = PLTerm "unit"
+  toPrologExpr TInt         = PLTerm "int"
+  toPrologExpr TPid         = PLTerm "pid"
+  toPrologExpr (TSum t1 t2) = sum [ toPrologExpr t1, toPrologExpr t2 ]
+    where
+      sum = mkQuery "sum_ty" 2
+  toPrologExpr (TProd t1 t2) = pair [ toPrologExpr t1, toPrologExpr t2 ]
+    where
+      pair = mkQuery "prod_ty" 2
 
 instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
   toPrologExpr (_, Skip{})
     = skip_rule []
-  toPrologExpr (p, Send{sndPid = q, sndMsg = (_,e)})
-    = send_rule [who,to,msg]
+  toPrologExpr (p, Send{sndPid = q, sndMsg = (t,e)})
+    = send_rule [who,to,ty,msg]
     where
       who = toPrologExpr p
       msg = toPrologExprMsg e
       to  = toPrologExpr q
-  toPrologExpr (p, Recv{rcvMsg = (t,v)})
+      ty  = toPrologExpr t
+  toPrologExpr (p, Recv{rcvMsg = (t,pat)})
     = recv_rule [who,var]
     where
-      var = undefined -- prologRecv (t,v)
+      var = prologRecv (t,pat)
       who = toPrologExpr p
   toPrologExpr (p, Block{blkBody = body})
     = seq_rule [PLList $ (toPrologExpr . (p,)) <$> body]
@@ -272,6 +300,14 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
                                   , toPrologExpr (p, b)
                                   ]
                          ]
+  toPrologExpr (p, Case { caseVar = v
+                        , caseLeft = l
+                        , caseRight = r })
+    = ite_rule [ toPrologExpr p
+               , PLEq (toPrologExpr v) (PLTerm "inl")
+               , toPrologExpr (p, l)
+               , toPrologExpr (p, r)
+               ]
 
   toPrologExpr p  = unhandled p
 

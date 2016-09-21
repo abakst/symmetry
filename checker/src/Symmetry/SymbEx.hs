@@ -496,7 +496,7 @@ recvToIL :: (?callStack :: CallStack)
          => (Typeable a) => AbsVal a -> Var a -> SymbExM (IL.Stmt ())
 recvToIL m x = do
   let t   = absToType m
-  return (IL.Recv (t, varToIL x) ())
+  return (IL.Recv (t, extractPattern m) ())
 --   case IL.lookupType g t of
 --     Just i  -> return $ nonDetRecvs i g cs
 --     Nothing -> do i <- freshTId
@@ -930,6 +930,16 @@ symRecv
 
 freshVal :: ArbPat SymbEx a => SymbExM (AbsVal a)
 freshVal = runSE arb >>= fresh
+
+extractPattern :: AbsVal a -> IL.Pat           
+extractPattern (ASum (Just (EVar t)) (Just v1) (Just v2))
+  = IL.PSum (varToIL t) (extractPattern v1) (extractPattern v2)
+extractPattern (AProd (Just (EVar t)) v1 v2)
+  = IL.PProd (varToIL t) (extractPattern v1) (extractPattern v2)
+extractPattern v
+  = case getVar v of
+      Just (EVar x) -> IL.PBase (varToIL x)
+
 
 -------------------------------------------------
 symSend :: (?callStack :: CallStack, Typeable a)
