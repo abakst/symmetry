@@ -1,12 +1,15 @@
+resolver: lts-5.9
 flags: {}
 packages:
-- ./liquid-fixpoint
 - '.'
-extra-deps:
+- './liquid-fixpoint'
+compiler-check: newer-minor
+
+extra-deps: 
+- daemons-0.2.1
 - dotgen-0.4.2
 - fgl-visualize-0.1.0.1
-- intern-0.9.1.4
-- located-base-0.1.1.0
+- generic-deriving-1.10.4
+- located-base-0.1.0.0
 - plugins-1.5.5.0
-compiler-check: newer-minor
-resolver: lts-5.3
+- intern-0.9.1.4

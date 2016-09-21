@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DataKinds #-}
 {-# Language GADTs #-}
 {-# Language RankNTypes #-}
 {-# Language FlexibleInstances #-}
@@ -12,6 +13,7 @@
 module Symmetry.Language.AST where
 
 import Data.Typeable
+import GHC.TypeLits
 import GHC.Stack
 
 data RSing  = RS Int
@@ -33,6 +35,8 @@ deriving instance Ord a => Ord (Pid a)
 type (:+:) a b = Either a b
 
 type Boolean = Either () ()  -- Either True False
+newtype T (n::Symbol) a = T a deriving Typeable
+data TyName (n::Symbol) = TyName
 
 class Symantics repr where
   -- Process Type
@@ -64,6 +68,9 @@ class Symantics repr where
   app  :: repr (a -> b) -> repr a -> repr b
 
   -- "Types"
+  lift   :: KnownSymbol n => TyName n -> repr a -> repr (T (n :: Symbol) a)
+  forget :: repr (T (n::Symbol) a) -> repr a
+                     
   inl   :: repr a -> repr (a :+: b)
   inr   :: repr b -> repr (a :+: b)
   pair  :: repr a -> repr b -> repr (a, b)
@@ -127,6 +134,9 @@ instance (ArbPat arb a, ArbPat arb b) => ArbPat arb (a :+: b) where
 
 instance (Symantics arb, ArbPat arb a, ArbPat arb b) => ArbPat arb (a, b) where
   arb  = pair arb arb
+
+instance (Symantics arb, KnownSymbol t, ArbPat arb a) => ArbPat arb (T t a) where
+  arb  = lift (TyName :: TyName t) arb
 
 class (Symantics repr,
        ArbPat repr (),

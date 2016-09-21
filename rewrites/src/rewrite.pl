@@ -62,7 +62,8 @@ replace_proc_id(Proc1, Proc, Rho, Rho1) :-
 	/* Transform all constant assignments for process Proc into mappings for process Proc1 */
 	findall(Proc-Var-Val, avl_member(Proc-Var, Rho, Val), L),
 	  (   foreach(Proc-Var-Val, L),
-	      fromto(Rho, RhoIn, RhoOut, Rho1)
+	      fromto(Rho, RhoIn, RhoOut, Rho1),
+	      param(Proc1)
 	  do  avl_delete(Proc-Var, RhoIn, _, RhoIn1),
 	      avl_store(Proc1-Var, RhoIn1, Val, RhoOut)
 	  ).

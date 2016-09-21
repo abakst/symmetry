@@ -65,6 +65,7 @@ data Label = LL | RL | VL Var
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data Type = TUnit | TInt | TString | TPid | TPidMulti | TProd Type Type | TSum Type Type
+          | TLift String Type
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data Pat = PBase Var
@@ -107,6 +108,7 @@ data ILExpr = EUnit
             | EPid Pid
             | ESet Set
             | EVar Var
+            | ELift String ILExpr
             | ELeft ILExpr
             | ERight ILExpr
             | EPair ILExpr ILExpr
@@ -514,6 +516,7 @@ instance Pretty Type where
   pretty TString   = text "string"
   pretty TPid      = text "pid"
   pretty TPidMulti = text "pid set"
+  pretty (TLift n t) = parens (text n <+> pretty t)
   pretty (TSum p1 p2)  = parens (pretty p1 <+> text "+" <+> pretty p2)
   pretty (TProd p1 p2) = parens (pretty p1 <+> text "*" <+> pretty p2)
 
