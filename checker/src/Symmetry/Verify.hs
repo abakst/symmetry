@@ -4,10 +4,10 @@ module Symmetry.Verify where
 
 import Symmetry.SymbEx
 import Symmetry.IL.AST
-import Symmetry.IL.Model (generateModel)
+-- import Symmetry.IL.Model (generateModel)
 import Symmetry.IL.ConfigInfo
 import Symmetry.IL.Rewrite.Prolog
-import Symmetry.IL.Model.HaskellModel (printHaskell,printQCFile)
+-- import Symmetry.IL.Model.HaskellModel (printHaskell,printQCFile)
 -- import Symmetry.IL.Unfold
 -- import Symmetry.IL.Inst
 -- import Symmetry.IL.TrailParser
@@ -33,8 +33,8 @@ data MainOptions = MainOptions { optVerify  :: Bool
                                , optQCSamples :: Int
                                , optVerbose :: Bool
                                , optProcess :: Bool
-                               , optModel   :: Bool
                                , optDir     :: String
+                               , optModel   :: Bool
                                }
 
 instance Options MainOptions where
@@ -45,8 +45,8 @@ instance Options MainOptions where
                   <*> simpleOption "qc-samples" 1000 "Number of random initial states to explore"
                   <*> simpleOption "verbose" False "Verbose Output"
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
-                  <*> simpleOption "dump-model" False "Dump Liquid Haskell model"
                   <*> simpleOption "outdir" ".symcheck" "Directory to store intermediate results"
+                  <*> simpleOption "dump-model" False "<disabled>"
 
 runCmd               :: Bool -> String -> FilePath -> CreateProcess -> IO Bool
 runCmd verb pre wd c
@@ -78,42 +78,42 @@ runCmd verb pre wd c
                          _           -> do
                            putStrLn =<< hGetContents h
                            return False
-copyMapModule opt d
-  = do let f' = if optQC opt
-                   then "SymMapQC.hs"
-                   else "SymMap.hs"
-       f <- getDataFileName ("checker" </> "include" </> f')
-       copyFile f (d </> "SymMap.hs")
+-- copyMapModule opt d
+--   = do let f' = if optQC opt
+--                    then "SymMapQC.hs"
+--                    else "SymMap.hs"
+--        f <- getDataFileName ("checker" </> "include" </> f')
+--        copyFile f (d </> "SymMap.hs")
 
-copyVectorModule opt d
-  = do
-       let f' = if optQC opt
-                   then "SymVectorQC.hs"
-                   else "SymVector.hs"
-       f <- getDataFileName ("checker" </> "include" </> f')
-       copyFile f (d </> "SymVector.hs")
+-- copyVectorModule opt d
+--   = do
+--        let f' = if optQC opt
+--                    then "SymVectorQC.hs"
+--                    else "SymVector.hs"
+--        f <- getDataFileName ("checker" </> "include" </> f')
+--        copyFile f (d </> "SymVector.hs")
 
-copyBoilerModule opt d
-  = do
-       let f' = if optQC opt
-                   then "SymBoilerPlateQC.hs"
-                   else "SymBoilerPlate.hs"
-       f <- getDataFileName ("checker" </> "include" </> f')
-       copyFile f (d </> "SymBoilerPlate.hs")
+-- copyBoilerModule opt d
+--   = do
+--        let f' = if optQC opt
+--                    then "SymBoilerPlateQC.hs"
+--                    else "SymBoilerPlate.hs"
+--        f <- getDataFileName ("checker" </> "include" </> f')
+--        copyFile f (d </> "SymBoilerPlate.hs")
 
-copyWeb _ d
-  = forM_ ["states.js", "states.html"] $ \f -> 
-       do f' <- fn f
-          copyFile f' (d </> f)
-  where
-    fn f = getDataFileName ("checker" </> "include" </> f)
+-- copyWeb _ d
+--   = forM_ ["states.js", "states.html"] $ \f -> 
+--        do f' <- fn f
+--           copyFile f' (d </> f)
+--   where
+--     fn f = getDataFileName ("checker" </> "include" </> f)
 
-copyIncludes opt d =
-  mapM_ (\f -> f opt d) [ copyMapModule
-                        , copyVectorModule
-                        , copyBoilerModule
-                        , copyWeb
-                        ]
+-- copyIncludes opt d =
+--   mapM_ (\f -> f opt d) [ copyMapModule
+--                         , copyVectorModule
+--                         , copyBoilerModule
+--                         , copyWeb
+--                         ]
 
 
 copyPrologFiles :: FilePath -> IO ()
@@ -149,14 +149,14 @@ runVerifier opt outd
 run1Cfg :: MainOptions -> FilePath -> Config () -> IO Bool
 run1Cfg opt outd cfg
   = do when (optProcess opt) $
-         pprint (config cinfo)
+         pprint cfg
 
-       when (optModel opt) $ do
-         createDirectoryIfMissing True outd
-         copyIncludes opt outd
-         writeFile (outd </> "SymVerify.hs") f
-         when (optQC opt)
-              (writeFile (outd </> "QC.hs") (printQCFile cinfo' m))
+       -- when (optModel opt) $ do
+       --   createDirectoryIfMissing True outd
+       --   copyIncludes opt outd
+       --   writeFile (outd </> "SymVerify.hs") f
+       --   when (optQC opt)
+       --        (writeFile (outd </> "QC.hs") (printQCFile cinfo' m))
 
        when (optRewrite opt) $ do
          createDirectoryIfMissing True outd
@@ -166,12 +166,12 @@ run1Cfg opt outd cfg
 
        runVerifier opt outd
   where
-    cinfo :: ConfigInfo (PredAnnot Int)
-    (cinfo, m) = generateModel cfg
-    cinfo'     = cinfo { isQC = optQC opt
-                       , qcSamples = optQCSamples opt}
-    f          = printHaskell cinfo' m
-    p          = printProlog  cinfo'
+    -- cinfo :: ConfigInfo (PredAnnot Int)
+    -- (cinfo, m) = generateModel cfg
+    -- cinfo'     = cinfo { isQC = optQC opt
+    --                    , qcSamples = optQCSamples opt}
+    -- f          = printHaskell cinfo' m
+    p          = printProlog cfg
     pprint c = print $
                text "Config" <>
                nest 2 (line  <> pretty c)
@@ -196,8 +196,8 @@ checkerMain main
 
       let  dir  = optDir opts
            outd = d </> dir
-           optsImplied = opts { optModel = optModel opts ||
-                                           optVerify opts }
+           optsImplied = opts { optModel = optModel opts
+                                           {- || optVerify opts -} }
 
       es <- forM cfgs $ run1Cfg optsImplied outd
       let status = and es

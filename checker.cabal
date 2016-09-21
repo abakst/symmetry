@@ -35,12 +35,12 @@ library
                    , Symmetry.Language
                    , Symmetry.IL.AST
                    , Symmetry.IL.ConfigInfo
-                   , Symmetry.IL.Model
+                   -- , Symmetry.IL.Model
                    , Symmetry.IL.Rewrite.Prolog
-                   , Symmetry.IL.Deadlock
-                   , Symmetry.IL.Model.HaskellModel
-                   , Symmetry.IL.Model.HaskellDefs
-                   , Symmetry.IL.Model.HaskellSpec
+                   -- , Symmetry.IL.Deadlock
+                   -- , Symmetry.IL.Model.HaskellModel
+                   -- , Symmetry.IL.Model.HaskellDefs
+                   -- , Symmetry.IL.Model.HaskellSpec
                    , Symmetry.SymbEx
                    , Symmetry.Verify
                    , Paths_checker

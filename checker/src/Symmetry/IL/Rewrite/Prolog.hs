@@ -7,7 +7,6 @@
 module Symmetry.IL.Rewrite.Prolog where
 
 import           Symmetry.IL.AST hiding(($$))
-import           Symmetry.IL.ConfigInfo
 import           Paths_checker
 import           Text.PrettyPrint
 import qualified Text.PrettyPrint.Leijen as P hiding ((<$>))
@@ -92,14 +91,15 @@ set_var_rule  = mkQuery "set_var"  1
 set_ints_rule = mkQuery "set_ints" 2
 e_var_rule    = mkQuery "e_var"    1
 e_pid_rule    = mkQuery "e_pid"    1
-e_left_rule   = mkQuery "e_left"   1
-e_right_rule  = mkQuery "e_right"  1
+
+mkLeft  x = pair_rule [PLTerm "inl", x]
+mkRight x = pair_rule [PLTerm "inr", x]
 
 -- Glue between generated prolog code and rewrite terms
 prolog_main = PLRule "main" [] stmts
   where stmts = PLAnd [con, rewq, rem, ind, crf, rew, prntHdr, prnt]
         con   = consult_rule [PLTerm "rewrite"]
-        rewq  = rewrite_query_rule [PLVar "T", PLVar "Name"]
+        rewq  = rewrite_query_rule [PLVar "T",PLVar "Rem", PLVar "Ind", PLVar "Name"]
         rem   = PLAsgn (PLVar "Rem") (skip_rule [])
         ind   = PLAsgn (PLVar "Ind") (PLList [])
         crf   =
@@ -122,7 +122,7 @@ prolog_main = PLRule "main" [] stmts
           format_rule [ PLString "~p:~t~30|~p~t~21+~p~n"
                       , PLList [PLVar "Name", PLVar "Rewrite", PLVar "Race"] ]
 
-printProlog :: (Data a, P.Pretty a) => ConfigInfo a -> String
+printProlog :: (Data a, P.Pretty a) => Config a -> String
 printProlog ci
   = render $ vcat [ protocol
                   , space
@@ -132,13 +132,13 @@ printProlog ci
                   , space
                   , encodeProlog prolog_main ]
     protocol =
-      vcat [ text "%%" <+> text l | l <- lines (show (P.pretty (config ci)))]
+      vcat [ text "%%" <+> text l | l <- lines (show (P.pretty ci))]
 
-rewrite :: (Data a, P.Pretty a) => ConfigInfo a -> PrologStmt
+rewrite :: (Data a, P.Pretty a) => Config a -> PrologStmt
 rewrite ci
   = PLRule "rewrite_query"
            [PLVar "T", PLTerm "skip", PLTerm "[]", PLVar "Name"]
-           $ PLAnd [ PLAsgn (PLVar "T") $ toPrologExpr (config ci)
+           $ PLAnd [ PLAsgn (PLVar "T") $ toPrologExpr ci
                    , PLAsgn (PLVar "Name") (PLTerm "verify") ]
 
 -- -----------------------------------------------------------------------------
@@ -192,13 +192,13 @@ instance ToPrologExpr ILExpr where
   toPrologExpr EUnit      = PLTerm "e_tt"
   toPrologExpr (EVar x)   = e_var_rule   [toPrologExpr x]
   toPrologExpr (EPid p)   = e_pid_rule   [toPrologExpr p]
-  toPrologExpr (ELeft e)  = e_left_rule  [toPrologExpr e]
-  toPrologExpr (ERight e) = e_right_rule [toPrologExpr e]
+  toPrologExpr (ELeft e)  = mkLeft  $ toPrologExpr e
+  toPrologExpr (ERight e) = mkRight $ toPrologExpr e
   toPrologExpr e          = unhandled e
 
 toPrologExprMsg         :: ILExpr -> PrologExpr
 toPrologExprMsg EUnit    = PLTerm "e_tt"
-toPrologExprMsg (EVar x) = e_var_rule [toPrologExpr x]
+toPrologExprMsg (EVar x) = toPrologExpr x
 toPrologExprMsg (EPid p) = toPrologExpr p -- TODO: Is this really an exception ?
 toPrologExprMsg e        = toPrologExpr e
 
@@ -211,10 +211,10 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
       who = toPrologExpr p
       msg = toPrologExprMsg e
       to  = toPrologExpr q
-  toPrologExpr (p, Recv{rcvMsg = (_,v)})
+  toPrologExpr (p, Recv{rcvMsg = (t,v)})
     = recv_rule [who,var]
     where
-      var = toPrologExpr v
+      var = undefined -- prologRecv (t,v)
       who = toPrologExpr p
   toPrologExpr (p, Block{blkBody = body})
     = seq_rule [PLList $ (toPrologExpr . (p,)) <$> body]
