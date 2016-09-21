@@ -257,6 +257,18 @@ data Config a = Config {
   , cProcs      :: [Process a]
   } deriving (Eq, Read, Show, Data, Typeable)
 
+-------------------------------------------------
+-- | Sequence Statements
+-------------------------------------------------
+seqStmt :: Stmt () -> Stmt () -> Stmt ()
+
+seqStmt (Skip _) s = s
+seqStmt s (Skip _) = s
+seqStmt (Block ss _) (Block ss' _) = Block (ss ++ ss') ()
+seqStmt s (Block ss _) = Block (s : ss) ()
+seqStmt (Block ss _) s = Block (ss ++ [s]) ()
+seqStmt s1 s2 = Block [s1, s2] ()
+
 unboundVars :: forall a. Data a => Stmt a -> [Var]
 unboundVars s
   = allvars \\ (bound ++ absIdx)

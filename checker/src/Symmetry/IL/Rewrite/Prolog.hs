@@ -2,13 +2,16 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TupleSections     #-}
-module Symmetry.IL.Rewrite.Prolog (printProlog) where
+{-# LANGUAGE ScopedTypeVariables     #-}
+-- module Symmetry.IL.Rewrite.Prolog (printProlog) where
+module Symmetry.IL.Rewrite.Prolog where
 
 import           Symmetry.IL.AST hiding(($$))
 import           Symmetry.IL.ConfigInfo
 import           Paths_checker
 import           Text.PrettyPrint
 import qualified Text.PrettyPrint.Leijen as P hiding ((<$>))
+import           Data.Generics (everywhere, mkT, Data(..), Typeable(..))
 
 import Control.Exception
 import Data.Char
@@ -25,6 +28,9 @@ data PrologExpr = PLTerm   { pTermName :: String }
                 | PLList   { pStmts :: [PrologExpr] }
                 | PLAnd    { pStmts :: [PrologExpr] }
                 | PLOr     { pStmts :: [PrologExpr] }
+                | PLEq     { pLhs :: PrologExpr
+                           , pRhs :: PrologExpr
+                           }
                 | PLAsgn   { pLhs :: PrologExpr
                            , pRhs :: PrologExpr }
                 | PLNull
@@ -51,7 +57,7 @@ mkQuery name argNo args
 -- imported functions
 consult_rule            = mkQuery "consult" 1
 check_race_freedom_rule = mkQuery "check_race_freedom" 2
-rewrite_query_rule      = mkQuery "rewrite_query" 2
+rewrite_query_rule      = mkQuery "rewrite_query" 4
 rewrite_rule            = mkQuery "rewrite" 6
 format_result_rule      = mkQuery "format_result" 2
 format_rule             = mkQuery "format" 2
@@ -86,6 +92,8 @@ set_var_rule  = mkQuery "set_var"  1
 set_ints_rule = mkQuery "set_ints" 2
 e_var_rule    = mkQuery "e_var"    1
 e_pid_rule    = mkQuery "e_pid"    1
+e_left_rule   = mkQuery "e_left"   1
+e_right_rule  = mkQuery "e_right"  1
 
 -- Glue between generated prolog code and rewrite terms
 prolog_main = PLRule "main" [] stmts
@@ -114,7 +122,7 @@ prolog_main = PLRule "main" [] stmts
           format_rule [ PLString "~p:~t~30|~p~t~21+~p~n"
                       , PLList [PLVar "Name", PLVar "Rewrite", PLVar "Race"] ]
 
-printProlog :: P.Pretty a => ConfigInfo a -> String
+printProlog :: (Data a, P.Pretty a) => ConfigInfo a -> String
 printProlog ci
   = render $ vcat [ protocol
                   , space
@@ -126,10 +134,10 @@ printProlog ci
     protocol =
       vcat [ text "%%" <+> text l | l <- lines (show (P.pretty (config ci)))]
 
-rewrite :: P.Pretty a => ConfigInfo a -> PrologStmt
+rewrite :: (Data a, P.Pretty a) => ConfigInfo a -> PrologStmt
 rewrite ci
   = PLRule "rewrite_query"
-           [PLVar "T", PLVar "Name"]
+           [PLVar "T", PLTerm "skip", PLTerm "[]", PLVar "Name"]
            $ PLAnd [ PLAsgn (PLVar "T") $ toPrologExpr (config ci)
                    , PLAsgn (PLVar "Name") (PLTerm "verify") ]
 
@@ -155,6 +163,13 @@ unhandled x = trace str (PLComment True [str])
                 rndr = P.displayS . P.renderCompact
                 str  = rndr doc ""
 
+debug :: P.Pretty a => a -> a
+debug x = trace str x
+  where
+    str  = rndr doc ""
+    rndr = P.displayS . P.renderCompact
+    doc  = P.pretty x
+
 instance ToPrologExpr Var where
   toPrologExpr (V v)  = PLTerm v
   toPrologExpr (GV v) = PLTerm v
@@ -169,21 +184,23 @@ instance ToPrologExpr Pid where
   toPrologExpr (PConc n)
     = PLTerm $ "p" ++ show n
   toPrologExpr p@(PAbs v s)
-    = unhandled p --toPrologExpr v <> colon <> toPrologExpr s
+    = toPrologExpr v
   toPrologExpr p
     = unhandled p
 
 instance ToPrologExpr ILExpr where
-  toPrologExpr EUnit    = PLTerm "e_tt"
-  toPrologExpr (EVar x) = e_var_rule [toPrologExpr x]
-  toPrologExpr (EPid p) = e_pid_rule [toPrologExpr p]
-  toPrologExpr e        = unhandled e
+  toPrologExpr EUnit      = PLTerm "e_tt"
+  toPrologExpr (EVar x)   = e_var_rule   [toPrologExpr x]
+  toPrologExpr (EPid p)   = e_pid_rule   [toPrologExpr p]
+  toPrologExpr (ELeft e)  = e_left_rule  [toPrologExpr e]
+  toPrologExpr (ERight e) = e_right_rule [toPrologExpr e]
+  toPrologExpr e          = unhandled e
 
 toPrologExprMsg         :: ILExpr -> PrologExpr
 toPrologExprMsg EUnit    = PLTerm "e_tt"
-toPrologExprMsg (EVar x) =e_var_rule [toPrologExpr x]
+toPrologExprMsg (EVar x) = e_var_rule [toPrologExpr x]
 toPrologExprMsg (EPid p) = toPrologExpr p -- TODO: Is this really an exception ?
-toPrologExprMsg e        = unhandled e
+toPrologExprMsg e        = toPrologExpr e
 
 instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
   toPrologExpr (_, Skip{})
@@ -202,20 +219,111 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
   toPrologExpr (p, Block{blkBody = body})
     = seq_rule [PLList $ (toPrologExpr . (p,)) <$> body]
 
-  toPrologExpr stmt@(p, Iter{iterVar = v, iterSet = s, iterBody = b})
-    = unhandled stmt
-  -- toPrologExpr (p, Iter{iterVar = v, iterSet = s, iterBody = b})
-  --   = PLQuery "foreach" [i, is, body]
-  --   where
-  --     i = toPrologExpr v
-  --     is = toPrologExpr s
-  --     body = toPrologExpr (p, b)
+  -- toPrologExpr stmt@(p, Iter{iterVar = v, iterSet = s, iterBody = b})
+  toPrologExpr (p, Iter{ iterVar = v
+                       , iterSet = s
+                       , iterBody = b@Block{ blkBody = bs}
+                       })
+    = case s of
+        SInts k ->
+          iter_rule [ toPrologExpr p
+                    , toPrologExpr k
+                    , body
+                    ] -- PLQuery "foreach" [i, is, body]
+        S _ ->
+          for_rule [ toPrologExpr p
+                   , toPrologExpr v
+                   , toPrologExpr s
+                   , body
+                   ]
+    where
+      body = toPrologExpr (p, b')
+      b'   = b { blkBody = filter (notIncr v) bs }
+      notIncr v Assign { assignLhs = v' } = v /= v'
+      notIncr _ _                         = True
+
+  toPrologExpr (p, Goto { varVar = x })
+    = assign_rule [ toPrologExpr p
+                  , toPrologExpr x
+                  , PLTerm "true"
+                  ]
+
+  toPrologExpr (p, Loop { loopVar  = x
+                        , loopBody = b
+                        })
+    = seq_rule [ PLList [ toPrologExpr p
+                        , assign_rule [ toPrologExpr p
+                                      , toPrologExpr x
+                                      , PLTerm "true"
+                                      ]
+                        , while_rule [ toPrologExpr p
+                                     , cond
+                                     , body
+                                     ]
+                        ]
+               ]
+      where
+        cond  = PLEq (toPrologExpr x) (PLTerm "true")
+        body  = seq_rule [ PLList [ toPrologExpr p
+                                  , assign_rule [ toPrologExpr p
+                                                , toPrologExpr x
+                                                , PLTerm "false"
+                                                ]
+                                  , toPrologExpr (p, b)
+                                  ]
+                         ]
 
   toPrologExpr p  = unhandled p
 
-instance P.Pretty a => ToPrologExpr (Config a) where
+instance ToPrologExpr LVar where
+  toPrologExpr (LV v) = PLTerm v
+
+instance ToPrologExpr Int where
+  toPrologExpr i = PLTerm (show i)
+
+instance (Data a, P.Pretty a) => ToPrologExpr (Config a) where
   toPrologExpr Config{ cProcs = ps }
-    = par_rule [PLList (toPrologExpr <$> ps)]
+    = par_rule [PLList (prologProcess <$> ps'')]
+      where
+        ps'   = everywhere (mkT toUpperPAbs) <$>  ps
+        ps''  = toUpperIterVarProc           <$>  ps'
+
+prologProcess :: (Data a, P.Pretty a) => Process a -> PrologExpr
+prologProcess (p@(PConc _), s)
+  = toPrologExpr (p, s)
+prologProcess (p@(PAbs v vs), s)
+  = sym_rule [ toPrologExpr v
+             , toPrologExpr vs
+             , toPrologExpr (p,s)
+             ]
+
+toUpperPAbs :: Pid -> Pid
+toUpperPAbs (PAbs v s) = PAbs v' s
+  where
+    v' = upperV v
+toUpperPAbs x          = x
+
+toUpperIterVarProc :: forall a. Data a => Process a -> Process a
+toUpperIterVarProc (p, s)
+  = (p, everywhere (mkT toUpperIterVar) s)
+  where
+    toUpperIterVar :: Stmt a -> Stmt a
+    toUpperIterVar s @ Iter { iterVar = v }
+      = s { iterVar  = upperV v
+          , iterBody = everywhere (mkT (go v)) (iterBody s)
+          }
+    toUpperIterVar s = s
+    go :: Var -> Var -> Var
+    go v = subVar v (upperV v) 
+
+subVar :: Var -> Var -> Var -> Var
+subVar x y v
+  | x == v    = y
+  | otherwise = v
+
+upperV :: Var -> Var
+upperV (V v)  = V  (map toUpper v)
+upperV (GV v) = GV (map toUpper v)
 
 -- -----------------------------------------------------------------------------
 -- PrologExpr to Prolog
@@ -247,10 +355,12 @@ instance Prolog PrologStmt where
                _  -> tupled (encodeProlog <$> pStmtArgs)
 
 instance Prolog PrologExpr where
-  encodeProlog (PLTerm {..})   = assert (length pTermName > 0 && (isLower $ head pTermName) )
-                                        (text pTermName)
-  encodeProlog (PLVar {..})    = assert (length pVarName > 0 && (isUpper $ head pVarName) )
-                                        (text pVarName)
+  encodeProlog (PLTerm {..})   =
+    assert (length pTermName > 0 && (isLower $ head pTermName))
+           (text pTermName)
+  encodeProlog (PLVar {..})    =
+    assert (length pVarName > 0 && (isUpper $ head pVarName))
+           (text pVarName)
   encodeProlog (PLString {..}) = quotes $ text pString
   encodeProlog (PLInt {..})    = int pInt
 
@@ -262,11 +372,18 @@ instance Prolog PrologExpr where
                [] -> empty
                _  -> tupled (encodeProlog <$> pQueryArgs)
 
-  encodeProlog (PLList {..}) = list (encodeProlog <$> pStmts)
-  encodeProlog (PLAnd {..})  = vcat $ punctuate comma (encodeProlog <$> pStmts)
-  encodeProlog (PLOr {..})   = vcat $ punctuate semi (encodeProlog <$> pStmts)
-  encodeProlog (PLAsgn {..}) = encodeProlog pLhs <+> equals <+> encodeProlog pRhs
-  encodeProlog PLNull        = char '_'
+  encodeProlog (PLList {..})
+    = list (encodeProlog <$> pStmts)
+  encodeProlog (PLAnd {..})
+    = vcat $ punctuate comma (encodeProlog <$> pStmts)
+  encodeProlog (PLOr {..})
+    = vcat $ punctuate semi (encodeProlog <$> pStmts)
+  encodeProlog (PLAsgn {..})
+    = encodeProlog pLhs <+> equals <+> encodeProlog pRhs
+  encodeProlog (PLEq {..})
+    = encodeProlog pLhs <+> equals <> equals <+> encodeProlog pRhs
+  encodeProlog PLNull
+    = char '_'
 
   encodeProlog (PLComment {..}) =
     if pInline

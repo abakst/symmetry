@@ -519,20 +519,6 @@ skip = IL.Skip ()
 assign :: Var a -> IL.ILExpr -> IL.Stmt ()
 assign v e
   = IL.Assign (varToIL v) e ()
--------------------------------------------------
--- | Sequence Statements
--------------------------------------------------
-seqStmt :: IL.Stmt () -> IL.Stmt () -> IL.Stmt ()
-
-seqStmt (IL.Skip _) s = s
-seqStmt s (IL.Skip _) = s
-
-seqStmt (IL.Block ss _) (IL.Block ss' _) = IL.Block (ss ++ ss') ()
-
-seqStmt s (IL.Block ss _) = IL.Block (s : ss) ()
-seqStmt (IL.Block ss _) s = IL.Block (ss ++ [s]) ()
-
-seqStmt s1 s2 = IL.Block [s1, s2] ()
 
 -------------------------------------------------
 -- | Updates to roles
@@ -806,7 +792,7 @@ symBind mm mf
   = SE $ do AProc _ st a  <- runSE mm
             AArrow _ f <- runSE mf
             AProc _ st' b <- runSE $ f a
-            return $ AProc Nothing (st `seqStmt` st') b
+            return $ AProc Nothing (st `IL.seqStmt` st') b
 
 -------------------------------------------------
 symForever :: (?callStack :: CallStack)
@@ -817,7 +803,7 @@ symForever p
             let v  = IL.LV $ "endL" ++ show n
                 sv = IL.Goto v ()
             AProc b s r <- prohibitSpawn (runSE p)
-            return $ AProc b (IL.Loop v (s `seqStmt` sv) ()) r
+            return $ AProc b (IL.Loop v (s `IL.seqStmt` sv) ()) r
 
 -------------------------------------------------
 symFixM :: (?callStack :: CallStack)
@@ -869,13 +855,13 @@ symDoN s n f
             AProc _ s _ <- runSE (g (AInt (Just (EVar v)) Nothing))
             return $ AProc Nothing (iter v x nv s) (error "TBD: symDoN")
     where
-      incrVar v = (`seqStmt` incr v)
+      incrVar v = (`IL.seqStmt` incr v)
       iter v _ (Just n) s = IL.Iter (varToIL v) (IL.SInts n) (incrVar v s) ()
       iter v (Just (EVar x)) _ s = IL.Iter (varToIL v) (varToILSet x) (incrVar v s) ()
       iter (V x) _ _ s    =
                   let v = IL.LV $ "L" ++ show x
                       sv = IL.Goto v  ()
-                  in IL.Loop v ((s `seqStmt` sv) `joinStmt` skip) ()
+                  in IL.Loop v ((s `IL.seqStmt` sv) `joinStmt` skip) ()
 
 incr x = IL.Assign (varToIL x) (IL.EPlus (IL.EVar (varToIL x)) (IL.EInt 1)) ()
 
@@ -909,7 +895,7 @@ symDoMany s p f
                 AProc _ s _  <- runSE (g (APidElem (Just (EVar x)) (Just v) (Pid Nothing)))
                 return $ AProc Nothing (iterVar v x s) (error "TBD: symDoMany")
     where
-      incrVar v = (`seqStmt` incr v)
+      incrVar v = (`IL.seqStmt` incr v)
       iter v r s    = IL.Iter (varToIL v)
                               (roleToSet r)
                               (incrVar v s) ()

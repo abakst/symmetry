@@ -20,9 +20,6 @@ master :: (DSL repr) => repr (RSing -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do p <- spawn r (app pingServer n)
       doN "loop0" n (lam $ \_ -> send p tt)
-      me <- self
-      c  <- readGhost me "loop0"
-      assert (c `eq` n)
       return tt
 
 mainProc :: (DSL repr) => repr (Int -> ())
