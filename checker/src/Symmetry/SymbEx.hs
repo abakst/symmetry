@@ -6,6 +6,7 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language ImplicitParams #-}
 {-# Language ViewPatterns #-}
+{-# LANGUAGE DataKinds #-}
 module Symmetry.SymbEx where
 
 import           Prelude hiding (error, undefined)
@@ -14,6 +15,7 @@ import           Data.Maybe
 import           Data.List (nub, (\\), lookup)
 
 import           GHC.Stack (CallStack)
+import           GHC.TypeLits
 import           GHC.Err.Located
 
 import qualified Data.Map.Strict as M
@@ -27,9 +29,16 @@ data Var a = V String
            | VPtrW IL.Type
              deriving (Ord, Eq, Show)
 
+lowerVar :: Var (T t a) -> Var a
+lowerVar (V s)    = V s
+lowerVar (VIdx r) = VIdx r
+lowerVar (VPtrR t) = VPtrR t
+lowerVar (VPtrW t) = VPtrW t
+                      
 data Expr a where
   EVar   :: Var a -> Expr a
   EInt   :: Int -> Expr Int
+  ELift  :: Expr a -> Expr (T t a)
   EProj1 :: Expr (a, b) -> Expr a
   EProj2 :: Expr (a, b) -> Expr b
 
@@ -185,6 +194,8 @@ fresh (ARoleMulti _ p) = do v <- Just . EVar <$> freshVar
                             return $ ARoleMulti v p
 fresh (AProc _ s a) = do v <- Just . EVar <$> freshVar
                          return $ AProc v s a
+fresh (ALift _ n a) = do v <- Just . EVar <$> freshVar
+                         return $ ALift v n a
 
 newtype SymbEx a = SE { runSE :: SymbExM (AbsVal a) }
 
@@ -197,6 +208,7 @@ data AbsVal t where
   AString    :: Maybe (Expr String) -> AbsVal String
   ASum       :: Maybe (Expr (a :+: b)) -> Maybe (AbsVal a) -> Maybe (AbsVal b) -> AbsVal (a :+: b)
   AProd      :: Maybe (Expr (a,b)) -> AbsVal a -> AbsVal b -> AbsVal (a, b)
+  ALift      :: Maybe (Expr (T n a)) -> String -> AbsVal a -> AbsVal (T (n::Symbol) a)
   AList      :: Maybe (Expr [a]) -> Maybe (AbsVal a) -> AbsVal [a]
   AArrow     :: Maybe (Expr (a -> b)) -> (AbsVal a -> SymbEx b) -> AbsVal (a -> b)
   APid       :: Maybe (Expr (Pid RSing)) -> L.Pid (Maybe RSing) -> AbsVal (Pid RSing)
@@ -225,6 +237,7 @@ setExpr e (ASum _ l r)    = ASum  (Just e) l r
 setExpr e (APid _ p)      = APid  (Just e) p
 setExpr e (APidMulti _ p) = APidMulti  (Just e) p
 setExpr e (AProd _ p1 p2) = AProd (Just e) p1 p2
+setExpr e (ALift _ t v)   = ALift (Just e) t v
 
 getVar :: AbsVal t -> Maybe (Expr t)
 getVar (AUnit v)     = v
@@ -233,9 +246,16 @@ getVar (AInt v _)    = v
 getVar (ASum v _ _)  = v
 getVar (AProd v _ _) = v
 getVar (APid v _)    = v
+getVar (ALift v _ _) = v
 
 absToType :: Typeable t => AbsVal t -> IL.Type
-absToType x = go (typeRep x)
+absToType x
+  = case x of
+      ALift _ n _ ->
+        let [_,a] = typeRepArgs (typeRep x)
+        in IL.TLift n (go a)
+      _           ->
+        go (typeRep x)
   where
     go :: TypeRep -> IL.Type
     go a
@@ -307,6 +327,7 @@ instance Send (Int) where
 instance Send (String) where
 instance (Send a, Send b) => Send (a :+: b) where
 instance (Send a, Send b) => Send (a,b) where
+instance (Typeable t, Send a) => Send (T t a) where
 instance Send (Pid RSing) where
 
 -------------------------------------------------
@@ -320,6 +341,7 @@ instance Pure (Int) where
 instance Pure (String) where
 instance (Pure a, Pure b) => Pure (a :+: b) where
 instance (Pure a, Pure b) => Pure (a,b) where
+instance Pure a => Pure (T t a) where
 instance Pure (Pid RSing) where
 
 -------------------------------------------------
@@ -334,10 +356,14 @@ join :: (?callStack :: CallStack)
 join ABot x = x
 join x    ABot = x
 
+
 join (AUnit _) (AUnit _)      = AUnit Nothing
 join (AInt _ _)  (AInt _ _)   = AInt Nothing Nothing
 join (AString _)  (AString _) = AString Nothing
 join (AList _ a) (AList _ b)  = AList Nothing (a `maybeJoin` b)
+join (ALift _ t a) (ALift _ t' a')
+  | t == t'   = ALift Nothing t (a `join` a')
+  | otherwise = error "Join of Lift of two different Types"
 
 join (APid _ (Pid Nothing)) (APid _ _) = APid Nothing (Pid Nothing)
 join (APid _ _) (APid _ (Pid Nothing)) = APid Nothing (Pid Nothing)
@@ -412,11 +438,13 @@ absToIL (AArrow _ _)  = error "TBD: absToIL AArrow"
 absToIL (ARoleSing _ _)  = error "TBD: absToIL ARoleSing"
 absToIL (ARoleMulti _ _)  = error "TBD: absToIL ARoleMulti"
 
-absToIL (AUnit _)          = [IL.EUnit]
-absToIL (AInt (Just e) _)  = [absExpToIL e]
-absToIL (AInt  _ (Just i)) = [IL.EInt i]
-absToIL (AString _)        = [IL.EString]
-absToIL (AList _ _)        = error "TBD: absToIL List"
+absToIL (AUnit _)            = [IL.EUnit]
+absToIL (AInt (Just e) _)    = [absExpToIL e]
+absToIL (AInt  _ (Just i))   = [IL.EInt i]
+absToIL (AString _)          = [IL.EString]
+absToIL (ALift (Just e) _ _) = [absExpToIL e]
+absToIL (ALift _ t v)        = absToIL v
+absToIL (AList _ _)          = error "TBD: absToIL List"
 
   -- APidElem   :: Maybe (Expr (Pid RMulti)) -> Maybe (Var Int) -> L.Pid (Maybe RMulti) -> AbsVal (Pid RSing)
 absToIL (APidElem (Just e) (Just i) (Pid _))
@@ -463,7 +491,7 @@ absPidToExp p = let [e] = absToIL p in e
 sendToIL :: (?callStack :: CallStack)
          => (Typeable a) => AbsVal (Pid RSing) -> AbsVal a -> SymbExM (IL.Stmt ())
 sendToIL p m = do
-  let t     = absToType m
+  let t      = absToType m
   case [ (t, e) | e <- absToIL m ] of
     [s] -> choosePid p $ mkSend s
     ss  -> choosePid p (\p -> IL.NonDet (map (`mkSend` p) ss) ())
@@ -964,6 +992,23 @@ symDie
     where
       s = IL.Die ()
 
+symLift :: KnownSymbol n =>
+           TyName (n::Symbol)
+        -> SymbEx a
+        -> SymbEx (T (n::Symbol) a)
+symLift name a = SE $ do av <- runSE a
+                         let tyName = symbolVal name
+                         return $ ALift Nothing tyName av
+
+symForget :: SymbEx (T (n::Symbol) a)
+          -> SymbEx a
+symForget a = SE $ do (ALift e _ v) <- runSE a
+                      return $ maybe v (flip setExpr v . lower) e
+  where
+    lower :: Expr (T n a) -> Expr a
+    lower (ELift e) = e
+    lower (EVar  v) = EVar (lowerVar v)
+
 symInL :: SymbEx a
        -> SymbEx (a :+: b)
 symInL a = SE $ do av <- runSE a
@@ -1088,6 +1133,8 @@ instance Symantics SymbEx where
   die       = symDie
   forever   = symForever
 
+  lift  = symLift
+  forget= symForget
   inl   = symInL
   inr   = symInR
   pair  = symPair
