@@ -50,7 +50,7 @@ mkTest :: ExitCode -> FilePath -> FilePath -> TestTree
 ---------------------------------------------------------------------------
 mkTest code dir file
   = testCase file $ do
-      (_,_,_,ph) <- createProcess $ shell cmd 
+      (_,_,_,ph) <- createProcess $ shell cmd
       c          <- waitForProcess ph
       assertEqual "Wrong exit code" code c
   where

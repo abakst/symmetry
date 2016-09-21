@@ -16,6 +16,7 @@ data ConfigState = CState { intVars     :: [(Pid, String)]
                           , globVals    :: [String]
                           , globSets    :: [Set]
                           }
+                   deriving (Show)
 
 data ConfigInfo a = CInfo { config     :: Config a
                           , stateVars  :: ConfigState
