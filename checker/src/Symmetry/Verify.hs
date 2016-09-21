@@ -115,6 +115,13 @@ copyIncludes opt d =
                         , copyWeb
                         ]
 
+
+copyPrologFiles :: FilePath -> IO ()
+copyPrologFiles d =
+  forM_ ["rewrite.pl", "tags.pl", "lib/misc.pl"] $ \f ->
+    do f' <- getDataFileName ("rewrites" </> "src" </> f)
+       copyFile f' (d </> f)
+
 runLiquid :: Bool -> FilePath -> FilePath -> IO Bool
 runLiquid verb fp cwd
   = runCmd verb "Running Verifier" cwd cmd
@@ -132,6 +139,10 @@ runVerifier opt outd
     runQC (optVerbose opt) (outd </> "QC.hs") outd
  | optVerify opt =
     runLiquid (optVerbose opt) (outd </> "SymVerify.hs") outd
+ | optRewrite opt =
+     let cmd = "sicstus --noinfo --nologo --goal \"main,halt.\" -l symverify.pl" :: String
+     in runCmd True "Testing rewrite..." outd $
+          shell $ printf "echo '$> %s'; %s" cmd cmd
  | otherwise = return True
   
 
@@ -149,6 +160,8 @@ run1Cfg opt outd cfg
 
        when (optRewrite opt) $ do
          createDirectoryIfMissing True outd
+         createDirectoryIfMissing True (outd </> "lib")
+         copyPrologFiles outd
          writeFile (outd </> "symverify.pl") p
 
        runVerifier opt outd
