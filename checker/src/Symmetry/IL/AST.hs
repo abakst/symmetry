@@ -24,6 +24,7 @@ infty = 2
 data Set = S { setName :: String }
          | SV Var
          | SInts Int
+         | SIntParam Var
            deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 data Var = V String  -- Local Var
@@ -208,8 +209,8 @@ data Stmt a = Skip { annot :: a }
                      }
 
             | Assert { assertPred :: Pred
-                      , annot :: a
-                      }
+                     , annot :: a
+                     }
 
              -- x := p1 == p2;
             | Compare { compareVar :: Var
@@ -231,9 +232,9 @@ data Stmt a = Skip { annot :: a }
                      }
 
             | Assign { assignLhs :: Var
-                      , assignRhs :: ILExpr
-                      , annot :: a
-                      }
+                     , assignRhs :: ILExpr
+                     , annot :: a
+                     }
 
             | Die { annot :: a }
             {- These do not appear in the source: -}
@@ -463,6 +464,7 @@ instance Pretty Set where
   pretty (S x)   = text x
   pretty (SV x)  = pretty x
   pretty (SInts n) = brackets (int 1 <+> text ".." <+> int n)
+  pretty (SIntParam n) = brackets (int 1 <+> text ".." <+> pretty n)
 
 instance Pretty Pid where
   pretty (PConc x)

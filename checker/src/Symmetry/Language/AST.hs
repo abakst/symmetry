@@ -47,6 +47,7 @@ class Symantics repr where
   str    :: String  -> repr String
   bool   :: Boolean -> repr Boolean
   nondetPos :: repr Int
+  nondetVal :: repr a -> repr a -> repr (Process repr a)
 
   neg    :: repr Int -> repr Int
   plus   :: repr Int -> repr Int -> repr Int

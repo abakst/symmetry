@@ -206,6 +206,7 @@ data AbsVal t where
   AUnit      :: Maybe (Expr ()) -> AbsVal ()
   AInt       :: Maybe (Expr Int) -> Maybe Int -> AbsVal Int
   AString    :: Maybe (Expr String) -> AbsVal String
+  ANonDet    :: Maybe (Expr a) -> AbsVal a -> AbsVal a -> AbsVal a
   ASum       :: Maybe (Expr (a :+: b)) -> Maybe (AbsVal a) -> Maybe (AbsVal b) -> AbsVal (a :+: b)
   AProd      :: Maybe (Expr (a,b)) -> AbsVal a -> AbsVal b -> AbsVal (a, b)
   ALift      :: Maybe (Expr (T n a)) -> String -> AbsVal a -> AbsVal (T (n::Symbol) a)
@@ -408,6 +409,10 @@ varToIL (VIdx r)  = roleIdxVar r
 varToILSet :: Var a -> IL.Set
 varToILSet v
   = let IL.V s = varToIL v in IL.S s
+
+varToILSetParam :: Var a -> IL.Set
+varToILSetParam v
+  = IL.SIntParam (varToIL v)
 
 varToILSetVar :: Var a -> IL.Set
 varToILSetVar v
@@ -885,7 +890,7 @@ symDoN s n f
     where
       incrVar v = (`IL.seqStmt` incr v)
       iter v _ (Just n) s = IL.Iter (varToIL v) (IL.SInts n) (incrVar v s) ()
-      iter v (Just (EVar x)) _ s = IL.Iter (varToIL v) (varToILSet x) (incrVar v s) ()
+      iter v (Just (EVar x)) _ s = IL.Iter (varToIL v) (varToILSetParam x) (incrVar v s) ()
       iter (V x) _ _ s    =
                   let v = IL.LV $ "L" ++ show x
                       sv = IL.Goto v  ()
@@ -1087,6 +1092,26 @@ symProj2 p = SE $ do p' <- runSE p
                          return (setExpr (EProj2 e) b)
                        AProd _ _ b -> return b
 
+symNondetVal :: SymbEx a -> SymbEx a -> SymbEx (Process SymbEx a)
+symNondetVal a b = SE $ do av <- runSE a
+                           bv <- runSE b
+                           v  <- freshVar
+                           let val = setVar v av  -- hack
+                           return $ AProc Nothing (nondet (varToIL v) av bv) val
+  where
+    nondet x v w =
+      let [vv] = absToIL v
+          [ww] = absToIL w
+      in
+      IL.Case { IL.caseVar   = IL.V "nondet"
+              , IL.caseLPat  = x
+              , IL.caseRPat  = x
+              , IL.caseLeft  = IL.Assign x vv ()
+              , IL.caseRight = IL.Assign x ww ()
+              , IL.annot = ()
+              } 
+                   
+
 -------------------------------------------------
 -- Instances
 -------------------------------------------------
@@ -1097,6 +1122,7 @@ instance Symantics SymbEx where
   int       = symInt
   str       = symStr
   bool      = symBool
+  nondetVal = symNondetVal
 
   -- Base Type Operations            
   plus      = symPlus

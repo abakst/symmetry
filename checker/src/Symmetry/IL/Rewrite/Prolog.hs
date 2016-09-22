@@ -92,16 +92,17 @@ set_ints_rule = mkQuery "set_ints" 2
 e_var_rule    = mkQuery "e_var"    1
 e_pid_rule    = mkQuery "e_pid"    1
 
-mkLeft  x = pair_rule [PLTerm "inl", x]
-mkRight x = pair_rule [PLTerm "inr", x]
+mkLeft  x = pair_rule [PLTerm "0", x]
+mkRight x = pair_rule [PLTerm "1", x]
 
 -- Glue between generated prolog code and rewrite terms
 prolog_main = PLRule "main" [] stmts
-  where stmts = PLAnd [con, rewq, rem, ind, crf, rew, prntHdr, prnt]
+  where stmts = PLAnd [con, rewq, rem, ind, {- crf, -} tmp, rew, prntHdr, prnt]
         con   = consult_rule [PLTerm "rewrite"]
         rewq  = rewrite_query_rule [PLVar "T",PLVar "Rem", PLVar "Ind", PLVar "Name"]
         rem   = PLAsgn (PLVar "Rem") (skip_rule [])
         ind   = PLAsgn (PLVar "Ind") (PLList [])
+        tmp   = PLAsgn (PLVar "Race") (PLTerm "fail")
         crf   =
           format_result_rule [ catch_rule [ check_race_freedom_rule [PLVar "T" , PLNull]
                                           , PLNull
@@ -190,17 +191,22 @@ instance ToPrologExpr Pid where
 
 instance ToPrologExpr ILExpr where
   toPrologExpr EUnit      = PLTerm "e_tt"
-  toPrologExpr (EVar x)   = e_var_rule   [toPrologExpr x]
-  toPrologExpr (EPid p)   = e_pid_rule   [toPrologExpr p]
+  toPrologExpr (EVar x)   = toPrologExpr x
+  toPrologExpr (EPid p)   = toPrologExpr p
+  -- toPrologExpr (EVar x)   = e_var_rule   [toPrologExpr x]
+  -- toPrologExpr (EPid p)   = e_pid_rule   [toPrologExpr p]
   toPrologExpr (ELeft e)  = mkLeft  $ toPrologExpr e
   toPrologExpr (ERight e) = mkRight $ toPrologExpr e
   toPrologExpr e          = unhandled e
+
+toPrologExprPid (EVar x) = e_var_rule [toPrologExpr x]                            
+toPrologExprPid (EPid x) = e_pid_rule [toPrologExpr x]                            
 
 toPrologExprMsg         :: ILExpr -> PrologExpr
 toPrologExprMsg EUnit     = PLTerm "e_tt"
 toPrologExprMsg (EVar x)  = toPrologExpr x
 toPrologExprMsg (EPid p)  = toPrologExpr p -- TODO: Is this really an exception ?
-toPrologExprMsg (ELeft e) = mkLeft $ toPrologExprMsg e
+toPrologExprMsg (ELeft e) = mkLeft   $ toPrologExprMsg e
 toPrologExprMsg (ERight e) = mkRight $ toPrologExprMsg e
 toPrologExprMsg e         = toPrologExpr e
 
@@ -232,12 +238,14 @@ instance ToPrologExpr Type where
 instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
   toPrologExpr (_, Skip{})
     = skip_rule []
+  toPrologExpr (_, Die{})
+    = mkQuery "die" 0 []
   toPrologExpr (p, Send{sndPid = q, sndMsg = (t,e)})
-    = send_rule [who,to,ty,msg]
+    = send_rule [who,to,msg]
     where
       who = toPrologExpr p
-      msg = toPrologExprMsg e
-      to  = toPrologExpr q
+      msg = toPrologExpr e
+      to  = toPrologExprPid q
       ty  = toPrologExpr t
   toPrologExpr (p, Recv{rcvMsg = (t,pat)})
     = recv_rule [who,var]
@@ -258,6 +266,11 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
                     , toPrologExpr k
                     , body
                     ] -- PLQuery "foreach" [i, is, body]
+        SIntParam x ->
+          iter_rule [ toPrologExpr p
+                    , toPrologExpr x
+                    , body
+                    ]
         S _ ->
           for_rule [ toPrologExpr p
                    , toPrologExpr v
@@ -273,16 +286,15 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
   toPrologExpr (p, Goto { varVar = x })
     = assign_rule [ toPrologExpr p
                   , toPrologExpr x
-                  , PLTerm "true"
+                  , PLTerm "1"
                   ]
 
   toPrologExpr (p, Loop { loopVar  = x
                         , loopBody = b
                         })
-    = seq_rule [ PLList [ toPrologExpr p
-                        , assign_rule [ toPrologExpr p
+    = seq_rule [ PLList [ assign_rule [ toPrologExpr p
                                       , toPrologExpr x
-                                      , PLTerm "true"
+                                      , PLTerm "1"
                                       ]
                         , while_rule [ toPrologExpr p
                                      , cond
@@ -291,11 +303,10 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
                         ]
                ]
       where
-        cond  = PLEq (toPrologExpr x) (PLTerm "true")
-        body  = seq_rule [ PLList [ toPrologExpr p
-                                  , assign_rule [ toPrologExpr p
+        cond  = PLEq (toPrologExpr x) (PLTerm "1")
+        body  = seq_rule [ PLList [ assign_rule [ toPrologExpr p
                                                 , toPrologExpr x
-                                                , PLTerm "false"
+                                                , PLTerm "0"
                                                 ]
                                   , toPrologExpr (p, b)
                                   ]
@@ -304,10 +315,16 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
                         , caseLeft = l
                         , caseRight = r })
     = ite_rule [ toPrologExpr p
-               , PLEq (toPrologExpr v) (PLTerm "inl")
+               , PLEq (toPrologExpr v) (PLTerm "0")
                , toPrologExpr (p, l)
                , toPrologExpr (p, r)
                ]
+
+  toPrologExpr (p, Assign { assignLhs = lhs, assignRhs = rhs })
+    = assign_rule [ toPrologExpr p
+                  , toPrologExpr lhs
+                  , toPrologExpr rhs
+                  ]
 
   toPrologExpr p  = unhandled p
 
@@ -417,7 +434,7 @@ instance Prolog PrologExpr where
   encodeProlog (PLAsgn {..})
     = encodeProlog pLhs <+> equals <+> encodeProlog pRhs
   encodeProlog (PLEq {..})
-    = encodeProlog pLhs <+> equals <> equals <+> encodeProlog pRhs
+    = encodeProlog pLhs <+> equals <+> encodeProlog pRhs
   encodeProlog PLNull
     = char '_'
 
@@ -425,4 +442,3 @@ instance Prolog PrologExpr where
     if pInline
     then text "/*" <+> (hsep $ punctuate space $ text <$> pLines) <+> text "*/"
     else vcat $ (text "%%" <+>) . text <$> pLines
-

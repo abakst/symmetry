@@ -31,7 +31,7 @@ mapperProcess =  lam $ \masterPid -> lam $ \workQueuePid -> app (fixM (app (app 
                           send wqPid myPid
                           (v :: repr SigT)  <- recv
                           match v 
-                            (lam $ \val  ->  do -- send mPid val 
+                            (lam $ \val  ->  do send mPid val 
                                                 app f tt)
                             (lam $ \_    -> ret tt)
 
@@ -48,10 +48,9 @@ workQueueProcess = lam $ \n -> lam $ \ps ->
                        send mapperPid (mkWork x)
 
 masterProc :: DSL repr => repr (Int -> Process repr ())
--- masterProc = lam $ \n -> do doN "l1" n (lam $ \_ -> do (x :: repr Int) <- recv
---                                                        ret x)
---                             ret tt
-masterProc = lam $ \n -> ret tt
+masterProc = lam $ \n -> do doN "l1" n (lam $ \_ -> do (x :: repr Int) <- recv
+                                                       ret x)
+                            ret tt
 
 master :: (DSL repr) => repr (RMulti -> Int -> Int -> Process repr ())
 master = lam $ \mapperRole  -> lam $ \k -> lam $ \n ->
