@@ -29,6 +29,7 @@ send(p, x, type, v)  : send a message of type "type".
  recv(p, x, v)       : process p receives value v from 
   | x=e_pid(q)       :       - process q.
   | x=e_var(y)       :       - the pid stored in variable y.
+  | x=type(t)        :       - of type t.
  recv(p, x, type, v) : receive messages of type "type", only.
  sym(P, S, A)        : composition of symmetric processes p in set s with source A.
                        s must be distinct from process ids.
@@ -497,7 +498,11 @@ recv(p, q, type, v): p receives a message v of type "type" from process q.
 	(   (   functor(T, recv, 2)->
 		T=recv(P, V)
 	    ;	functor(T, recv, 3)->
-		T=recv(P, PidExp, V)
+		T=recv(P, Exp, V),
+		(   Exp=type(Type) ->
+		    true
+		;   PidExp=Exp
+		)
 	    ;   functor(T, recv, 4) ->
 		T=recv(P, PidExp, Type, V)
 	    ),
