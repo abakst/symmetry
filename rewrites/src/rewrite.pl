@@ -518,7 +518,7 @@ recv(p, q, type, v): p receives a message v of type "type" from process q.
 
 is_recv_from(T) :-
   /* Check that parameter 2 is not a type */
-  functor(T, recv, 3), \+(arg(T, 2, type(_))).
+  functor(T, recv, 3), \+(arg(2, T, type(_))).
 
 parse_pid_exp(PidExp, P, Rho, Q) :-
 	/*
