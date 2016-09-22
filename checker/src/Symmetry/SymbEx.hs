@@ -1016,9 +1016,7 @@ symLift :: KnownSymbol n =>
         -> SymbEx (T (n::Symbol) a)
 symLift name a = SE $ do av <- runSE a
                          let tyName = symbolVal name
-                             e      = getVar av
-                         x  <- maybe newVar (return . lift) e
-                         return (ALift (Just x) tyName av)
+                         return (ALift Nothing tyName av)
   where
     newVar = do v <- freshVar
                 return (EVar v)

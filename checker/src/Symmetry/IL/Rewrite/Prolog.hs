@@ -148,6 +148,36 @@ rewrite ci
 -- Symmetry to PrologExpr
 -- -----------------------------------------------------------------------------
 
+-- -----------------------------------------------------------------------------
+-- Helper function to convert iters into fors for great rewrite justice
+-- -----------------------------------------------------------------------------
+rewriteIters :: forall a. (Data a, P.Pretty a) => Config a -> Config a
+rewriteIters c
+  = c { cProcs = everywhere (mkT rewriteIter) (cProcs c) }
+  where
+    pidSets = [ absSet p | p <- fst <$> cProcs c, isAbs p ]
+    bounds  = cSetBounds c
+
+    rewriteIter :: Stmt a -> Stmt a
+    rewriteIter s@Iter{}
+      = s { iterSet = replacePids (iterSet s) } 
+      where
+        replacePids s'@(SIntParam v)
+          | [a] <- gather v
+          , iterVar s `notElem` unboundVars s
+          = a
+          | otherwise
+          = s'
+        replacePids x
+          = x
+        gather v = [ s
+                   | s <- pidSets
+                   , (Unknown s' v') <- bounds
+                   , s == s'
+                   , v == v'
+                   ]
+    rewriteIter s = s
+
 class ToPrologExpr a where
   toPrologExpr :: a -> PrologExpr
 
@@ -238,6 +268,7 @@ instance ToPrologExpr Type where
   toPrologExpr TUnit        = PLTerm "unit"
   toPrologExpr TInt         = PLTerm "int"
   toPrologExpr TPid         = PLTerm "pid"
+  toPrologExpr TString      = PLTerm "str"
   toPrologExpr (TLift s t)  = mkQuery "tapp" 2 [PLTerm (toLower <$> s), toPrologExpr t]
   toPrologExpr (TSum t1 t2) = sum [ toPrologExpr t1, toPrologExpr t2 ]
     where
@@ -354,9 +385,11 @@ instance ToPrologExpr Int where
   toPrologExpr i = PLTerm (show i)
 
 instance (Data a, P.Pretty a) => ToPrologExpr (Config a) where
-  toPrologExpr Config{ cProcs = ps }
+  toPrologExpr cfg
     = par_rule [PLList (prologProcess <$> ps'')]
       where
+        cfg'  = rewriteIters cfg
+        ps    = cProcs cfg'
         ps'   = everywhere (mkT toUpperPAbs) <$>  ps
         ps''  = toUpperIterVarProc           <$>  ps'
 

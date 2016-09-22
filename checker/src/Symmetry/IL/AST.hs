@@ -601,17 +601,19 @@ prettyMsg (t, c, v)
   = text "T" <> int t <> text "@" <>
     text "C" <> int c <> parens (pretty v)
 
+instance Pretty SetBound where
+  pretty (Known s n)   = text "|" <> pretty s <> text "|" <+> equals <+> int n
+  pretty (Unknown s v) = text "|" <> pretty s <> text "|" <+> equals <+> pretty v
+  
 instance Pretty a => Pretty (Config a) where
   pretty (Config {cProcs = ps, cSetBounds = bs, cGlobals = gs, cGlobalSets = gsets})
     = vsep (map goGlob gs ++
             map goGlobS gsets ++
-            map goB bs ++
+            map pretty bs ++
             map go ps)
     where
       goGlob (v, t) = text "Global" <+> pretty v <+> text "::" <+> pretty t
       goGlobS s = text "Global" <+> pretty s
-      goB (Known s n) = text "|" <> pretty s <> text "|" <+> equals <+> int n
-      goB (Unknown s v) = text "|" <> pretty s <> text "|" <+> equals <+> pretty v
       go (pid, s) = processName pid <> colon <$$>
                     indent 2 (pretty s)
       processName (PConc n)  = text "P" <> text "r" <> int n

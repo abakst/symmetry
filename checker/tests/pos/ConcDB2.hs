@@ -39,7 +39,7 @@ client
                       (lam $ \_ -> do resp :: repr Response <- recv
                                       let x = arb :: repr Int
                                       match (forget resp)
-                                        (lam $ \_ -> send db x) -- value
+                                        (lam $ \_ -> return tt {- send db x -}) -- value
                                         (lam $ \_ -> return tt))
                       -- Did I Lookup?
                       (lam $ \_ -> do v :: repr Response <- recv
@@ -51,21 +51,18 @@ database
     dbLoop = lam $ \self -> lam $ \_ ->
                 do msg :: repr Request <- recv
                    match (forget msg)
-                         (lam $ \p -> send p (int 0))
-                         (lam $ \p -> die)
-                   --                -- Alloc
-                   --         (lam $ \p -> do let b = arb :: repr Boolean
-                   --                         match b
-                   --                           (lam $ \_ -> do send p mkFree
-                   --                                           v :: repr Value <- recv
-                   --                                           return tt)
-                   --                           (lam $ \_ -> do send p mkAllocd
-                   --                                           return tt))
-                   --         (lam $ \m' -> match m'
-                   --                         (lam $ \p -> do let v = arb :: repr Value
-                   --                                         send p v)
-                   --                         (lam $ \_ -> die))
-                   -- tt |> self
+                           (lam $ \p -> do let b = arb :: repr Boolean
+                                           match b
+                                             (lam $ \_ -> do send p mkFree
+                                                             -- v :: repr Value <- recv
+                                                             return tt)
+                                             (lam $ \_ -> do send p mkAllocd
+                                                             return tt))
+                           (lam $ \m' -> match m'
+                                           (lam $ \p -> do let v = arb :: repr Value
+                                                           send p v)
+                                           (lam $ \_ -> die))
+                   tt |> self
 
 mainProc :: DSL repr => repr (Process repr ())
 mainProc = do rcs <- newRMulti
