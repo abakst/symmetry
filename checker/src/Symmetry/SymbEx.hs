@@ -29,18 +29,28 @@ data Var a = V String
            | VPtrW IL.Type
              deriving (Ord, Eq, Show)
 
+chgVar :: Var a -> Var b
+chgVar (V s)    = V s
+chgVar (VIdx r) = VIdx r
+chgVar (VPtrR t) = VPtrR t
+chgVar (VPtrW t) = VPtrW t
+
+liftVar :: Var a -> Var (T t a)
+liftVar = chgVar
+
 lowerVar :: Var (T t a) -> Var a
-lowerVar (V s)    = V s
-lowerVar (VIdx r) = VIdx r
-lowerVar (VPtrR t) = VPtrR t
-lowerVar (VPtrW t) = VPtrW t
-                      
+lowerVar = chgVar
+
 data Expr a where
   EVar   :: Var a -> Expr a
   EInt   :: Int -> Expr Int
   ELift  :: Expr a -> Expr (T t a)
   EProj1 :: Expr (a, b) -> Expr a
   EProj2 :: Expr (a, b) -> Expr b
+  
+lower :: Expr (T n a) -> Expr a
+lower (ELift e) = e
+lower (EVar  v) = EVar (lowerVar v)
 
 type REnv = M.Map Role (AbsVal Int, IL.Stmt ())
 
@@ -194,8 +204,9 @@ fresh (ARoleMulti _ p) = do v <- Just . EVar <$> freshVar
                             return $ ARoleMulti v p
 fresh (AProc _ s a) = do v <- Just . EVar <$> freshVar
                          return $ AProc v s a
-fresh (ALift _ n a) = do v <- Just . EVar <$> freshVar
-                         return $ ALift v n a
+fresh (ALift _ n a) = do v  <- EVar <$> freshVar
+                         a' <- fresh a
+                         return . setExpr v $ ALift Nothing n a'
 
 newtype SymbEx a = SE { runSE :: SymbExM (AbsVal a) }
 
@@ -238,7 +249,7 @@ setExpr e (ASum _ l r)    = ASum  (Just e) l r
 setExpr e (APid _ p)      = APid  (Just e) p
 setExpr e (APidMulti _ p) = APidMulti  (Just e) p
 setExpr e (AProd _ p1 p2) = AProd (Just e) p1 p2
-setExpr e (ALift _ t v)   = ALift (Just e) t v
+setExpr e (ALift _ t v)   = ALift (Just e) t (setExpr (lower e) v)
 
 getVar :: AbsVal t -> Maybe (Expr t)
 getVar (AUnit v)     = v
@@ -653,9 +664,12 @@ symEq :: Eq a
 -------------------------------------------------
 symEq a b  = SE $ do av <- runSE a
                      bv <- runSE b
-                     return $ APred Nothing (Just (opPred IL.Eq av bv))
+                     x  <- freshVar
+                     return $ APred (Just x) (Just (opPred IL.Eq av bv))
 
 opPred :: IL.Op -> AbsVal a -> AbsVal a -> IL.Pred
+opPred IL.Eq p1@(APid _ _) p2@(APid _ _)
+  = IL.ILBop IL.Eq (pidAbsValToIL p1) (pidAbsValToIL p2)
 opPred o (AInt _ (Just i)) (AInt _ (Just j))
   = IL.ILBop o (IL.EInt i) (IL.EInt j)
 opPred o (AInt (Just x) _) (AInt _ (Just i))
@@ -946,7 +960,8 @@ symExec :: SymbEx (Process SymbEx a)
 symExec p
   = SE $ do (AProc _ st a) <- runSE p
             modify $ \s -> s { renv  = M.empty
-                             , renvs = M.insert (snd $ me s) (AInt Nothing (Just 1), st) (renv s) : renvs s
+                             , renvs = M.insert (snd $ me s) (AInt Nothing (Just 1), st) (renv s)
+                                     : renvs s
                              }
             return a
 
@@ -969,6 +984,8 @@ extractPattern (ASum (Just (EVar t)) (Just v1) (Just v2))
   = IL.PSum (varToIL t) (extractPattern v1) (extractPattern v2)
 extractPattern (AProd (Just (EVar t)) v1 v2)
   = IL.PProd (varToIL t) (extractPattern v1) (extractPattern v2)
+extractPattern (ALift _ _ v)
+  = extractPattern v
 extractPattern v
   = case getVar v of
       Just (EVar x) -> IL.PBase (varToIL x)
@@ -999,16 +1016,20 @@ symLift :: KnownSymbol n =>
         -> SymbEx (T (n::Symbol) a)
 symLift name a = SE $ do av <- runSE a
                          let tyName = symbolVal name
-                         return $ ALift Nothing tyName av
+                             e      = getVar av
+                         x  <- maybe newVar (return . lift) e
+                         return (ALift (Just x) tyName av)
+  where
+    newVar = do v <- freshVar
+                return (EVar v)
+    lift :: Expr a -> Expr (T n a)
+    lift (EVar v) = EVar (liftVar v)
+    lift e        = ELift e
 
 symForget :: SymbEx (T (n::Symbol) a)
           -> SymbEx a
 symForget a = SE $ do (ALift e _ v) <- runSE a
                       return $ maybe v (flip setExpr v . lower) e
-  where
-    lower :: Expr (T n a) -> Expr a
-    lower (ELift e) = e
-    lower (EVar  v) = EVar (lowerVar v)
 
 symInL :: SymbEx a
        -> SymbEx (a :+: b)
@@ -1058,6 +1079,16 @@ symMatchSum (ASum x vl vr) l r
             return $ joinProcs Nothing (getVar a) (getVar b) c1 c2
           Just v -> 
             return $ joinProcs (Just v) (getVar a) (getVar b) c1 c2
+symMatchSum (APred (Just b) (Just p)) l r
+  = do x <- freshVar
+       v1 <- runSE $ app l (SE . return $ AUnit (Just (EVar x)))
+       v2 <- runSE $ app r (SE . return $ AUnit (Just (EVar x)))
+       case joinProcs (Just (EVar b)) (Just (EVar x)) (Just (EVar x)) v1 v2 of
+         AProc e s v ->
+           let s' = IL.Assign (varToIL b) (IL.EPred p) () `IL.seqStmt` s in
+           return $ AProc e s' v
+         r           -> return r
+         
 
 joinProcs :: forall a b x y.
              (?callStack :: CallStack)

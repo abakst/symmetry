@@ -116,6 +116,7 @@ data ILExpr = EUnit
             | EPlus ILExpr ILExpr
             | EProj1 ILExpr
             | EProj2 ILExpr
+            | EPred Pred
              deriving (Ord, Eq, Read, Show, Typeable, Data)
 
 -- send(p, EPid p)

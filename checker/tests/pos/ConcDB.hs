@@ -55,8 +55,7 @@ recv_value  = do msg :: repr ALV <- recv
                  match msg reject $ lam $ \e1 ->
                     match e1 reject id
 
-class ( HelperSym repr
-      ) => CDBSem repr
+class DSL repr => CDBSem repr
 
 instance CDBSem SymbEx
 

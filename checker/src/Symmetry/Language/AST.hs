@@ -137,7 +137,9 @@ instance (Symantics arb, ArbPat arb a, ArbPat arb b) => ArbPat arb (a, b) where
   arb  = pair arb arb
 
 instance (Symantics arb, KnownSymbol t, ArbPat arb a) => ArbPat arb (T t a) where
-  arb  = lift (TyName :: TyName t) arb
+  arb  = lift (TyName :: TyName t) v
+    where
+      v = arb
 
 class (Symantics repr,
        ArbPat repr (),
