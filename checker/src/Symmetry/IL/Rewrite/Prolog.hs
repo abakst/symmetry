@@ -99,7 +99,7 @@ mkRight x = pair_rule [PLTerm "1", x]
 
 -- Glue between generated prolog code and rewrite terms
 prolog_main = PLRule "main" [] stmts
-  where stmts = PLAnd [con, rewq, rem, ind, {- crf, -} tmp, rew, prntHdr, prnt]
+  where stmts = PLAnd [con, rewq, rem, ind, crf, rew, prntHdr, prnt]
         con   = consult_rule [PLTerm "rewrite"]
         rewq  = rewrite_query_rule [PLVar "T",PLVar "Rem", PLVar "Ind", PLVar "Name"]
         rem   = PLAsgn (PLVar "Rem") (skip_rule [])
