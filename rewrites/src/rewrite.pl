@@ -101,7 +101,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  external send/recv-from.
 	  */
 	; (   functor(T, send, 3)
-    ;   functor(T, recv, 3), is_recv_from(T)
+	  ;   functor(T, send, 4)
+	  ;   functor(T, recv, 3),
+	      is_recv_from(T)
 	  ),
 	  arg(1, T, P),
 	  arg(2, T, X),
@@ -517,8 +519,13 @@ recv(p, q, type, v): p receives a message v of type "type" from process q.
 	).
 
 is_recv_from(T) :-
-  /* Check that parameter 2 is not a type */
-  functor(T, recv, 3), \+(arg(2, T, type(_))).
+  /* Check that T is a receive from a specific process. */
+	functor(T, recv, 3),
+	arg(2, T, Exp),
+	functor(Exp, F, _),
+	(   F==e_var
+	;   F==e_pid
+	).
 
 parse_pid_exp(PidExp, P, Rho, Q) :-
 	/*
