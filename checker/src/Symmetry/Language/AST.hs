@@ -69,7 +69,7 @@ class Symantics repr where
   app  :: repr (a -> b) -> repr a -> repr b
 
   -- "Types"
-  lift   :: KnownSymbol n => TyName n -> repr a -> repr (T (n :: Symbol) a)
+  lift   :: (Typeable a, KnownSymbol n) => TyName n -> repr a -> repr (T (n :: Symbol) a)
   forget :: repr (T (n::Symbol) a) -> repr a
                      
   inl   :: repr a -> repr (a :+: b)
@@ -136,7 +136,7 @@ instance (ArbPat arb a, ArbPat arb b) => ArbPat arb (a :+: b) where
 instance (Symantics arb, ArbPat arb a, ArbPat arb b) => ArbPat arb (a, b) where
   arb  = pair arb arb
 
-instance (Symantics arb, KnownSymbol t, ArbPat arb a) => ArbPat arb (T t a) where
+instance (Typeable a, Symantics arb, KnownSymbol t, ArbPat arb a) => ArbPat arb (T t a) where
   arb  = lift (TyName :: TyName t) v
     where
       v = arb

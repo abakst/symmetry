@@ -204,9 +204,9 @@ fresh (ARoleMulti _ p) = do v <- Just . EVar <$> freshVar
                             return $ ARoleMulti v p
 fresh (AProc _ s a) = do v <- Just . EVar <$> freshVar
                          return $ AProc v s a
-fresh (ALift _ n a) = do v  <- EVar <$> freshVar
-                         a' <- fresh a
-                         return . setExpr v $ ALift Nothing n a'
+fresh (ALift _ n a) = do a' <- fresh a
+                         let v = getVar a'
+                         return $ ALift Nothing n a'
 
 newtype SymbEx a = SE { runSE :: SymbExM (AbsVal a) }
 
@@ -220,7 +220,7 @@ data AbsVal t where
   ANonDet    :: Maybe (Expr a) -> AbsVal a -> AbsVal a -> AbsVal a
   ASum       :: Maybe (Expr (a :+: b)) -> Maybe (AbsVal a) -> Maybe (AbsVal b) -> AbsVal (a :+: b)
   AProd      :: Maybe (Expr (a,b)) -> AbsVal a -> AbsVal b -> AbsVal (a, b)
-  ALift      :: Maybe (Expr (T n a)) -> String -> AbsVal a -> AbsVal (T (n::Symbol) a)
+  ALift      :: Typeable a => Maybe (Expr (T n a)) -> String -> AbsVal a -> AbsVal (T (n::Symbol) a)
   AList      :: Maybe (Expr [a]) -> Maybe (AbsVal a) -> AbsVal [a]
   AArrow     :: Maybe (Expr (a -> b)) -> (AbsVal a -> SymbEx b) -> AbsVal (a -> b)
   APid       :: Maybe (Expr (Pid RSing)) -> L.Pid (Maybe RSing) -> AbsVal (Pid RSing)
@@ -249,7 +249,7 @@ setExpr e (ASum _ l r)    = ASum  (Just e) l r
 setExpr e (APid _ p)      = APid  (Just e) p
 setExpr e (APidMulti _ p) = APidMulti  (Just e) p
 setExpr e (AProd _ p1 p2) = AProd (Just e) p1 p2
-setExpr e (ALift _ t v)   = ALift (Just e) t (setExpr (lower e) v)
+setExpr e (ALift _ t v)   = ALift Nothing t (setExpr (lower e) v)
 
 getVar :: AbsVal t -> Maybe (Expr t)
 getVar (AUnit v)     = v
@@ -258,16 +258,12 @@ getVar (AInt v _)    = v
 getVar (ASum v _ _)  = v
 getVar (AProd v _ _) = v
 getVar (APid v _)    = v
-getVar (ALift v _ _) = v
+getVar (ALift _ _ v) = ELift <$> getVar v
 
 absToType :: Typeable t => AbsVal t -> IL.Type
+absToType (ALift _ n x) = IL.TLift n (absToType x)
 absToType x
-  = case x of
-      ALift _ n _ ->
-        let [_,a] = typeRepArgs (typeRep x)
-        in IL.TLift n (go a)
-      _           ->
-        go (typeRep x)
+  = go (typeRep x)
   where
     go :: TypeRep -> IL.Type
     go a
@@ -458,7 +454,7 @@ absToIL (AUnit _)            = [IL.EUnit]
 absToIL (AInt (Just e) _)    = [absExpToIL e]
 absToIL (AInt  _ (Just i))   = [IL.EInt i]
 absToIL (AString _)          = [IL.EString]
-absToIL (ALift (Just e) _ _) = [absExpToIL e]
+-- absToIL (ALift (Just e) _ _) = [absExpToIL e]
 absToIL (ALift _ t v)        = absToIL v
 absToIL (AList _ _)          = error "TBD: absToIL List"
 
@@ -1010,7 +1006,7 @@ symDie
     where
       s = IL.Die ()
 
-symLift :: KnownSymbol n =>
+symLift :: (Typeable a, KnownSymbol n) =>
            TyName (n::Symbol)
         -> SymbEx a
         -> SymbEx (T (n::Symbol) a)
@@ -1027,7 +1023,8 @@ symLift name a = SE $ do av <- runSE a
 symForget :: SymbEx (T (n::Symbol) a)
           -> SymbEx a
 symForget a = SE $ do (ALift e _ v) <- runSE a
-                      return $ maybe v (flip setExpr v . lower) e
+                      let ev = lower <$> e
+                      return $ maybe (error "TBD") (const v) (getVar v)
 
 symInL :: SymbEx a
        -> SymbEx (a :+: b)
@@ -1110,7 +1107,9 @@ symProj1 :: SymbEx (a, b)
 symProj1 p = SE $ do p' <- runSE p
                      case p' of
                        AProd (Just e) a _ ->
-                         return (setExpr (EProj1 e) a)
+                         return $ if isJust (getVar a)
+                                    then a
+                                    else setExpr (EProj1 e) a
                        AProd _ a _        -> return a
 
 symProj2 :: SymbEx (a, b)
@@ -1118,7 +1117,9 @@ symProj2 :: SymbEx (a, b)
 symProj2 p = SE $ do p' <- runSE p
                      case p' of
                        AProd (Just e) _ b ->
-                         return (setExpr (EProj2 e) b)
+                         return $ if isJust (getVar b)
+                                    then b
+                                    else setExpr (EProj2 e) b
                        AProd _ _ b -> return b
 
 symNondetVal :: SymbEx a -> SymbEx a -> SymbEx (Process SymbEx a)

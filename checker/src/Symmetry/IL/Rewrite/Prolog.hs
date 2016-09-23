@@ -233,18 +233,11 @@ instance ToPrologExpr ILExpr where
   -- toPrologExpr (EPid p)   = e_pid_rule   [toPrologExpr p]
   toPrologExpr (ELeft e)  = mkLeft  $ toPrologExpr e
   toPrologExpr (ERight e) = mkRight $ toPrologExpr e
+  toPrologExpr (EPair x y)= pair_rule [toPrologExpr x, toPrologExpr y]
   toPrologExpr e          = unhandled e
 
-toPrologExprPid (EVar x) = e_var_rule [toPrologExpr x]                            
-toPrologExprPid (EPid x) = e_pid_rule [toPrologExpr x]                            
-
-toPrologExprMsg         :: ILExpr -> PrologExpr
-toPrologExprMsg EUnit     = PLTerm "e_tt"
-toPrologExprMsg (EVar x)  = toPrologExpr x
-toPrologExprMsg (EPid p)  = toPrologExpr p -- TODO: Is this really an exception ?
-toPrologExprMsg (ELeft e) = mkLeft   $ toPrologExprMsg e
-toPrologExprMsg (ERight e) = mkRight $ toPrologExprMsg e
-toPrologExprMsg e         = toPrologExpr e
+toPrologExprPid (EVar x)   = e_var_rule [toPrologExpr x]                            
+toPrologExprPid (EPid x)   = e_pid_rule [toPrologExpr x]                            
 
 prologRecv :: (Type, Pat) -> PrologExpr
 prologRecv (_, p)
