@@ -22,8 +22,14 @@ P ::= proc        -- single process
 #=============
 # Addintionals Defs.
 #=============
+
+#"smaller-than"
 B<C :iff
 there is A s.t. (A;B)=C.
+
+#parallel compose
+
+ΠX := Π p∈dom(X) X(p)
 
 #==========
 # Rewrite Rules
@@ -109,7 +115,7 @@ A||B,G,D,X ~~> skip||C,G,D',X'
 while (e) A || B,G,D,X ~~> C,G,D',X'
 
 =====================
-While-continue: [lift X and D]
+While-continue: [lift X and D]?
 =====================
 
 D  |= e
@@ -199,10 +205,10 @@ p: send(x,y),G,D,X[p := T] ~~> skip,G,D,X[p := T;send(x,y)]
 Compose-External:
 =============
 
-B || Π(...) X',G,D,X ~~> skip,G,(D;D''),X''
+B || ΠX X',G,D,X ~~> skip,G,(D;D''),0
 A,G,D,X ~~> C,G,(D;D'),X'
 ------------------------------------------------
-A||B,G,D,X ~~> C,G,(D;D' ∪ D''),X''
+A||B,G,D,X ~~> C,G,(D;D' ∪ D''),0
 
 =============
 # Soundness Proof
