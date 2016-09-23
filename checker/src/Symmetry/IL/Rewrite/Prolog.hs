@@ -227,6 +227,8 @@ instance ToPrologExpr Pid where
 
 instance ToPrologExpr ILExpr where
   toPrologExpr EUnit      = PLTerm "e_tt"
+  toPrologExpr (EInt i)   = toPrologExpr i
+  toPrologExpr EString    = mkQuery "e_str" 1 [PLNull]
   toPrologExpr (EVar x)   = toPrologExpr x
   toPrologExpr (EPid p)   = toPrologExpr p
   -- toPrologExpr (EVar x)   = e_var_rule   [toPrologExpr x]
@@ -367,6 +369,15 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
                , mkQuery "nondet" 1 [PLNull]
                , toPrologExpr (p,s1)
                , toPrologExpr (p,s2)
+               ]
+                                                  
+  toPrologExpr (p, Choose { chooseVar = x
+                          , chooseSet = i
+                          , chooseBody = s
+                          })
+    = seq_rule [ PLList [ nondet_rule [toPrologExpr x, toPrologExpr i]
+                        , toPrologExpr (p, s)
+                        ]
                ]
 
   toPrologExpr p  = unhandled p
