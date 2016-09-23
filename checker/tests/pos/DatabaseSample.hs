@@ -12,8 +12,8 @@ import Symmetry.SymbEx
 import SrcHelper
 
 type Database = Pid RSing
-type Key      = String
-type Value    = String
+type Key      = Int
+type Value    = Int
 type NodeId   = Pid RSing
 
 type MV = () :+: Value
@@ -95,8 +95,8 @@ worker
 
 master :: DSL repr => repr (Process repr ())
 master  = do db <- createDB
-             let words = cons (pair (str "key1") (str "val1")) $
-                           cons (pair (str "key2") (str "val2"))
+             let words = cons (pair (int 0) (int 10)) $
+                           cons (pair (int 1) (int 20))
                              nil
              matchList words (lam $ \_  -> ret tt)
                              (lam $ \ht -> let x = proj1 ht

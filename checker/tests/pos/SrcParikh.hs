@@ -12,11 +12,11 @@ import Data.Either
 import SrcHelper
 import Symmetry.SymbEx
 
-type Msg = (Pid RSing,String) :+: -- Init (Pid RSing) String
-           (String :+:            -- Set String
-           (Pid RSing :+:         -- Get (Pid RSing)
-           (() :+:                -- Ok
-            () )))                -- Bye
+type Msg = (Pid RSing,Int) :+: -- Init (Pid RSing) String
+           (Int, ())       :+: -- Set String
+           (Pid RSing, ()) :+: -- Get (Pid RSing)
+           ((), ())        :+: -- Ok
+           ((), ())             -- Bye
 
 recv_init :: DSL repr => repr (Process repr (Pid RSing, String))
 recv_init  = do msg::repr Msg <- recv
