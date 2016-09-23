@@ -13,6 +13,10 @@ type ClientReq_ = (Pid RSing) :+: (Pid RSing)
 type ClientReq  = T "ClientReq" ClientReq_
 type ForwardMsg = T "Forward" ClientReq_
 
+type FWResponse = T "FWInt" Int
+mkFWResponse :: DSL repr => repr Int -> repr FWResponse
+mkFWResponse = lift (TyName :: TyName "FWInt")
+
 mkReqGood :: DSL repr => repr (Pid RSing) -> repr ClientReq
 mkReqGood p = lift (TyName :: TyName "ClientReq") (inl p)
 
@@ -34,15 +38,15 @@ firewall = lam $ \server ->
      match (forget msg)
        (lam $ \p -> do send server (mkForward (inl me))
                        x :: repr Int <- recv
-                       send p x)
-       (lam $ \p -> send p (int 1))
+                       send p (mkFWResponse x))
+       (lam $ \p -> send p (mkFWResponse (int (-1))))
 
 client :: DSL repr
        => repr (Pid RSing -> Process repr ())
 client = lam $ \fw ->
   do me <- self
      send fw (mkReqGood me)
-     _ :: repr Int <- recv
+     _ :: repr ForwardMsg <- recv
      return tt
 
 master :: DSL repr => repr (Process repr ())

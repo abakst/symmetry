@@ -99,11 +99,10 @@ mkRight x = pair_rule [PLTerm "1", x]
 
 -- Glue between generated prolog code and rewrite terms
 prolog_main = PLRule "main" [] stmts
-  where stmts = PLAnd [con, rewq, rem, ind, crf, rew, prntHdr, prnt]
+  where stmts = PLAnd [con, rewq, rem, crf, rew, prntHdr, prnt]
         con   = consult_rule [PLTerm "rewrite"]
         rewq  = rewrite_query_rule [PLVar "T",PLVar "Rem", PLVar "Ind", PLVar "Name"]
         rem   = PLAsgn (PLVar "Rem") (skip_rule [])
-        ind   = PLAsgn (PLVar "Ind") (PLList [])
         tmp   = PLAsgn (PLVar "Race") (PLTerm "fail")
         crf   =
           format_result_rule [ catch_rule [ check_race_freedom_rule [PLVar "T" , PLNull]

@@ -59,11 +59,6 @@ master = lam $ \mapperRole  -> lam $ \k -> lam $ \n ->
                   masterPid     <- spawn masterRole (app masterProc n)
                   mappers       <- spawnMany mapperRole k (app (app mapperProcess masterPid) myPid)
                   app (app workQueueProcess n) mappers
-                  -- workQueuePid  <- spawn workQueueRole (app (app workQueueProcess n) mappers)
-      
-                  -- doN "l1" n (lam $ \p -> do recv)
-                  -- ret tt
-
 
 mainProc :: (DSL repr) => repr (Int -> Int -> ())
 mainProc = lam $ \k -> lam $ \n -> exec $ do r <- newRMulti
