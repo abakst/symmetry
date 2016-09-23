@@ -208,7 +208,7 @@ Compose-External:
 B || ΠX X',G,D,X ~~> skip,G,(D;D''),0
 A,G,D,X ~~> C,G,(D;D'),X'
 ------------------------------------------------
-A||B,G,D,X ~~> C,G,(D;D' ∪ D''),0
+A||B,G,D,X ~~> C,G,(D;D'; D''),0
 
 =============
 # Soundness Proof
