@@ -93,6 +93,8 @@ Tag each receive with all tags on the appropriate channel.
 		true
 	    ;   X=e_var(_) ->
 		true
+	    ;   X=type(Type) ->
+		true
 	    ;  throw(parse-pid-error(X))
 	    ),
 	    sub_sym_set(Q, Proc, Q1),
