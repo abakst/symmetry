@@ -184,7 +184,9 @@ fresh (AInt _ n)   = (\v -> return (AInt (Just (EVar v)) n))  =<< freshVar
 fresh (AString _)  = AString . Just . EVar <$> freshVar
 fresh (ASum _ l r) = do v  <- Just . EVar <$> freshVar
                         V x  <- freshVar
+                        n <- gets varCtr
                         fl <- mapM ((setVar (V x) <$>) . fresh) l
+                        modify $ \s -> s { varCtr = n }
                         fr <- mapM ((setVar (V x) <$>) . fresh) r
                         return $ ASum v fl fr
 fresh (AProd _ l r) = do v  <- Just . EVar <$> freshVar

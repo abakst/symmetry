@@ -244,7 +244,7 @@ prologRecv (_, p)
   = toPrologExpr p
 
 instance ToPrologExpr Pat where    
-  toPrologExpr (PSum t (PProd x _ _) (PProd y _ _))
+  toPrologExpr (PSum t x@(PProd _ _ _) (PProd _ _ _))
     = pair_rule [toPrologExpr t, toPrologExpr x]
   toPrologExpr (PSum t (PBase x) (PBase y))
     = pair_rule [toPrologExpr t, toPrologExpr x]
