@@ -214,7 +214,7 @@ type IdStmtMap = M.Map Int (Stmt Int)
 flattenStmt                     :: Stmt a -> [Stmt a]
 flattenStmt s@(Block l _)       = s : (concatMap flattenStmt l)
 flattenStmt s@(Iter _ _ s' _)   = s : (flattenStmt s')
-flattenStmt s@(Loop _ s' _)     = s : (flattenStmt s')
+flattenStmt s@(Loop _ _ s' _)   = s : (flattenStmt s')
 flattenStmt s@(Choose _ _ s' _) = s : (flattenStmt s')
 flattenStmt s@(Case _ _ _ sl sr _)  = s : (concatMap flattenStmt [sl,sr])
 flattenStmt s@(NonDet l _)      = s : (concatMap flattenStmt l)

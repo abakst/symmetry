@@ -24,15 +24,14 @@ mkTerm :: DSL repr => repr SigT
 mkTerm = inr tt
 
 
-mapperProcess :: (DSL repr) => repr (Pid RSing -> Pid RSing -> Process repr ())
-mapperProcess =  lam $ \masterPid -> lam $ \workQueuePid -> app (fixM (app (app fix_f masterPid) workQueuePid)) tt
-           where fix_f = lam $ \mPid -> lam $ \wqPid -> lam $ \f -> lam $ \_->   
+mapperProcess :: (DSL repr) => repr (Pid RSing -> Process repr ())
+mapperProcess =  lam $ \workQueuePid -> app (fixM (app fix_f workQueuePid)) tt
+           where fix_f = lam $ \wqPid -> lam $ \f -> lam $ \_->   
                        do myPid <- self
                           send wqPid myPid
                           (v :: repr SigT)  <- recv
                           match v 
-                            (lam $ \val  ->  do -- send mPid val 
-                                                app f tt)
+                            (lam $ \val  -> app f tt)
                             (lam $ \_    -> ret tt)
 
 
@@ -47,18 +46,11 @@ workQueueProcess = lam $ \n -> lam $ \ps ->
       = lam $ \x -> do mapperPid <- recv
                        send mapperPid (mkWork x)
 
-masterProc :: DSL repr => repr (Int -> Process repr ())
--- masterProc = lam $ \n -> do doN "l1" n (lam $ \_ -> do (x :: repr Int) <- recv
---                                                        ret x)
---                             ret tt
-masterProc = lam $ \n -> ret tt
-
 master :: (DSL repr) => repr (RMulti -> Int -> Int -> Process repr ())
 master = lam $ \mapperRole  -> lam $ \k -> lam $ \n ->
                do myPid <- self
                   masterRole <- newRSing
-                  masterPid     <- spawn masterRole (app masterProc n)
-                  mappers       <- spawnMany mapperRole k (app (app mapperProcess masterPid) myPid)
+                  mappers       <- spawnMany mapperRole k (app mapperProcess myPid)
                   app (app workQueueProcess n) mappers
                   -- workQueuePid  <- spawn workQueueRole (app (app workQueueProcess n) mappers)
       

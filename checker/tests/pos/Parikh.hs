@@ -50,6 +50,7 @@ client = lam $ \server ->
   do me <- self
      send server (pair (int 0) (pair me (int 0)))
      _ :: repr () <- recv
+     send server (pair (int 2) (pair me (int 0)))
      send server (pair (int 3) (pair me (int 0)))
      return tt
 

@@ -847,7 +847,7 @@ symForever p
             let v  = IL.LV $ "endL" ++ show n
                 sv = IL.Goto v ()
             AProc b s r <- prohibitSpawn (runSE p)
-            return $ AProc b (IL.Loop v (s `IL.seqStmt` sv) ()) r
+            return $ AProc b (IL.Loop v True (s `IL.seqStmt` sv) ()) r
 
 -------------------------------------------------
 symFixM :: (?callStack :: CallStack)
@@ -862,7 +862,7 @@ symFixM f
                       g = SE . return . AArrow Nothing $ \a -> SE $ return (AProc Nothing sv a)
                   AArrow _ h  <- runSE (app f g)
                   AProc b s r <- prohibitSpawn $ runSE (h a)
-                  return $ AProc b (IL.Loop v s ()) r
+                  return $ AProc b (IL.Loop v False s ()) r
 
 prohibitSpawn m
   = do env <- gets renv
@@ -905,7 +905,7 @@ symDoN s n f
       iter (V x) _ _ s    =
                   let v = IL.LV $ "L" ++ show x
                       sv = IL.Goto v  ()
-                  in IL.Loop v ((s `IL.seqStmt` sv) `joinStmt` skip) ()
+                  in IL.Loop v False ((s `IL.seqStmt` sv) `joinStmt` skip) ()
 
 incr x = IL.Assign (varToIL x) (IL.EPlus (IL.EVar (varToIL x)) (IL.EInt 1)) ()
 

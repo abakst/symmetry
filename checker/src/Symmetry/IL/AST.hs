@@ -194,9 +194,10 @@ data Stmt a = Skip { annot :: a }
                    , annot    :: a
                    }
 
-            | Loop { loopVar  :: LVar
-                   , loopBody :: Stmt a
-                   , annot    :: a
+            | Loop { loopVar     :: LVar
+                   , loopForever :: Bool
+                   , loopBody    :: Stmt a
+                   , annot       :: a
                    }
 
             | Goto { varVar :: LVar
@@ -329,8 +330,8 @@ instance Traversable Stmt where
     = Recv ms <$> f a
   traverse f (Iter v s ss a)
     = flip (Iter v s) <$> f a <*> traverse f ss
-  traverse f (Loop v ss a)
-    = flip (Loop v) <$> f a <*> traverse f ss
+  traverse f (Loop v b ss a)
+    = flip (Loop v b) <$> f a <*> traverse f ss
   traverse f (Choose v s ss a)
     = flip (Choose v s) <$> f a <*> traverse f ss
   traverse f (Goto v a)
@@ -372,7 +373,7 @@ lastStmts s@(Recv _ _)         = [s]
 lastStmts (NonDet ss _)        = concatMap lastStmts ss
 lastStmts (Choose _ _ s _)     = lastStmts s
 lastStmts s@(Iter _ _ _ _)     = [s]
-lastStmts (Loop _ s _)         = lastStmts s
+lastStmts (Loop _ _ s _)       = lastStmts s
 lastStmts (Case _ _ _ sl sr _) = lastStmts sl ++ lastStmts sr
 lastStmts s@(Die _)            = [s]
 lastStmts s@Assert{}           = [s]
@@ -417,7 +418,7 @@ nextStmts toMe s@(Iter _ _ t _)
     I.fromList [(ident j, [s]) | j <- lastStmts t]  `joinMaps`
     nextStmts (ident s) t
 
-nextStmts toMe me@(Loop v s _)
+nextStmts toMe me@(Loop v _ s _)
   = singleton toMe me `joinMaps`
     I.fromList [(j, [me]) | j <- js ] `joinMaps`
     nextStmts (ident me) s
@@ -568,8 +569,10 @@ instance Pretty a => Pretty (Stmt a) where
   pretty (Goto (LV v) a)
     = text "goto" <+> pretty v <+> pretty a
 
-  pretty (Loop (LV v) s a)
+  pretty (Loop (LV v) False s a)
     = pretty v <> colon <+> parens (pretty s) <+> pretty a
+  pretty (Loop (LV v) True s a)
+    = text "forever" <> colon <+> parens (pretty s) <+> pretty a
 
   pretty (Case l pl pr sl sr a)
     = text "match" <+> pretty l <+> text "with"  <+> pretty a $$
