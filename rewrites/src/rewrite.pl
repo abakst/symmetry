@@ -196,6 +196,20 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Gamma1=Gamma,
 	  Psi1=Psi
 	/*
+	while(p, cond, A): remove after one iteration --bit hacky
+	*/
+	; functor(T, while, 3),
+	  T= while(P, Cond, A),
+	  check_cond(Cond, P, Rho),
+	  rewrite(A, Gamma, Delta, Rho, Psi, skip, Gamma2, Delta2, Rho2, Psi),
+	  negate(Cond, NegCond),
+	  check_cond(NegCond, P, Rho2)->
+	  T1=skip,
+	  Gamma1=Gamma2,
+	  Delta1=Delta2,
+	  Rho1=Rho2,
+	  Psi1=Psi
+	/*
 	while(p, cond, A): remove while if cond doesn't hold.
 	*/
 	; functor(T, while, 3),
