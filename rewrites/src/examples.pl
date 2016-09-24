@@ -386,3 +386,26 @@ rewrite_query(T, skip, [(m,r)], Name) :-
 	 T=par([Server,  sym(P, s, Client)]),
 	 Res=Server,
 	 Name='lock-server'.
+
+
+/*==============
+More tests:
+================*/
+rewrite_query(T,skip,[],Name) :-
+    P0=seq([recv(p0,type(prod_ty(int,prod_ty(pid,int))),pair(x10,pair(x12,x13))),ite(p0,0 = x10,assign(p0,x15,0),assign(p0,x15,1)),ite(p0,x15 = 0,send(p0,e_var(x12),unit,e_tt),die),seq([assign(p0,e0,1),while(p0,e0 = 1,seq([assign(p0,e0,0),seq([recv(p0,type(prod_ty(int,prod_ty(pid,int))),pair(x21,pair(x23,x24))),ite(p0,0 = x21,assign(p0,x26,0),assign(p0,x26,1)),ite(p0,x26 = 0,die,seq([ite(p0,1 = x21,assign(p0,x29,0),assign(p0,x29,1)),ite(p0,x29 = 0,seq([send(p0,e_var(x23),int,0),assign(p0,e0,1)]),seq([ite(p0,2 = x21,assign(p0,x32,0),assign(p0,x32,1)),ite(p0,x32 = 0,assign(p0,e0,1),skip)]))]))])]))])]),
+    P1=seq([send(p1,e_pid(p0),prod_ty(int,prod_ty(pid,int)),pair(0,pair(p1,0))),recv(p1,type(unit),x2),send(p1,e_pid(p0),prod_ty(int,prod_ty(pid,int)),pair(2,pair(p1,0))),send(p1,e_pid(p0),prod_ty(int,prod_ty(pid,int)),pair(3,pair(p1,0)))]),
+    T = par([P0,P1]),
+    Name = 'while-loop-exit'.
+
+rewrite_query(T,X,[],Name) :-
+    X=par([Forever]),
+    Forever=while(p1,true,seq([recv(p1,type(pid),x0),send(p1,e_var(x0),pid,p1)])),
+    P0=seq([send(p0,e_pid(p1),pid,p0),recv(p0,type(pid),x1)]),
+    T = par([P0,seq([assign(p1,endL0,1),Forever])]),
+    Name = 'ping-forever'.
+
+rewrite_query(T,skip,[],Name) :-
+    A = for(p0,XL0,set(r1),seq([send(p0,e_pid(XL0),pid,p0),recv(p0,e_pid(XL0),type(pid),x2)])),
+    B = seq([recv(IR1,type(pid),x1),send(IR1,e_var(x1),pid,IR1)]),
+    T = par([A,sym(IR1,set(r1),B)]),
+    Name = 'recv-from-loop'.
