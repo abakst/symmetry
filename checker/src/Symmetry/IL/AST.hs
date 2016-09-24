@@ -495,6 +495,7 @@ instance Pretty MConstr where
 instance Pretty ILExpr where
   pretty EUnit     = text "()"
   pretty EString   = text "<str>"
+  pretty (EPred p) = pretty p
   pretty (EInt i)  = int i
   pretty (EVar v)  = pretty v
   pretty (EPid p)  = pretty p

@@ -224,6 +224,12 @@ instance ToPrologExpr Pid where
   toPrologExpr p
     = unhandled p
 
+instance ToPrologExpr Pred where
+  toPrologExpr (ILBop o e1 e2)
+    = prologOp o (toPrologExpr e1) (toPrologExpr e2)
+    where
+      prologOp Eq x y = PLEq x y
+
 instance ToPrologExpr ILExpr where
   toPrologExpr EUnit      = PLTerm "e_tt"
   toPrologExpr (EInt i)   = toPrologExpr i
@@ -355,6 +361,13 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
                , PLEq (toPrologExpr v) (PLTerm "0")
                , toPrologExpr (p, l)
                , toPrologExpr (p, r)
+               ]
+
+  toPrologExpr (p, Assign { assignLhs = lhs, assignRhs = EPred rhs })
+    = ite_rule [ toPrologExpr p
+               , toPrologExpr rhs
+               , assign_rule [ toPrologExpr p, toPrologExpr lhs, PLTerm "0" ]
+               , assign_rule [ toPrologExpr p, toPrologExpr lhs, PLTerm "1" ]
                ]
 
   toPrologExpr (p, Assign { assignLhs = lhs, assignRhs = rhs })

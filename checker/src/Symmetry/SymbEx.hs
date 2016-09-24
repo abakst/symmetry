@@ -183,11 +183,10 @@ fresh (AUnit _)    = AUnit . Just . EVar <$> freshVar
 fresh (AInt _ n)   = (\v -> return (AInt (Just (EVar v)) n))  =<< freshVar
 fresh (AString _)  = AString . Just . EVar <$> freshVar
 fresh (ASum _ l r) = do v  <- Just . EVar <$> freshVar
-                        V x  <- freshVar
-                        n <- gets varCtr
-                        fl <- mapM ((setVar (V x) <$>) . fresh) l
+                        n  <- gets varCtr
+                        fl <- mapM fresh l
                         modify $ \s -> s { varCtr = n }
-                        fr <- mapM ((setVar (V x) <$>) . fresh) r
+                        fr <- mapM fresh r
                         return $ ASum v fl fr
 fresh (AProd _ l r) = do v  <- Just . EVar <$> freshVar
                          fl <- fresh l
@@ -453,8 +452,8 @@ absToIL (ARoleSing _ _)  = error "TBD: absToIL ARoleSing"
 absToIL (ARoleMulti _ _)  = error "TBD: absToIL ARoleMulti"
 
 absToIL (AUnit _)            = [IL.EUnit]
-absToIL (AInt (Just e) _)    = [absExpToIL e]
 absToIL (AInt  _ (Just i))   = [IL.EInt i]
+absToIL (AInt (Just e) _)    = [absExpToIL e]
 absToIL (AString _)          = [IL.EString]
 -- absToIL (ALift (Just e) _ _) = [absExpToIL e]
 absToIL (ALift _ t v)        = absToIL v
@@ -969,10 +968,14 @@ symRecv :: (?callStack :: CallStack, Typeable a, ArbPat SymbEx a)
 -------------------------------------------------
 symRecv
   = SE $ do v     <- freshVal
-            x     <- freshVar
-            let val = setVar x v
-            s     <- recvToIL val x
-            return $ AProc Nothing s val
+            -- x     <- freshVar
+            -- let val = setVar x v
+            -- s     <- recvToIL val x
+            -- return $ AProc Nothing s val
+            s <- recvToIL v (extr (getVar v))
+            return $ AProc Nothing s v
+    where
+      extr (Just (EVar x)) = x
 
 freshVal :: ArbPat SymbEx a => SymbExM (AbsVal a)
 freshVal = runSE arb >>= fresh
