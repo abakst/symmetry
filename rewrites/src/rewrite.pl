@@ -450,10 +450,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  check_cond(Cond, P, Rho),
 	  empty_avl(Psi),
           mk_pair(A, B, Pair),
-	  rewrite(Pair, Gamma, [], Rho, Psi, par(skip, skip), Gamma, Delta2, Rho1, Psi1) ->
+	  rewrite(Pair, Gamma, [], Rho, Psi, par(skip, skip), Gamma1, Delta2, Rho1, Psi1) ->
 	  T1=par(skip, TB),
-	  append(Delta, [Delta2], Delta1),
-	  Gamma1=Gamma
+	  append(Delta, [Delta2], Delta1)
 	  /*
 	  par(A, B): rewrite ordered pairs.
 	  */
