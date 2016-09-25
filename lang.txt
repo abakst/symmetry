@@ -210,6 +210,26 @@ A,G,D,X ~~> C,G,(D;D'),X'
 ------------------------------------------------
 A||B,G,D,X ~~> C,G,(D;D'; D''),0
 
+========
+Congruence:
+========
+
+- congruence relation
+
+skip||A ≡ skip
+skip;A ≡ skip
+sym(skip) ≡ skip
+
+A≡B
+---------------
+sym(A) ≡ sym(A)
+
+- rewrite rule
+
+A≡B
+---------
+A,G,D,X ~~> B,G,D,X 
+
 =============
 # Soundness Proof
 =============
