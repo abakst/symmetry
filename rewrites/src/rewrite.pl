@@ -386,11 +386,14 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  copy_instantiate(B, P, Proc, B1),
 	  set_talkto(M, S),
 	  assert(symset(Proc, S)),
-	  mk_pair(A, B1, Pair),
-	  rewrite(Pair, Gamma, [], Rho2, Psi, par(skip, skip), Gamma, Delta2, Rho3, Psi2)->
+	  mk_pair(A, B1, Pair, Switched),
+	  rewrite(Pair, Gamma, [], Rho2, Psi, Pair1, Gamma, Delta2, Rho3, Psi2),
+	  unswitch_pair(Pair1, Switched, par(skip, B2)),
+          smaller_than(B2, B1) ->
 	  clear_talkto,
 	  retract(symset(Proc, S)),
-	  T1=par(TA, skip),
+          substitute_term(P, Proc, B2, B3),
+	  T1=par(TA, sym(P, S, B3)),
 	  replace_proc_id(S, Proc, Rho3, Rho1),
 	  Gamma1=Gamma,
 	  substitute_term(P, Proc, Delta2, Delta3),
