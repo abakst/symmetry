@@ -10,10 +10,11 @@ import Symmetry.Language
 import Symmetry.Verify
 
 type ClientReq_ = (Pid RSing) :+: (Pid RSing)
+
 type ClientReq  = T "ClientReq" ClientReq_
 type ForwardMsg = T "Forward" ClientReq_
-
 type FWResponse = T "FWInt" Int
+
 mkFWResponse :: DSL repr => repr Int -> repr FWResponse
 mkFWResponse = lift (TyName :: TyName "FWInt")
 
@@ -46,7 +47,7 @@ client :: DSL repr
 client = lam $ \fw ->
   do me <- self
      send fw (mkReqGood me)
-     _ :: repr ForwardMsg <- recv
+     _ :: repr FWResponse <- recv
      return tt
 
 master :: DSL repr => repr (Process repr ())
