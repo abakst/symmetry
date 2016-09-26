@@ -95,6 +95,8 @@ class Symantics repr where
             => repr (Pid RSing) -> repr a -> repr (Process repr ())
   recv      :: (?callStack :: CallStack, Typeable a, ArbPat repr a)
             => repr (Process repr a)
+  recvFrom  :: (?callStack :: CallStack, Typeable a, ArbPat repr a)
+            => repr (Pid RSing) -> repr (Process repr a)
 
   newRSing  :: (?callStack :: CallStack)
             => repr (Process repr RSing)
@@ -107,7 +109,7 @@ class Symantics repr where
   doMany    :: String -> repr (Pid RMulti) -> repr (Pid RSing -> Process repr a) -> repr (Process repr [a])
   doN       :: String -> repr Int -> repr (Int -> Process repr a) -> repr (Process repr [a])
   lookup    :: repr (Pid RMulti) -> repr Int -> repr (Pid RSing)
-  forever   :: repr (Process repr ()) -> repr (Process repr ())
+  forever   :: repr (a -> Process repr a) -> repr a -> repr (Process repr a)
 
   die       :: repr (Process repr a)
 

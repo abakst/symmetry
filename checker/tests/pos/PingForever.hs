@@ -9,9 +9,11 @@ import Symmetry.Verify
 
 pingServer :: (DSL repr) => repr (Process repr ())
 pingServer = do myPid <- self
-                forever $ do
-                  p     <- recv
-                  send p myPid
+                forever (loop myPid) tt
+  where
+    loop me = lam $ \_ -> do
+                p     <- recv
+                send p me
 
 master :: (DSL repr) => repr
           (RSing -> Process repr ())

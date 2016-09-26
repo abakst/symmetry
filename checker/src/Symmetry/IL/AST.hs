@@ -185,6 +185,7 @@ data Stmt a = Skip { annot :: a }
                     }
 
             | Recv  { rcvMsg :: (Type, Pat)
+                    , rcvFrm :: Maybe ILExpr
                     , annot  :: a
                     }
 
@@ -280,11 +281,11 @@ unboundVars s
     bound   = nub $ everything (++) (mkQ [] go) s
     absIdx  = nub $ everything (++) (mkQ [] goAbs) s
     go :: Data a => Stmt a -> [Var]
-    go (Recv (_,x) _) = vars x
-    go (i@Iter {})    = [iterVar i]
-    go (i@Choose {})  = [chooseVar i]
-    go (i@Case {})    = [caseLPat i, caseRPat i]
-    go _               = []
+    go (Recv (_,x) _ _) = vars x
+    go (i@Iter {})      = [iterVar i]
+    go (i@Choose {})    = [chooseVar i]
+    go (i@Case {})      = [caseLPat i, caseRPat i]
+    go _                = []
     goAbs :: Pid -> [Var]
     goAbs (PAbs v _) = [v]
     goAbs _          = []
@@ -299,7 +300,7 @@ unboundSets s
     isSetVar _           = False
     boundSetVars         = nub $ everything (++) (mkQ [] go) s
     go :: Data a => Stmt a -> [Set]
-    go (Recv (_, p) _)= [S x | V x <- vars p] -- TODO
+    go (Recv (_, p) _ _) = [S x | V x <- vars p] -- TODO
     go _                 = []
 
 endLabels :: (Data a, Typeable a) => Stmt a -> [LVar]
@@ -326,8 +327,8 @@ instance Traversable Stmt where
     = Skip <$> f a
   traverse f (Send p ms a)
     = Send p ms <$> f a
-  traverse f (Recv ms a)
-    = Recv ms <$> f a
+  traverse f (Recv ms x a)
+    = Recv ms x <$> f a
   traverse f (Iter v s ss a)
     = flip (Iter v s) <$> f a <*> traverse f ss
   traverse f (Loop v b ss a)
@@ -369,7 +370,7 @@ lastStmts s@(Goto _ _)         = [s]
 lastStmts s@(Compare _ _ _ _)  = [s]
 lastStmts (Block ss _)         = [last ss]
 lastStmts s@(Send _ _ _)       = [s]
-lastStmts s@(Recv _ _)         = [s]
+lastStmts s@(Recv _ _ _)       = [s]
 lastStmts (NonDet ss _)        = concatMap lastStmts ss
 lastStmts (Choose _ _ s _)     = lastStmts s
 lastStmts s@(Iter _ _ _ _)     = [s]
@@ -558,8 +559,12 @@ instance Pretty a => Pretty (Stmt a) where
   pretty (Send p (t,e) a)
     = text "send" <+> pretty p <+> parens (pretty e <+> text "::" <+> pretty t) <+> pretty a
 
-  pretty (Recv (t,x) a)
+  pretty (Recv (t,x) Nothing a)
     = text "recv" <+> parens (pretty x <+> text "::" <+> pretty t) <+> pretty a
+
+  pretty (Recv (t,x) (Just e) a)
+    = text "recvFrom" <> parens (pretty e)
+      <+> parens (pretty x <+> text "::" <+> pretty t) <+> pretty a
 
   pretty (Iter x xs s a)
     = pretty x <+> text ":=" <+> int 0 $$
@@ -629,8 +634,8 @@ recvVars s
   = everything (++) (mkQ [] go) s
   where
     go :: Stmt a -> [Var]
-    go (Recv t _) = listify (const True) t
-    go _           = []
+    go (Recv t _ _) = listify (const True) t
+    go _            = []
 
 patVars :: forall a. (Data a, Typeable a) => Stmt a -> [Var]
 patVars s

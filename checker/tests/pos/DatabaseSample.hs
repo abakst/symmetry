@@ -30,7 +30,7 @@ setMsg k v = inr (pair k v)
 
 dbProc :: DSL repr => repr (Process repr ())
 dbProc  = do peers   <- newRMulti
-             workers <- spawnMany peers (int workerCount) worker
+             workers <- spawnMany peers workerCount worker
              app loop workers
 
 -- create the illusion of `ord` function
@@ -40,7 +40,7 @@ dbProc  = do peers   <- newRMulti
 --                      (ifte (lt s (str "s")) (int 2) (int 3))
 
 keyspace :: DSL repr => repr (Int -> [Int])
-keyspace  = lam $ \n -> cons n (cons (plus n (int workerCount_div_2)) nil)
+keyspace  = lam $ \n -> cons n (cons (plus n workerCount_div_2) nil)
 
 loop :: DSL repr => repr (Pid RMulti -> Process repr ())
 loop  = lam $ \workers ->
@@ -107,8 +107,10 @@ master  = do db <- createDB
                                               ret tt)
              return tt
 
-workerCount       = 4
-workerCount_div_2 = workerCount `div` 2
+workerCount       :: DSL repr => repr Int
+workerCount       = arb
+workerCount_div_2 :: DSL repr => repr Int
+workerCount_div_2 = arb
 
 main :: IO ()
 main  = checkerMain $ exec master

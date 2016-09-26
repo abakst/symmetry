@@ -165,7 +165,6 @@ findRemainders Config { cProcs = ps }
     go loop@Loop{ loopForever = True } = [loop]
     go _                               = []
 
-
 -- -----------------------------------------------------------------------------
 -- Helper function to convert iters into fors for great rewrite justice
 -- -----------------------------------------------------------------------------
@@ -308,6 +307,13 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
       msg = toPrologExpr e
       to  = toPrologExprPid q
       ty  = toPrologExpr t
+  toPrologExpr (p, Recv{rcvMsg = (t,pat), rcvFrm = Just e })
+    = recv_ft_rule [who,whence,ty,var]
+    where
+      var    = prologRecv (t,pat)
+      who    = toPrologExpr p
+      ty     = ty_rule [toPrologExpr t]
+      whence = toPrologExprPid e
   toPrologExpr (p, Recv{rcvMsg = (t,pat)})
     = recv_t_rule [who,ty,var]
     where
@@ -351,28 +357,20 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
                   , PLTerm "1"
                   ]
 
-  toPrologExpr (p, Loop { loopVar  = x
-                        , loopBody = b
+  toPrologExpr (p, Loop { loopVar     = x
+                        , loopBody    = b
+                        , loopForever = f
                         })
-    = seq_rule [ PLList [ assign_rule [ toPrologExpr p
-                                      , toPrologExpr x
-                                      , PLTerm "1"
-                                      ]
-                        , while_rule [ toPrologExpr p
-                                     , cond
-                                     , body
-                                     ]
-                        ]
-               ]
+    | f          = while_rule [ pExp, cond, body ]
+    | otherwise  = seq_rule [ PLList [ setLoop "1" , while_rule [ pExp, cond, body ] ] ]
       where
-        cond  = PLEq (toPrologExpr x) (PLTerm "1")
-        body  = seq_rule [ PLList [ assign_rule [ toPrologExpr p
-                                                , toPrologExpr x
-                                                , PLTerm "0"
-                                                ]
-                                  , toPrologExpr (p, b)
-                                  ]
-                         ]
+        setLoop v        = assign_rule [ pExp, toPrologExpr x, PLTerm v ]
+        pExp             = toPrologExpr p
+        cond | f         = PLTerm "true"
+             | otherwise = PLEq (toPrologExpr x) (PLTerm "1")
+        body | f         = toPrologExpr (p, b)
+             | otherwise = seq_rule [ PLList [ setLoop "0", toPrologExpr (p, b) ] ]
+
   toPrologExpr (p, Case { caseVar = v
                         , caseLeft = l
                         , caseRight = r })
