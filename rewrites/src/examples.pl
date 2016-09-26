@@ -10,6 +10,28 @@ Examples specified as queries of the form
 - Name : Example name.
 ===========================================*/
 
+/*==============
+ Unfolding:
+================*/
+
+
+/*===========
+Unfold-send
+===========*/
+
+rewrite_query(T, Rem, Ind, Name) :-
+	T=par([
+	       seq([
+		    assume(element(p, s)),
+		    send(m, e_pid(p), v)
+		   ]),
+	       sym(P, s,
+		   recv(P, v)
+		  )
+	      ]),
+	Rem=sym(P, set_minus(s, p), recv(P, v)),
+	Name=unfold-send.
+
 
 /*==============
  Loop free:

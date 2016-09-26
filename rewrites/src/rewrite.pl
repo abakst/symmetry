@@ -16,14 +16,19 @@
 			 ]).
 
 :- dynamic independent/2, /* independent(p,q): processes p and q are independent.*/
-	talkto/2,     /* talkto(p,q): p and q are communicating, all other procs are external. */
-	symset/2.    /* symset(p, S): process p belongs to the set of symmetric processes S. */
+	   talkto/2,      /* talkto(p,q): p and q are communicating, all other procs are external. */
+	   symset/2,      /* symset(p, S): process p belongs to the set of symmetric processes S. */
+	   is_valid/1.    /* is_valid(cons): cons is valid. */
 
 /*==============================================================================
  Language:
 ================================================================================
+
+Core languange:
+---------------
  par([A,B,C])        : A || B || C.
  seq([A,B,C])        : A; B; C.
+ skip                : no-operation.
  send(p, x, v)       : process p sends value v to
   | x=e_pid(q)       :       - process q.
   | x=e_var(y)       :       - the pid stored in variable y.
@@ -43,8 +48,20 @@ send(p, x, type, v)  : send a message of type "type".
  assign(p, x, v)     : process p assigns value v to variable x.
  ite(P, Cond, A, B)  : process p executes A if Cond holds and B, otherwise.
  if(P, Cond, A)      : Short for ite(P, Cond, A, skip).
- skip                : no-operation.
  pair(x, y)          : pair of values x and y.
+
+(Set) constraints:
+------------------
+ fresh(p)            : p is fresh.
+ emp                 : ∅.
+ setOf([a,b,...])    : {a,b,...}.
+ element(p, S)       : p in S.
+ subset(P, Q)        : P ⊆ Q.
+ prop_subset(P, Q)   : P ⊂ Q.
+ set_minus(P, Q)     : P\Q.
+ assume(cons)        : assume cons holds.
+
+
 
 Terms are expected to be of the form par([ seq([..,]), ...]).
 ==============================================================================
@@ -288,8 +305,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      rewrite_step(par(TL, TR), Gamma, Delta, Rho, Psi, T2, Gamma1, Delta1, Rho1, Psi1)->
 	      list_to_ord_set([TL,TR], Ts),
 	      ord_subtract(OL, Ts, Ts1),
-	      T2=par(T2A,T2B),
-	      T1=par([T2A,T2B|Ts1])
+	      unpack_par(T2, T2L),
+	      append([T2L,Ts1], L2),
+	      T1=par(L2)
 	  )
 	  /*
 	  seq([A|B])
@@ -322,6 +340,44 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Delta1=Delta,
 	  Rho1=Rho,
 	  Psi1=Psi
+
+	/**********************
+	        Unfolding
+	**********************/
+
+	/* assume */
+	; functor(T, assume, 1) ->
+	  arg(1, T, Cons),
+	  assert(is_valid(Cons)),
+	  T1=skip,
+	  Gamma1=Gamma,
+	  Delta1=Delta,
+	  Rho1=Rho,
+	  Psi1=Psi
+
+	/*
+	------------
+	unfold-send:
+	------------
+	par([send(_, p, _), sym(Q, s, A)]) ~~>
+	par([send(_, p, _, _), sym(Q, set_minus(s, setOf([p])), A(Q)), A(p)])
+	*/
+	; functor(T, par, 2),
+	  arg(1, T, Send),
+	  parse_send(Send, Rho, _, P, _, _),
+	  arg(2, T, Sym),
+	  functor(Sym, sym, 3),
+	  Sym=sym(Q, S, A),
+	  nonvar(P),
+	  is_valid(element(P, S)) ->
+	  copy_instantiate(A, Q, P, AP),
+	  Sym1=par(sym(Q, set_minus(S,P), A), AP),
+	  T1=par(Send, Sym1),
+	  Gamma1=Gamma,
+	  Delta1=Delta,
+	  Rho1=Rho,
+	  Psi1=Psi
+
 	/**********************
 	        Loops
 	**********************/
@@ -528,10 +584,41 @@ sanity_check(L) :-
 	;   throw(parameter_not_instantiated(X))
 	).
 
+unpack_par(T, L) :-
+	/*
+	Unpack nested par-expressions into a list.
+	*/
+	(   functor(T, F, _),
+	    F\==par,
+	    L=[T]
+	;   functor(T, par, 1),
+	    arg(1, T, [T1]),
+	    unpack_par(T1, L)
+	;   functor(T, par, 2),
+	    arg(1, T, T1),
+	    arg(2, T, T2),
+	    unpack_par(T1, L1),
+	    unpack_par(T2, L2),
+	    append([L1,L2],L)
+	).
+
+
+parse_send(T, Rho, P, Q, Type, V) :-
+	/*
+	send(p, q, type, v): p sends a message v of type "type" to process q.
+	*/
+	(   functor(T, send, 3) ->
+	    T=send(P, Exp, V)
+	;   functor(T, send, 4) ->
+	    T=send(P, Exp, Type, V)
+	),
+	parse_pid_exp(Exp, P, Rho, Q).
+
+
 parse_recv(T, Rho, P, Q, Type, V) :-
-/*
-recv(p, q, type, v): p receives a message v of type "type" from process q.
-*/
+	/*
+	recv(p, q, type, v): p receives a message v of type "type" from process q.
+	*/
 	(   (   functor(T, recv, 2)->
 		T=recv(P, V)
 	    ;	functor(T, recv, 3)->
@@ -554,7 +641,9 @@ recv(p, q, type, v): p receives a message v of type "type" from process q.
 	).
 
 is_recv_from(T) :-
-  /* Check that T is a receive from a specific process. */
+  /*
+	Check that T is a receive from a specific process.
+  */
 	functor(T, recv, 3),
 	arg(2, T, Exp),
 	functor(Exp, F, _),
