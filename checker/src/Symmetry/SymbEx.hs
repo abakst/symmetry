@@ -1150,7 +1150,7 @@ symNondetVal :: SymbEx a -> SymbEx a -> SymbEx (Process SymbEx a)
 symNondetVal a b = SE $ do av <- runSE a
                            bv <- runSE b
                            v  <- freshVar
-                           let val = setVar v av  -- hack
+                           let val = setVar v (av `join` bv)  -- hack
                            return $ AProc Nothing (nondet (varToIL v) av bv) val
   where
     nondet x v w =

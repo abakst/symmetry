@@ -23,6 +23,10 @@ mkValue :: DSL repr => repr (Pid RSing -> Int -> Request)
 mkValue = lam $ \p -> lam $ \v ->
           lift (TyName :: TyName "Req") (pair (int 1) (pair p v))
 
+mkRequest :: DSL repr => repr (Int -> Pid RSing -> Value -> Request)
+mkRequest = lam $ \c -> lam $ \p -> lam $ \v ->
+              lift (TyName :: TyName "Req") (pair c (pair p v))
+
 mkLookup :: DSL repr => repr (Pid RSing -> Value -> Request)
 mkLookup = lam $ \p -> lam $ \k ->
            lift (TyName :: TyName "Req") (pair (int 2) (pair p k))
@@ -33,26 +37,27 @@ mkFree = lift (TyName :: TyName "Resp") (inl tt)
 mkAllocd :: DSL repr => repr Response
 mkAllocd = lift (TyName :: TyName "Resp") (inr tt)
 
-client :: DSL repr => repr (Pid RSing -> Process repr ())
+client :: forall repr. DSL repr => repr (Pid RSing -> Process repr ())
 client
   = lam $ \db -> do me  <- self
-                    msg <- nondetVal (app mkAlloc me) (app (app mkLookup me) arb)
+                    tag <- nondetVal (int 0) (int 1)
+                    let msg = mkRequest `app` tag `app` me `app` (int 3)
                     send db msg
-                    match (proj1 (forget msg) `eq` int 0)
+                    match (tag `eq` int 0)
                       -- Did I alloc?
                       (lam $ \_ -> do resp :: repr Response <- recv
                                       let x = arb :: repr Int
                                       match (forget resp)
-                                        (lam $ \_ -> return tt {- send db x -}) -- value
+                                        (lam $ \_ -> send db x) -- value
                                         (lam $ \_ -> return tt))
                       -- Did I Lookup?
-                      (lam $ \_ -> do v :: repr Response <- recv
+                      (lam $ \_ -> do v :: repr Value <- recv
                                       return tt)
 database :: forall repr. DSL repr => repr (Process repr ())
 database
-  = app (fixM dbLoop) tt
+  = forever dbLoop tt
   where
-    dbLoop = lam $ \self -> lam $ \_ ->
+    dbLoop = lam $ \_ ->
                 do msg :: repr Request <- recv
                    let m = forget msg
                        p = proj1 (proj2 m)
@@ -61,13 +66,13 @@ database
                               do let b = arb :: repr Boolean
                                  match b
                                   (lam $ \_ -> do send p mkFree
-                                   -- v :: repr Value <- recv
+                                                  v :: repr Value <- recvFrom p
                                                   return tt)
                                   (lam $ \_ -> do send p mkAllocd
                                                   return tt))
                            (lam $ \_ -> do let v = arb :: repr Value
                                            send p v)
-                   tt |> self
+                   return tt
 
 mainProc :: DSL repr => repr (Process repr ())
 mainProc = do rcs <- newRMulti

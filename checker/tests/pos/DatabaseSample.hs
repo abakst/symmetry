@@ -44,7 +44,7 @@ keyspace  = lam $ \n -> cons n (cons (plus n workerCount_div_2) nil)
 
 loop :: DSL repr => repr (Pid RMulti -> Process repr ())
 loop  = lam $ \workers ->
-          do let loop_h = lam $ \loop -> lam $ \arg ->
+          do let loop_h = lam $ \arg ->
                             do req :: repr MsgT <- recv
                                let helper = lam $ \m -> lam $ \k ->
                                      -- matchList (app keyspace (app ord k))
@@ -58,8 +58,8 @@ loop  = lam $ \workers ->
                                match req
                                  (lam $ \m -> app2 helper (inl m) (proj1 m))
                                  (lam $ \m -> app2 helper (inr m) (proj1 m))
-                               app loop arg
-             app (fixM loop_h) tt
+                               return tt
+             forever loop_h tt
 
 createDB :: DSL repr => repr (Process repr Database)
 createDB  = do r <- newRSing
@@ -77,34 +77,35 @@ get  = lam $ \db -> lam $ \k ->
 
 worker :: DSL repr => repr (Process repr ())
 worker
-  = do app (fixM workerLoop) nil
+  = do forever workerLoop nil
        return tt
   where
     workerLoop
-      = lam $ \loop -> lam $ \map -> do
+      = lam $ \map -> do
            msg :: repr MsgT <- recv
            match msg
              (lam $ \m ->
                 do let (k, p) = (proj1 m, proj2 m)
                    result <- app2 SrcHelper.lookup k map
                    send p result
-                   map |> loop)
+                   return map)
              (lam $ \m ->
                 do let (k, v) = (proj1 m, proj2 m)
-                   cons (pair k v) map |> loop)
+                   return (cons (pair k v) map))
 
 master :: DSL repr => repr (Process repr ())
 master  = do db <- createDB
-             let words = cons (pair (int 0) (int 10)) $
-                           cons (pair (int 1) (int 20))
-                             nil
-             matchList words (lam $ \_  -> ret tt)
-                             (lam $ \ht -> let x = proj1 ht
-                                            in app3 set db (proj1 x) (proj2 x))
-             matchList words (lam $ \_  -> ret tt)
-                             (lam $ \ht -> do let k = proj1 $ proj1 ht
-                                              r <- app2 get db k
-                                              ret tt)
+             -- let words = cons (pair (int 0) (int 10)) $
+             --               cons (pair (int 1) (int 20))
+             --                 nil
+             -- matchList words (lam $ \_  -> ret tt)
+             --                 (lam $ \ht -> let x = proj1 ht
+             --                                in app3 set db (proj1 x) (proj2 x))
+             -- matchList words (lam $ \_  -> ret tt)
+             --                 (lam $ \ht -> do let k = proj1 $ proj1 ht
+             --                                  r <- app2 get db k
+             --                                  ret tt)
+             app3 set db (int 0) (int 10)
              return tt
 
 workerCount       :: DSL repr => repr Int
