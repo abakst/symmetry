@@ -3,7 +3,8 @@
 		 tag_recvs/3,
 		 check_tags/1,
 		 tag_term/2,
-		 check_race_freedom/2
+		 check_race_freedom/2,
+		 tags_independent/2
 		 ], [hidden(false)]).
 
 :- use_module(library(ordsets)).
@@ -17,13 +18,17 @@ tag(a, t): action a has tag t.
 :- dynamic tags/2,   /* tags(P-Q, Tags): sends with tags
 	                Tags were sent on channel P-Q.
 		     */
+	proc/1,       /* proc(P): P is a process in the current universe. */
 	proc/2,      /* proc(Tag, Proc): Tag "Tag" belongs to process p. */
+	talksto/2,   /* talksto(P,Q)   : Q can receive messages from P */
 	type/2,      /* type(Tag, Type): Tag "Tag" belongs to a send of type "Type".  */
 	sym_set/1.   /* sym_set(S): S is a set of symmetric processes. */
 
 cleanup :-
 	retractall(tags(_,_)),
+	retractall(proc(_)),
 	retractall(proc(_,_)),
+	retractall(talksto(_,_)),
 	retractall(type(_,_)),
 	retractall(sym_set(_)).
 
@@ -82,6 +87,7 @@ Tag each receive with all tags on the appropriate channel.
 	    T=recv(P, _),
 	    sub_sym_set(P, Proc, P1),
 	    findall(Tag, (tags(Q-P1,Tag), Q\=P1), Tags),
+	    set_talksto(P1, Tags),
 	    T1=tag(T, Tags)
 	;   (   functor(T, recv, 3) ->
 		T=recv(P, X, _)
@@ -99,6 +105,7 @@ Tag each receive with all tags on the appropriate channel.
 	    ),
 	    sub_sym_set(Q, Proc, Q1),
 	    findall(Tag, (tags(Q1-P1,Tag), Q1\=P1, (nonvar(Type)->type(Tag, Type);true)), Tags)->
+	    set_talksto(P1, Tags),
 	    T1=tag(T, Tags)
 	;   functor(T, sym, 3) ->
 	    T=sym(P, S, A),
@@ -113,6 +120,16 @@ Tag each receive with all tags on the appropriate channel.
 		foreacharg(Arg1, T1),
 		param(Proc)
 	    do  tag_recvs(Arg, Proc, Arg1)
+	    )
+	).
+
+set_talksto(P, Tags) :-
+	(   foreach(Tag, Tags),
+	    param(P)
+	do  (   proc(Tag, Q),
+		P\==Q->
+		assert(talksto(P,Q))
+	    ;   true
 	    )
 	).
 
@@ -142,6 +159,7 @@ Checks if all receive tag-sets either
 	    do  check_tags(Arg)
 	    )
 	).
+
 sub_sym_set(P, Proc, P1) :-
 	/*
 	If P belongs to a symmetric set S, then P1=S, and P1=P, otherwise.
@@ -152,8 +170,41 @@ sub_sym_set(P, Proc, P1) :-
 	;   P1=P
 	).
 
+get_procs(T) :-
+	/*Recursively traverse T and assert proc(P), if process P performs an action.*/
+	(   simple(T) ->
+	    true
+	;   functor(T, F, _),
+	    ord_member(F, [assign,if,ite,iter,recv,send,while])->
+	    arg(1, T, P),
+	    assert(proc(P))
+	;   functor(T, for, 4)->
+	    arg(1, T, M),
+	    arg(3, T, P),
+	    assert(proc(P)),
+	    assert(proc(M))
+	;   functor(T, sym, 3),
+	    arg(2, T, P),
+	    assert(proc(P))
+	;   functor(T, nondet, _)
+	;   (   foreacharg(Arg, T)
+	    do  get_procs(Arg)
+	    )
+	).
+
+
+tags_independent(P, Q) :-
+/* Two processes P and are independent iff
+	no sends happen along the channel P-Q. */
+	proc(P),
+	proc(Q),
+	P\==Q,
+	\+talksto(P,Q),
+	\+talksto(Q,P).
+
 tag_term(T, T2)	:-
 	cleanup,
+	get_procs(T),
 	tag_sends(T, none, T1),
 	tag_recvs(T1, none, T2).
 

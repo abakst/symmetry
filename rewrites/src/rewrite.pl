@@ -10,7 +10,10 @@
 			     ]
 	     ).
 
-:- use_module('tags.pl', [check_race_freedom/2]).
+:- use_module('tags.pl', [
+			  check_race_freedom/2,
+			  tags_independent/2
+			 ]).
 
 :- dynamic independent/2, /* independent(p,q): processes p and q are independent.*/
 	talkto/2,     /* talkto(p,q): p and q are communicating, all other procs are external. */
@@ -110,7 +113,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  atomic(P),
 	  parse_pid_exp(X, P, Rho, Q),
 	  talkto(P, M),
-	  independent(Q, M) ->
+	  tags_independent(Q,M) ->
 	  T1=skip,
 	  Gamma1=Gamma,
 	  Delta1=Delta,
