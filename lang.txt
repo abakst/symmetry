@@ -2,17 +2,17 @@
 # Language
 #========
 statements:
-s ::= send(e1,e2)      -- send e2 to e1
-    | x := recvFrom(*) -- recv message from any process, bind to x
+s ::= send(e1,e2)       -- send e2 to e1
+    | x := recvFrom(*)  -- recv message from any process, bind to x
     | x := recvFrom(p) -- recv message from the pid p, bind to x 
-    | x := * ∈ P          -- nondet pick process in set P.
-    | for (i : I): s   -- iteration over collection
-    | while (e): s     -- iteration
-    | s;s              -- sequence
-    | ite(cond, s, s)  -- case-split
-    | skip                -no-op
+    | nondet(p ∈ P, s)   -- p is nondet chosen from P 
+    | for (i : I): s           -- iteration over collection
+    | while (e): s           -- iteration
+    | s;s                       -- sequence
+    | ite(cond, s, s)      -- case-split
+    | skip                     -no-op
 
-proc ::= p: s          -- process p runs s
+proc ::= p: s               -- process p runs s
 
 process-soup:
 P ::= proc        -- single process
@@ -156,7 +156,7 @@ A || Π(p:P): B(p),G,D,X
 ~~> skip || B(p*) || Π(p:P\{p*}),G,(D;D'(p*)),X'[p*:=T(p*)]
 -----------------------------------------------------------
 A || Π(p:P): B(p),G,D,X
-~~> Π(p:P) B(p),G,(D;p:=*;D'(p)),X'[q:=(p:=* in P; T(p))]
+~~> Π(p:P) B(p),G,(D;p:=*;D'(p)),X'[q:=nondet(p∈P, T(p))]
 
 ==========
 unfold-send:
@@ -181,19 +181,20 @@ m: x := recvFrom(*) || Π(p:P')B(p),G,D,X
 ## Nondet
 ========
 
+p* fresh
 --------------
-p:=*∈ P,G,D,X ~~>
-skip,G ∪ {p ∈ P, nondet(p)},D,X
+nondet(p∈ P, T(p)),G,D,X ~~>
+T(p*),G ∪ {p* ∈ P, fresh(p*)},D,X
 
 
 ===========
 ## Recv-nondet
 ===========
 
-G ⊢ p ∈ P and G ⊢ nondet(p)
+G ⊢ p ∈ P and G ⊢ fresh(p)
 ----------------------
 m: recvFrom(P),G,D,X ~~>
-m: recvFrom(p),G,D,X 
+m: recvFrom(p),G,D,X
 
 =====
 ## Ext
