@@ -174,7 +174,7 @@ unfold-recv:
 p* fresh
 G ⊢ ∅ ⊂ P' ⊆ P
 ------------------------------------------
-m: x := recvFrom(*) || Π(p:P')B(p),G,D,X
+m: x := recvFrom(P) || Π(p:P')B(p),G,D,X
 ~~> m: x := recvFrom(p*) || B(p*) || Π(p:P'\{p*})B(p),G,D;p*:=*;X
 
 ========
