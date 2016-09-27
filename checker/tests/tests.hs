@@ -36,7 +36,8 @@ quickCheckTests
 
 prologTests
   = group "Prolog Rewriter" [
-     testGroup "benchmarks" <$> dirTests "checker/tests/benchmarks" [] cmd ExitSuccess
+      testGroup "benchmarks"     <$> dirTests "checker/tests/benchmarks"     [] cmd ExitSuccess
+    , testGroup "neg-benchmarks" <$> dirTests "checker/tests/neg-benchmarks" [] cmd (ExitFailure 1)
     ]
   where
     cmd = "--rewrite"
