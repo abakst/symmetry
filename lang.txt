@@ -234,6 +234,17 @@ A,G,D,X ~~> B,G,D,X
 =============
 # Soundness Proof
 =============
+Definition: tagged program.
+
+Definition: race freedom.
+
+Lemma:
+  Let P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ'.
+  If P : race-free then P' : race-free.
+Proof:
+  By induction on the derivation of ~~>, splitting cases on the last step.
+  (see ./race-free.txt)
+
 
 =============
 ## Main Theorem
