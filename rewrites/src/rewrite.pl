@@ -58,7 +58,7 @@ send(p, x, type, v)  : send a message of type "type".
  element(p, S)       : p in S.
  subset(P, Q)        : P ⊆ Q.
  prop_subset(P, Q)   : P ⊂ Q.
- set_minus(P, Q)     : P\Q.
+ set_minus(P, Q)     : P\{Q}.
  assume(cons)        : assume cons holds.
 
 
@@ -356,11 +356,13 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Psi1=Psi
 
 	/*
-	------------
+	=============
 	unfold-send:
-	------------
+	=============
+	p ∈ P
+	---------
 	par([send(_, p, _), sym(Q, s, A)]) ~~>
-	par([send(_, p, _, _), sym(Q, set_minus(s, setOf([p])), A(Q)), A(p)])
+	par([send(_, p, _, _), sym(Q, set_minus(s, p), A(Q)), A(p)])
 	*/
 	; functor(T, par, 2),
 	  arg(1, T, Send),
@@ -373,6 +375,36 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  copy_instantiate(A, Q, P, AP),
 	  Sym1=par(sym(Q, set_minus(S,P), A), AP),
 	  T1=par(Send, Sym1),
+	  Gamma1=Gamma,
+	  Delta1=Delta,
+	  Rho1=Rho,
+	  Psi1=Psi
+
+	/*
+	=============
+	unfold-recv:
+	=============
+	 p* fresh
+	 ∅ ⊂ s1 ⊆ s
+	---------------------------------------
+	par([recv(_, s, _), sym(Q, s1, A)]) ~~>
+	par([recv(_, p*, _, _), sym(Q, set_minus(s1, p*), A(Q)), A(p*)])
+	*/
+	; functor(T, par, 2),
+	  arg(1, T, Recv),
+	  is_recv_from(Recv),
+	  parse_recv(Recv, Rho, P, S, Type, V),
+	  arg(2, T, Sym),
+	  functor(Sym, sym, 3),
+	  Sym=sym(Q, S1, A),
+	  nonvar(S),
+	  is_valid(prop_subset(emp,S1)),
+	  is_valid(subset(S1,S)) ->
+	  fresh_pred_sym(Proc),
+	  copy_instantiate(A, Q, Proc, AP),
+	  Sym1=par(sym(Q, set_minus(S1, Proc), A), AP),
+	  Recv1=recv(P, e_pid(Proc), Type, V),
+	  T1=par(Recv1, Sym1),
 	  Gamma1=Gamma,
 	  Delta1=Delta,
 	  Rho1=Rho,
@@ -644,12 +676,14 @@ is_recv_from(T) :-
   /*
 	Check that T is a receive from a specific process.
   */
-	functor(T, recv, 3),
-	arg(2, T, Exp),
-	functor(Exp, F, _),
-	(   F==e_var
-	;   F==e_pid
-	).
+  (   functor(T, recv, 3)
+  ;   functor(T, recv, 4)
+  ),
+  arg(2, T, Exp),
+  functor(Exp, F, _),
+  (   F==e_var
+  ;   F==e_pid
+  ).
 
 parse_pid_exp(PidExp, P, Rho, Q) :-
 	/*
