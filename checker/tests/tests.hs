@@ -25,12 +25,21 @@ main = tests >>= run
     run = defaultMainWithIngredients [
            testRunner
           ]
-    tests = group "Tests" [ quickCheckTests ]
+    tests = group "Tests" [ prologTests ]
 
 quickCheckTests
   = group "QuickCheck" [
-     testGroup "pos" <$> dirTests "checker/tests/pos" [] ExitSuccess
+     testGroup "pos" <$> dirTests "checker/tests/pos" [] cmd ExitSuccess
     ]
+  where
+    cmd = "--qc --verify --qc-samples 25"
+
+prologTests
+  = group "Prolog Rewriter" [
+     testGroup "benchmarks" <$> dirTests "checker/tests/benchmarks" [] cmd ExitSuccess
+    ]
+  where
+    cmd = "--rewrite"
 
 ---------------------------------------------------------------------------
 -- Nicked from LH:
@@ -38,23 +47,23 @@ quickCheckTests
 group n xs = testGroup n <$> sequence xs
 
 ---------------------------------------------------------------------------
-dirTests :: FilePath -> [FilePath] -> ExitCode -> IO [TestTree]
+dirTests :: FilePath -> [FilePath] -> String -> ExitCode -> IO [TestTree]
 ---------------------------------------------------------------------------
-dirTests root ignored code
+dirTests root ignored testcmd code 
   = do files    <- walkDirectory root
        let tests = [ rel | f <- files, isTest f, let rel = makeRelative root f, rel `notElem` ignored ]
-       return    $ mkTest code root <$> tests
+       return    $ mkTest testcmd code root <$> tests
 
 ---------------------------------------------------------------------------
-mkTest :: ExitCode -> FilePath -> FilePath -> TestTree
+mkTest :: String -> ExitCode -> FilePath -> FilePath -> TestTree
 ---------------------------------------------------------------------------
-mkTest code dir file
+mkTest testcmd code dir file
   = testCase file $ do
       (_,_,_,ph) <- createProcess $ shell cmd
       c          <- waitForProcess ph
       assertEqual "Wrong exit code" code c
   where
-    cmd = printf "cd %s && runghc %s --qc --verify --qc-samples 25" dir file
+    cmd = printf "cd %s && runghc %s %s" dir file testcmd
 
 binPath pkgName = do
   testPath <- getExecutablePath

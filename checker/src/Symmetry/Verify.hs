@@ -4,19 +4,11 @@ module Symmetry.Verify where
 
 import Symmetry.SymbEx
 import Symmetry.IL.AST
--- import Symmetry.IL.Model (generateModel)
-import Symmetry.IL.ConfigInfo
 import Symmetry.IL.Rewrite.Prolog
--- import Symmetry.IL.Model.HaskellModel (printHaskell,printQCFile)
--- import Symmetry.IL.Unfold
--- import Symmetry.IL.Inst
--- import Symmetry.IL.TrailParser
 
 import System.Console.ANSI
 import Paths_checker
-import Control.Exception
 import Control.Monad
-import Control.Applicative
 import System.Exit
 import System.Directory
 import System.FilePath
@@ -24,7 +16,7 @@ import System.IO
 import System.Process hiding (runCommand)
 import Text.Printf
 import Options
-import Text.PrettyPrint.Leijen  (pretty, nest, text, (<>), line, hPutDoc)
+import Text.PrettyPrint.Leijen  (pretty, nest, text, (<>), line)
 import qualified Data.Map.Strict as M
 
 data MainOptions = MainOptions { optVerify  :: Bool
@@ -151,13 +143,6 @@ run1Cfg opt outd cfg
   = do when (optProcess opt) $
          pprint cfg
 
-       -- when (optModel opt) $ do
-       --   createDirectoryIfMissing True outd
-       --   copyIncludes opt outd
-       --   writeFile (outd </> "SymVerify.hs") f
-       --   when (optQC opt)
-       --        (writeFile (outd </> "QC.hs") (printQCFile cinfo' m))
-
        when (optRewrite opt) $ do
          createDirectoryIfMissing True outd
          createDirectoryIfMissing True (outd </> "lib")
@@ -166,12 +151,7 @@ run1Cfg opt outd cfg
 
        runVerifier opt outd
   where
-    -- cinfo :: ConfigInfo (PredAnnot Int)
-    -- (cinfo, m) = generateModel cfg
-    -- cinfo'     = cinfo { isQC = optQC opt
-    --                    , qcSamples = optQCSamples opt}
-    -- f          = printHaskell cinfo' m
-    p          = printProlog cfg
+    p        = printProlog cfg
     pprint c = print $
                text "Config" <>
                nest 2 (line  <> pretty c)

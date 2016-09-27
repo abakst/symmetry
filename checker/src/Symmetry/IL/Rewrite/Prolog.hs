@@ -58,8 +58,6 @@ consult_rule            = mkQuery "consult" 1
 check_race_freedom_rule = mkQuery "check_race_freedom" 2
 rewrite_query_rule      = mkQuery "rewrite_query" 4
 rewrite_rule            = mkQuery "rewrite" 6
-format_result_rule      = mkQuery "format_result" 2
-format_rule             = mkQuery "format" 2
 catch_rule              = mkQuery "catch" 3
 
 -- imported rewrite rules
@@ -99,29 +97,30 @@ mkRight x = pair_rule [PLTerm "1", x]
 
 -- Glue between generated prolog code and rewrite terms
 prolog_main = PLRule "main" [] stmts
-  where stmts = PLAnd [con, rewq, crf, rew, prntHdr, prnt]
-        con   = consult_rule [PLTerm "rewrite"]
-        rewq  = rewrite_query_rule [PLVar "T",PLVar "Rem", PLVar "Ind", PLVar "Name"]
-        tmp   = PLAsgn (PLVar "Race") (PLTerm "fail")
-        crf   =
-          format_result_rule [ catch_rule [ check_race_freedom_rule [PLVar "T" , PLNull]
-                                          , PLNull
-                                          , PLTerm "fail" ]
-                             , PLVar "Race" ]
-        rew   =
-          format_result_rule [ rewrite_rule [ PLVar "T"
-                                            , PLVar "Rem"
-                                            , PLVar "Ind"
-                                            , PLNull, PLNull, PLNull]
-                             , PLVar "Rewrite" ]
-        prntHdr =
-          PLAnd [ format_rule [ PLString "~p:~30|~p~t~10+~p~n"
-                              , PLList [PLString "name", PLString "rewrite", PLString "race-check"] ]
-                , format_rule [ PLString "====================================================~n"
-                              , PLList []]]
-        prnt  =
-          format_rule [ PLString "~p:~t~30|~p~t~21+~p~n"
-                      , PLList [PLVar "Name", PLVar "Rewrite", PLVar "Race"] ]
+  where
+    stmts = PLAnd [ con
+                  , rewq
+                  , catch checkRaces
+                  , catch checkRewrite
+                  , halt [ PLInt 0 ]
+                  ]
+    con   = consult_rule [PLTerm "rewrite"]
+    rewq  = rewrite_query_rule [PLVar "T",PLVar "Rem", PLVar "Ind", PLVar "Name"]
+    tmp   = PLAsgn (PLVar "Race") (PLTerm "fail")
+    checkRaces   = check_race_freedom_rule [ PLVar "T", PLNull ]
+    checkRewrite = rewrite_rule [ PLVar "T"
+                                , PLVar "Rem"
+                                , PLVar "Ind"
+                                , PLNull
+                                , PLNull
+                                , PLNull
+                                ]
+                                  
+    halt    = mkQuery "halt" 1
+    catch g = catch_rule [ PLOr [ g, halt [ PLInt 1 ] ]
+                         , PLNull
+                         , halt [ PLInt 2 ]
+                         ]
 
 printProlog :: (Data a, P.Pretty a) => Config a -> String
 printProlog ci
@@ -517,7 +516,7 @@ instance Prolog PrologExpr where
   encodeProlog (PLAnd {..})
     = vcat $ punctuate comma (encodeProlog <$> pStmts)
   encodeProlog (PLOr {..})
-    = vcat $ punctuate semi (encodeProlog <$> pStmts)
+    = parens (vcat $ punctuate semi (encodeProlog <$> pStmts))
   encodeProlog (PLAsgn {..})
     = encodeProlog pLhs <+> equals <+> encodeProlog pRhs
   encodeProlog (PLEq {..})
