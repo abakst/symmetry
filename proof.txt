@@ -1,35 +1,135 @@
-Thm:
- If Γ,Δ,Ψ,P ~> Γ',Δ',Ψ',P' then,
-   ∀ E, (such that wf...)
-   If <[[Γ]], Δ;(E | P | [[Ψ]])> ---> DL, then
-      <[[Γ']], Δ';(E | P' | [[Ψ]])> ---> DL.
+=============
+# Soundness Proof
+=============
+Definition: tagged program.
 
-Proof: by induction on derivation of - ~> -, splitting cases on
+Definition: race freedom.
+
+Lemma:
+  Let P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ'.
+  If P : race-free then P' : race-free.
+Proof:
+  By induction on the derivation of ~~>, splitting cases on the last step.
+  (see ./race-free.txt)
+
+Definition: Left mover.
+  s is a left mover if
+  ∀ σ,μ,σ',μ',p,q,s,t, p != q ->
+        <σ,μ, p:t; q:s> ~~> <σ',μ',skip>
+     -> <σ,μ, q:s; p:t> ~~> <σ',μ',skip>
+
+Prop (1): "Send is a left mover"
+
+Prop (2): "An enabled RecvFrom is a left mover"
+  ∀ σ,μ,σ',μ',r,p,q,s,
+       r != q
+    -> ∃ m M, μ(p,q) = m · M
+    -> <σ,μ,q: r:s; q:x:=recvFrom(p)> ~~> <σ',μ',skip>
+    -> <σ,μ,q: q:x:=recvFrom(p); r:s> ~~> <σ',μ',skip>
+
+=============
+## Main Theorem
+=============
+Lemma:
+ If P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ' then,
+   ∀ σ,μ,Q,E, 
+       Δ;(E | P;Q | [[Ψ]]) : well-formed
+   --> Δ;(E | P;Q | [[Ψ]]) : race-free   -
+   --> (     <⊥, [[Γ]], Δ;(E | P;Q | [[Ψ]])>     --->* <σ,μ,skip>
+         <-> <⊥, [[Γ']], Δ';(E | P';Q | [[Ψ']])> --->* <σ,μ,skip> ).
+
+ Where [[Γ]] = "message buffers in Γ"
+       [[Ψ]] = "parallel composition of domain of Ψ"
+
+## Proof
+
+Proof: by induction on derivation of - ~~> -, splitting cases on
 last step.
 
-- P = recv.
-By the form of the rule,
+- P = p:send(q,v).
 
-Γ[(p,q) := m:M],Δ,Ψ,x := recvFrom(p) ~> Γ,Δ;x := m,Ψ,skip.
+  This follows from (1): let T be a trace of the input program ending in skip.
+  Then by repeated applications of (1), move p:send(q,v) to the left. Finally,
+  the reachable states of <⊥,[[Γ]],Δ;p:send(q,v);E> are the same as
+  <⊥,[[Γ[(p,q):=Γ(p,q)·v]]],Δ;E> since Δ only contains assignments.
 
-Let E s.t.
-  < [[ Γ[(p,q) := m:M] ]],Δ;E | Ψ |x := recvFrom(p) > ~A~> DL
-To show:
-  < [[ Γ ]],Δ;x := m;E | Ψ |skip > ~B~> DL
+- P = q: x:=recvFrom(p).
 
-The prefix of A must be all of Δ (single thread). In the remainder, E
-| Ψ |x := recvFrom(p), recvFrom(p) is a left mover (by lemma
-recvs-are-left-movers). So any halted state reachable must also be
-reachable from the state after immediately executing the recvFrom,
-which gives us the program we wish to show.
+  The conclusion follows from the fact(2) that 'recvFrom(p)'
+  is a left mover (when enabled), following the same reasoning as above.
 
-- P = send.
-Same reasoning as recv (send is always a left mover).
+- P = q: x:=recvFrom(*);A || B
+
+  By IH,
+     ∀ σ,μ,E,
+       Δ;(E | x:=recvFrom(p);A | B | [[Ψ]]) : well-formed
+   --> Δ;(E | x:=recvFrom(p);A | B | [[Ψ]]) : race-free   -
+   --> (     <⊥, [[Γ]], Δ;(E | x:=recvFrom(p);A | B | [[Ψ]])> --->* <σ,μ,skip>
+         <-> <⊥, [[Γ']], Δ';(E | A' | B' | [[Ψ']])>           --->* <σ,μ,skip> ).
+
+  Assume for some σ0,μ0,E0,
+  
+   (a) Δ;(E | x:=recvFrom(*);A | B | [[Ψ]]) : well-formed
+   (b) Δ;(E | x:=recvFrom(*);A | B | [[Ψ]]) : race-free 
+   (c) <⊥, [[Γ]], Δ;(E | x:=recvFrom(*);A | B | [[Ψ]])>     --->* <σ0,μ0,skip>
+
+   We need to show:
+   <⊥, [[Γ']], Δ';(E | A' | B' | [[Ψ']])> --->* <σ0,μ0,skip>.
+
+  By (b), either there exists a process p such that x is only assigned messages sent by x or
+  there is a set of processes P all running the program S such that x is only assigned messages
+  sent from a single location in S. 
+  Thus,
+  ∃p0:proc.
+    [[(E | x:= recvFrom(*) | A | B | [[Ψ]])]] = [[(E | x := recvFrom(p0) | A | B [[Ψ]]]]
+  Or
+  ∃P0:procSet.
+    [[(E | x:= recvFrom(*) | A | B | [[Ψ]])]] = [[(E | x := recvFrom(P0) | A | B [[Ψ]]]].
+
+  Assume the former case.
+  - If p is equal to p0, then the conclusion is obvious since the
+    program with recvFrom(p0) is equivalent to the input program
+  - If p is not equal to p0, then in Δ;(E | x:=recvFrom(p);A | B), the
+    recvFrom(p) will never be enabled. But by the IH,
+    Δ;(E | x:=recvFrom(p);A | B | [[Ψ]]) R Δ';(E | A' | B' | [[Ψ']]), so
+    it must be the case that the recvFrom(p) was eventually enabled. So p
+    must have been equal to p0.
+  The reasoning is similar for the latter case.
+
+- P  = P(x)
+  P' = P(v)
+
+  Since D |= x = v, and x is never assigned in P, in all executions of
+  (E | P(x) | [[Ψ]]) x is equal to v. Thus,
+    E | P(x) | [[Ψ]] ≡ E | P(v) | [[Ψ]],
+  which proves the goal.
+
+- compose-seq
+
+  By IH,
+     ∀ σ,μ,E,
+       Δ;(E | A | C | [[Ψ]]) : well-formed
+   --> Δ;(E | A | C | [[Ψ]]) : race-free   -
+   --> (     <⊥, [[Γ]], Δ;(E | A | C | [[Ψ]])>       --->* <σ,μ,skip>
+         <-> <⊥, [[Γ']], Δ';(E | A' | C' | [[Ψ']])>  --->* <σ,μ,skip> ).
+
+  Assume for some σ0,μ0,E0,
+  
+   (a) Δ;(E | A;B | C | [[Ψ]]) : well-formed
+   (b) Δ;(E | A;B | C | [[Ψ]]) : race-free 
+   (c) <⊥, [[Γ]], Δ;(E | A;B | C | [[Ψ]])>     --->* <σ0,μ0,skip>
+
+  Conclusion follows by IH with (σ:=σ0) (μ:=μ0) (E:=E0).
+
+
+Assume:
+ P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
+ T ∈ [[Γ],(E | P;B | [[Ψ]])] deadlocks.
 
 - P = parallel compose.
 Assume:
- Γ,Δ,Ψ,P ~> Γ',Δ',Ψ',P' and
- [[ Γ,Δ,Ψ,P ]] < [[ Γ',Δ',Ψ',P' ]]. Then
+ P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
+ [[ P,Γ,Δ,Ψ ]] < [[ P',Γ',Δ',Ψ' ]]. Then
  ∀ E,
    < [[ Γ ]], Δ;(Ψ | P | E) > ~~> DL implies
    < [[ Γ' ]], Δ',(Ψ' | P' | E) >.
@@ -43,15 +143,33 @@ We need to show that
 - P = transitive
 Assume:
 
- Γ,Δ,Ψ,P ~> Γ',Δ',Ψ',P' and
- Γ',Δ',Ψ',P' ~> Γ'',Δ'',Ψ'',P'' and
- [[ Γ,Δ,Ψ,P ]] < [[ Γ'',Δ'',Ψ'',P'' ]].
+ P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
+ P',Γ',Δ',Ψ' ~> P'',Γ'',Δ'',Ψ''
+ Thus by simple application of the IH,
+ [[ P,Γ,Δ,Ψ ]] < [[ P'',Γ'',Δ'',Ψ'' ]].
 
-- P = recvFrom(S)
+- P = recvFrom(*)
 Assume:
- Γ,Δ,Ψ,x := recvFrom(S)|Π(S): Q ~>
-  Γ,Δ;p* := * in S,Ψ,x := recvFrom(p)|p*: Q|Π(S\p*): Q.
+ x := recvFrom(*)|Π(S'): Q,Γ,Δ,Ψ ~>
+  x := recvFrom(p)|p*: Q|Π(S\p*): Q,Γ,Δ;p* := * in S,Ψ.
 
 Suppose that
- [[ Γ,Δ,Ψ,x := recvFrom(S)|Π(S): Q|E]]
+ [[ x := recvFrom(*)|Π(S'): Q|E],Γ,Δ,Ψ]
 reaches a DL, and let T be the halting trace.
+
+By assumption (well-tagged programs), for every recv, either
+a single concrete sender sends matching messages or one of a
+set of processes (S) sends a matching message from a single
+syntactic send. Let p* be the sender.
+
+- Case: p* is not in S. But this is not possible, since the first argument
+of the send() is equal to `m` (and the program is well-tagged).
+
+- Case: p* is in S \ S'. So p* must be in E. But by hypothesis, if p*: B'
+is in E then B' < B. This means that a message sent from p* came from
+a location *other* than the send() preceding B, which violates the assumption
+that all messages sent from a symmetric set come from a single syntactic send.
+
+- Case: p* is in S'. Then the rewritten program reaches the same halted states
+as the input program, as p* ranges over all of the elements of S' and the
+recvFrom is a left-mover.

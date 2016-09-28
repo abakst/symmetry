@@ -41,7 +41,7 @@ there is A s.t. (A;B)=C.
 send:
 ===
 
-q is a constant
+q is a value
 ------------------------------------------------------------
 p: send(q,v); G[(p,q) := M],D,X ~~> skip,G[(p,q) := M·v],D,X
 
@@ -49,25 +49,26 @@ p: send(q,v); G[(p,q) := M],D,X ~~> skip,G[(p,q) := M·v],D,X
 recvFrom:
 =======
 
-p is a constant
+p is a value
 ------------------------------------------------------------
 q: x:=recvFrom(p), G[(p,q) := v·M],D,X
 ~~> skip,G[(p,q) := M],(D;x:=v),X
 
-========
+=============
 recvWildcard:
-========
+=============
 
-p in Procs
-------------------------
-_ := recvFrom(*),G,D,X ~~>
-_ := recvFrom(p),G,D,X
+p in Procs = either a concrete proc or a set of sym procs
+x := recvFrom(p);A||B,G,D,X ~~> A'||B',G',D',X'
+-----------------------------------------------
+_ := recvFrom(*);A||B,G,D,X ~~> A'||B',G',D',X'
 
-====
+======
 const:
-====
+======
 
-D |= x = c, c is a constant
+D |= x = c
+x is not assigned in P
 ----------------------------
 P(x),G,D,X ~~> P(c),G,D,X
 
@@ -78,6 +79,11 @@ compose-seq:
 (A||C),G,D,X ~> (A'||C'),G',D',X'
 --------------------------
 (A;B||C) ,G,D,X ~> (A';B||C') ,G',D',X'
+
+AB: can this work?
+A,G,D,X ~> A',G',D',X'
+--------------------------
+(A;B||C),G,D,X ~> (A';B||C),G',D',X'
 
 =========
 compose-par:
@@ -231,119 +237,3 @@ A≡B
 ---------
 A,G,D,X ~~> B,G,D,X 
 
-=============
-# Soundness Proof
-=============
-Definition: tagged program.
-
-Definition: race freedom.
-
-Lemma:
-  Let P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ'.
-  If P : race-free then P' : race-free.
-Proof:
-  By induction on the derivation of ~~>, splitting cases on the last step.
-  (see ./race-free.txt)
-
-
-=============
-## Main Theorem
-=============
-Thm:
- If P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ' then,
-   ∀ E, (such that (1)wf...& (2)small...)
-   If <[[Γ]], Δ;(E | P | [[Ψ]])> ---> DL, then
-      <[[Γ']], Δ';(E | P' | [[Ψ']])> ---> DL.
-
- Where [[Γ]] = "message buffers in Γ"
-       [[Ψ]] = "parallel composition of domain of Ψ"
-       (1) E is well formed with Γ ==> should not duplicate any
-                existing processes in P...
-       (2) "small" meaning that for a sym set S, if
-           p:A is in P, p and p' ∈ S, p':A' ∈ E,
-           then A' < A (i.e. syntactically smaller, reduced...)
-
- Additional assumptions:
-   -P is well-tagged (all recvs tagged either from a single loc in a symmetric set, or
-    from a single concrete proc)
-   -E's are well-tagged, sub-P's are well-tagged
-
-## Proof
-
-Proof: by induction on derivation of - ~~> -, splitting cases on
-last step.
-
-- P = recv.
-By the form of the rule,
-
-Γ[(p,q) := m:M],Δ,Ψ,x := recvFrom(p) ~> Γ,Δ;x := m,Ψ,skip.
-
-Let E s.t.
-  < [[ Γ[(p,q) := m:M] ]],Δ;E | Ψ |x := recvFrom(p) > ~A~> DL
-To show:
-  < [[ Γ ]],Δ;x := m;E | Ψ |skip > ~B~> DL
-
-The prefix of A must be all of Δ (single thread). In the remainder, E
-| Ψ |x := recvFrom(p), recvFrom(p) is a left mover (by lemma
-recvs-are-left-movers). So any halted state reachable must also be
-reachable from the state after immediately executing the recvFrom,
-which gives us the program we wish to show.
-
-- P = send.
-Two possible rules: send: 
-Same reasoning as recv (send is always a left mover).
-Ext:
-Assume [[ Γ ]], Δ;([[Ψ[p:=T]]] | p:send(q,m) | E ~T~> DL.
-
-- compose-seq
-Assume:
- P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
- T ∈ [[Γ],(E | P;B | [[Ψ]])] deadlocks.
-
-- P = parallel compose.
-Assume:
- P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
- [[ P,Γ,Δ,Ψ ]] < [[ P',Γ',Δ',Ψ' ]]. Then
- ∀ E,
-   < [[ Γ ]], Δ;(Ψ | P | E) > ~~> DL implies
-   < [[ Γ' ]], Δ',(Ψ' | P' | E) >.
-We need to show that
- ∀ E,
-   < [[ Γ ]], Δ;(Ψ | P | A | E) > ~~> DL implies
-   < [[ Γ' ]], Δ',(Ψ' | P' | A | E) >
-
- which follows by instantiating the IH with (E := E | A).
-
-- P = transitive
-Assume:
-
- P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
- P',Γ',Δ',Ψ' ~> P'',Γ'',Δ'',Ψ''
- Thus by simple application of the IH,
- [[ P,Γ,Δ,Ψ ]] < [[ P'',Γ'',Δ'',Ψ'' ]].
-
-- P = recvFrom(*)
-Assume:
- x := recvFrom(*)|Π(S'): Q,Γ,Δ,Ψ ~>
-  x := recvFrom(p)|p*: Q|Π(S\p*): Q,Γ,Δ;p* := * in S,Ψ.
-
-Suppose that
- [[ x := recvFrom(*)|Π(S'): Q|E],Γ,Δ,Ψ]
-reaches a DL, and let T be the halting trace.
-
-By assumption (well-tagged programs), for every recv, either
-a single concrete sender sends matching messages or one of a
-set of processes (S) sends a matching message from a single
-syntactic send. Let p* be the sender.
-
-- Case: p* is not in S. But this is not possible, since the first argument
-of the send() is equal to `m` (and the program is well-tagged).
-
-- Case: p* is in S \ S'. So p* must be in E. But by hypothesis, if p*: B'
-is in E then B' < B. This means that a message sent from p* came from
-a location *other* than the send() preceding B, which violates the assumption
-that all messages sent from a symmetric set come from a single syntactic send.
-
-- Case: p* is in S'. Then the rewritten program reaches the same halted states
-as the input program, as p* ranges over all of the elements of S' and the
-recvFrom is a left-mover.
