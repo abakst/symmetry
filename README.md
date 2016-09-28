@@ -1,4 +1,4 @@
-# Symmetry  [![Build Status](https://travis-ci.org/abakst/symmetry.svg?branch=prolog_out)](https://travis-ci.org/abakst/symmetry)
+# Symmetry  [![Build Status](https://travis-ci.org/abakst/symmetry.svg?branch=prolog-out)](https://travis-ci.org/abakst/symmetry)
 Protocol verifier for message passing programs.
 
 This package defines a DSL for writing message passing programs. In theory, programs written in this DSL
@@ -36,21 +36,17 @@ $ ghc Prog.hs -o Prog
 To run the verification, run:
 
 ~~~~
-$ ./Prog --verify
+$ ./Prog --rewrite
 ~~~~
 
 ## What's going on
 
-`./Prog --verify`:
+`./Prog --rewrite`:
 
-  1. creates a first-order abstraction (as a Haskell program) `SymVerify.hs` in `$CWD/.symcheck`;
-  2. TODO: runs `Liquid Haskell` on `SymVerify.hs`
+  1. creates a first-order abstraction (as a Prolog program) `symverify.pl` in `$CWD/.symcheck`;
+  2. checks to see if the Prolog model can be rewritten into a canonical trace
 
 If (2) succeeds, then `Prog` is deadlock-free and no assertion fails at runtime.
-
-`./Proc --verify --qc`:
-
-   * Additionally creates a file `QC.hs` that can be run to *test* the `SymVerify.hs` program using `QuickCheck`, and *log* sets of states and schedules.
   
 `./Proc --dump-process`:
 
@@ -60,9 +56,6 @@ If (2) succeeds, then `Prog` is deadlock-free and no assertion fails at runtime.
 
    * Write the files that `Liquid Haskell` or `QuickCheck` would inspect, but do not actually run them.
 
-## Plans for future
-
-- If (2) above fails, produce some counterexample to help understand why the prover was unable
 
 # Useful Model-Checking Papers
 
