@@ -321,7 +321,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ;   L=[A|B],
 	      (  A==skip ->
 		  T1=seq(B),Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi=Psi1
-	      ;   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1)->
+	      ;   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1) ->
 		  T1=seq([A1|B])
 	      )
 	  )
@@ -331,10 +331,6 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	; functor(T, nondet, 2) ->
 	  T = nondet(P, A),
 	  fresh_pred_sym(Proc),
-	  (   symset(P, S) ->
-	      assert(symset(Proc, S))
-	  ;   true
-	  ),
 	  copy_instantiate(A, P, Proc, T1),
 	  Gamma1=Gamma,
 	  Delta1=Delta,
@@ -366,18 +362,19 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	*/
 	; functor(T, par, 2),
 	  arg(1, T, Send),
-	  parse_send(Send, Rho, _, P, _, _),
+	  parse_send(Send, Rho, M, P, _, _),
 	  arg(2, T, Sym),
 	  functor(Sym, sym, 3),
 	  Sym=sym(Q, S, A),
 	  nonvar(P),
-	  is_valid(element(P, S)) ->
+	  is_valid(element(P, S))->
 	  copy_instantiate(A, Q, P, AP),
-	  Sym1=par(sym(Q, set_minus(S,P), A), AP),
+	  set_talkto(M, P),
+	  Sym1=par(AP, sym(Q, set_minus(S,P), A)),
 	  T1=par(Send, Sym1),
+	  replace_proc_id(Proc, S, Rho, Rho1),
 	  Gamma1=Gamma,
 	  Delta1=Delta,
-	  Rho1=Rho,
 	  Psi1=Psi
 
 	/*
@@ -401,15 +398,58 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  is_valid(prop_subset(emp,S1)),
 	  is_valid(subset(S1,S)) ->
 	  fresh_pred_sym(Proc),
+	  set_talkto(P, Proc),
 	  copy_instantiate(A, Q, Proc, AP),
 	  Sym1=par(sym(Q, set_minus(S1, Proc), A), AP),
 	  Recv1=recv(P, e_pid(Proc), Type, V),
 	  T1=par(Recv1, Sym1),
+	  replace_proc_id(Proc, S, Rho, Rho1),
 	  Gamma1=Gamma,
 	  Delta1=Delta,
-	  Rho1=Rho,
 	  Psi1=Psi
 
+	/*
+	================
+	for-loop-unfold:
+	================
+	p* fresh
+	s* fresh
+	∅ ⊂ s* ⊆ s and p*∈s*
+	par(A(p*), sym(Q, s*, B)) ~~>
+	par(skip, par(sym(P, s*\p1, B), C(p1)))
+	---------------------------------------
+	par(for(m, P, s, A), sym(Q, s, B)) ~~>
+	par(skip, sym(Q, s, C))
+	*/
+	; functor(T, par, 2),
+	  arg(1, T, For),
+	  functor(For, for, 4),
+	  For=for(M, P, S, A),
+	  arg(2, T, Sym),
+	  Sym=sym(Q, S, B),
+	  fresh_pred_sym(Proc),
+	  fresh_pred_sym(S1),
+	  copy_instantiate(A, P, Proc, A1),
+	  assert(is_valid(prop_subset(emp, S1))),
+	  assert(is_valid(subset(S1, S))),
+	  assert(is_valid(element(Proc, S1))),
+          TA=par([A1, sym(Q, S1, B)]),
+	  (   TB=par([sym(Q, set_minus(S1, Proc1), B), C])
+	  ;   TB=sym(Q, set_minus(S1, Proc1), B)
+	  ),
+	  rewrite(TA, Gamma, [], Rho, Psi, TB, Gamma, Delta2, Rho2, Psi2) ->
+	  clear_talkto,
+	  substitute_term(Q, Proc1, C, C1),
+          replace_proc_id(S, Proc1, Rho2, Rho1),
+	  T1=par(skip, sym(Q, S, C1)),
+	  Gamma1=Gamma,
+          substitute_term(P, Proc1, Delta2, Delta3),
+	  append(Delta, [for(P, S ,Delta3)], Delta1),
+          (   avl_delete(Proc1, Psi2, Ext0, Psi3) ->
+	      substitute_term(Q, Proc1, Ext0, Ext),
+	      add_external(Psi3, sym(Q, S, seq(Ext)), S, Psi1)
+	  ;   Psi1=Psi
+	  )
 	/**********************
 	        Loops
 	**********************/
@@ -445,8 +485,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  replace_proc_id(Proc, S, Rho, Rho2),
 	  assert(symset(Proc, S)),
 	  set_talkto(M, Proc),
-	  mk_pair(A, B1, Pair),
-	  rewrite(Pair, Gamma, [], Rho2, Psi, par(skip, B1), Gamma, Delta2, _, Psi2)->
+	  mk_pair(A, B1, Pair, Switched),
+          unswitch_pair(Pair1, Switched, par(skip, B1)),
+	  rewrite(Pair, Gamma, [], Rho2, Psi, Pair1, Gamma, Delta2, _, Psi2)->
 	  clear_talkto,
 	  retract(symset(Proc, S)),
 	  T1 = par(skip, TB),
@@ -478,8 +519,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  set_talkto(M, S),
 	  assert(symset(Proc, S)),
 	  mk_pair(A, B1, Pair, Switched),
+          unswitch_pair(Pair1, Switched, par(skip, B2)),
 	  rewrite(Pair, Gamma, [], Rho2, Psi, Pair1, Gamma, Delta2, Rho3, Psi2),
-	  unswitch_pair(Pair1, Switched, par(skip, B2)),
           smaller_than(B2, B1) ->
 	  clear_talkto,
 	  retract(symset(Proc, S)),
@@ -538,8 +579,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  check_cond(Cond, P, Rho),
 	  empty_avl(Psi),
           mk_pair(A, B, Pair, Switched),
-	  rewrite(Pair, Gamma, [], Rho, Psi, Pair1, Gamma, Delta2, Rho1, Psi1),
           unswitch_pair(Pair1, Switched, par(A1, skip)),
+	  rewrite(Pair, Gamma, [], Rho, Psi, Pair1, Gamma, Delta2, Rho1, Psi1),
           smaller_than(A1, A) ->
 	  T1=par(A1, TB),
 	  append(Delta, [Delta2], Delta1),
@@ -550,22 +591,21 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	; functor(T, par, 2) ->
 	  arg(1, T, A),
 	  arg(2, T, B),
-	  (   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1)->
-	      T1=par(A1, B)
-	  ;   rewrite_step(B, Gamma, Delta, Rho, Psi, B1, Gamma1, Delta1, Rho1, Psi1)->
-	      T1=par(A, B1)
-	  ;   functor(A, seq, 1),
+	  (   functor(A, seq, 1),
 	      A=seq([C|Cs]),
 	      rewrite_step(par(C, B), Gamma, Delta, Rho, Psi, par(C1, B1), Gamma1, Delta1, Rho1, Psi1)->
 	      T1=par(seq([C1|Cs]), B1)
+	  ;   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1)->
+	      T1=par(A1, B)
+	  ;   rewrite_step(B, Gamma, Delta, Rho, Psi, B1, Gamma1, Delta1, Rho1, Psi1)->
+	    T1=par(A, B1)
 	  )
 	).
 
 rewrite(T, Gamma, Delta, Rho, Psi, T2, Gamma2, Delta2, Rho2, Psi2) :-
 	(   match(T, T2),
-	    %T=T2,
 	    Gamma=Gamma2, Delta=Delta2, Rho=Rho2, Psi= Psi2
-	;   rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) ->
+	;   rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1)->
 	    sanity_check([T1, Gamma1, Delta1, Rho1, Psi1]),
 	    rewrite(T1, Gamma1, Delta1, Rho1, Psi1, T2, Gamma2, Delta2, Rho2, Psi2)
 	;   format('Failed to rewrite term:~p~n' ,[T]), fail

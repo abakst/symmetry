@@ -32,6 +32,43 @@ rewrite_query(T, Rem, Ind, Name) :-
 	Rem=sym(P, set_minus(s, p), recv(P, v)),
 	Name=unfold-send.
 
+/*===========
+Unfold-recv
+===========*/
+
+rewrite_query(T, Rem, Ind, Name) :-
+	T=par([
+	       seq([
+		    assume(prop_subset(emp, s1)),
+		    assume(subset(s1, s)),
+		    recv(m, e_pid(s), v)
+		   ]),
+	       sym(P, s1,
+		   send(P, e_pid(m), v)
+		  )
+	      ]),
+	Rem=sym(P, set_minus(s1, Q), send(P, e_pid(m), v)),
+	Name=unfold-recv.
+
+/*===========
+ For-loop
+===========*/
+
+rewrite_query(T, skip, Ind, Name) :-
+	Ind=[],
+	P1=seq([recv(m, e_pid(s), id)]),
+	P2=seq([send(P, e_pid(m), P)]),
+	T=(par([for(m, _, s, P1), sym(P, s, P2)])),
+	Name=unfold-for-simple.
+
+
+rewrite_query(T, skip, Ind, Name) :-
+	Ind=[],
+	P1=seq([recv(m, e_pid(s), id), send(m, e_var(id), m)]),
+	P2=seq([send(P,e_pid(m), P), recv(P, x)]),
+	T=(par([for(m, _, s, P1), sym(P, s, P2)])),
+	Name=unfold-for.
+
 
 /*==============
  Loop free:
@@ -80,10 +117,10 @@ Simple ping
 
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[], 
-	P1=seq([send(m,e_pid(Q),m), recv(m,x)]),
-	P2=seq([recv(P, id),send(P,e_pid(m),P)]),
+	P1=seq([send(m, e_pid(Q), m), recv(m, e_pid(Q), x)]),
+	P2=seq([recv(P, e_pid(m), id), send(P,e_pid(m),P)]),
 	T=(par([for(m, Q, s, P1), sym(P, s, P2)])),
-	Name='simple ping loop'.
+	Name=simple-ping-loop.
 
 /*===========
 Reverse ping
@@ -91,10 +128,10 @@ Reverse ping
 
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[], 
-	P1=seq([recv(m,id), send(m,e_var(id),m)]),
+	P1=seq([recv(m, e_pid(s), id), send(m,e_var(id), m)]),
 	P2=seq([send(P,e_pid(m),P), recv(P, x)]),
 	T=(par([for(m, _, s, P1), sym(P, s, P2)])),
-	Name='reverse ping'.
+	Name=reverse-ping.
 
 /*===========
  Two loops
@@ -102,11 +139,18 @@ rewrite_query(T, skip, Ind, Name) :-
 
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[], 
-	P1A=seq([send(m,e_pid(Q),m)]),
-	P1B=seq([recv(m,x)]),
-	P2=seq([recv(P, id),send(P,e_pid(m),P)]),
-	T=(par([seq([for(m, Q, s, P1A),for(m, Q, s, P1B)]), sym(P, s, P2)])),
-	Name='two loops'.
+	P1=seq([send(m, e_pid(Q), m)]),
+	P2=seq([recv(P, id)]),
+	T=(par([seq([for(m, Q, s, P1)]), sym(P, s, P2)])),
+	Name=two-loops-simple.
+
+rewrite_query(T, skip, Ind, Name) :-
+	Ind=[],
+	P1A=seq([send(m, e_pid(Q), m)]),
+	P1B=seq([recv(m, e_pid(s), x)]),
+	P2=seq([recv(P, id), send(P, e_pid(m), P)]),
+	T=(par([seq([for(m, Q, s, P1A), for(m, Q, s, P1B)]), sym(P, s, P2)])),
+	Name=two-loops.
 
 /*============
 Two loops var
@@ -115,10 +159,10 @@ Two loops var
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[], 
 	P1A=seq([send(m,e_pid(Q), m)]),
-	P1B=seq([recv(m, x)]),
+	P1B=seq([recv(m, e_pid(s), x)]),
 	P2=seq([recv(P, id), send(P,e_var(id),P)]),
 	T=(par([for(m, Q, s, P1A), for(m, Q, s, P1B), sym(P, s, P2)])),
-	Name='two loops var'.
+	Name=two-loops-var.
 
 /*===========
  Double ping:
@@ -152,20 +196,20 @@ rewrite_query(T, skip, Ind, Name) :-
 
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[],
-	P1=seq([recv(q, id), send(q, e_var(id), 1)]),
+	P1=seq([recv(q, e_pid(s), id), send(q, e_var(id), 1)]),
 	P2=seq([assign(P, stop, 0), W]),
-	W=while(P, stop=0, seq([send(P, e_pid(q), P), recv(P, stop)])),
+	W=while(P, stop=0, seq([send(P, e_pid(q), P), recv(P, e_pid(q), stop)])),
 	T=(par([for(q, _, s, P1), sym(P, s, P2)])),
-	Name='work-stealing 2nd-phase'.
+	Name=work-stealing2.
 
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[],
-	P1A=seq([recv(q, id), send(q, e_var(id), 0)]),
-	P1B=seq([recv(q, id), send(q, e_var(id), 1)]),
+	P1A=seq([recv(q, e_pid(s), id), send(q, e_var(id), 0)]),
+	P1B=seq([recv(q, e_pid(s), id), send(q, e_var(id), 1)]),
 	P2=seq([assign(P, stop, 0), W]),
 	W=while(P, stop=0, seq([send(P, e_pid(q), P), recv(P, stop)])),
 	T=(par([seq([iter(q, k, P1A), for(q, _, s, P1B)]), sym(P, s, P2)])),
-	Name='work-stealing'.
+	Name=work-stealing.
 
 /*==================
 Multiple processes:
@@ -179,7 +223,7 @@ rewrite_query(T, skip, Ind, Name) :-
 	 Ind=[], 
 	 P1=seq([send(m, e_pid(Q), m)]),
 	 P2=seq([recv(P, id), send(P,e_pid(n), P)]),
-	 P3=seq([recv(n, x)]),
+	 P3=seq([recv(n, e_pid(s), x)]),
 	 T=(par([for(m, Q, s, P1), sym(P, s, P2), for(m, _, s, P3)])),
 	Name='two-party ping'.
 
@@ -189,8 +233,8 @@ Interleaved two-party ping
 
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[(m,n)],
-	P1=seq([recv(m, id), send(m, e_var(id), m)]),
-	P2=seq([send(P, e_pid(m), P), send(P, e_pid(n), P), recv(P, id)]),
+	P1=seq([recv(m, e_pid(s), id), send(m, e_var(id), m)]),
+	P2=seq([send(P, e_pid(m), P), send(P, e_pid(n), P), recv(P, e_pid(m), id)]),
 	P3=seq([recv(n, e_pid(s), x)]),
 	T=(par([for(m, _, s, P1), sym(P, s, P2), for(n, _, s, P3)])),
 	Name='interleaved two-party ping'.
@@ -224,7 +268,7 @@ rewrite_query(T, skip, Ind, Name) :-
 
 rewrite_query(T, Rem, Ind, Name) :-
 	Ind=[],
-	DB=seq([  recv(db, id),
+	DB=seq([  recv(db, e_pid(s), id),
 		  send(db, e_var(id), res)
 	       ]),
 	Client=
@@ -238,7 +282,7 @@ rewrite_query(T, Rem, Ind, Name) :-
 
 rewrite_query(T, Rem, Ind, Name) :-
 	Ind=[],
-	DB=seq([  recv(db, id),
+	DB=seq([  recv(db, e_pid(s), id),
 		  send(db, e_var(id), res)
 	       ]),
 	Client=seq([
@@ -253,16 +297,43 @@ rewrite_query(T, Rem, Ind, Name) :-
         Map-reduce
 ==========================*/
 
+rewrite_query(T, Rem, Ind, Name) :-
+	Ind=[(q,m)],
+	P1A=seq([recv(q, e_pid(s), id), send(q, e_var(id), 0)]),
+	P2=seq([assign(P, stop, 0), W]),
+	W=while(P, stop=0, seq([
+				send(P, e_pid(q), P), recv(P, stop),
+				if(P, stop=0, send(P, e_pid(m), P))
+			       ])),
+	P3=seq([recv(m, e_pid(s), id)]),
+	T=(par([seq([iter(q, k, P1A)]), sym(P, s, P2), iter(m, k, P3)])),
+	Rem=sym(P,s, W),
+	Name=map-reduce-simple.
+
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[(q,m)],
 	P1A=seq([recv(q, id), send(q, e_var(id), 0)]),
-	P1B=seq([recv(q, id), send(q, e_var(id), 1)]),
+	P1B=seq([recv(q, e_pid(s), id), send(q, e_var(id), 1)]),
 	P2=seq([assign(P, stop, 0), W]),
 	W=while(P, stop=0, seq([send(P, e_pid(q), P), recv(P, stop),
 				if(P, stop=0, send(P, e_pid(m), P))])),
 	P3=seq([recv(m, e_pid(s), id)]),
 	T=(par([seq([iter(q, k, P1A), for(q, _, s, P1B)]), sym(P, s, P2), iter(m, k, P3)])),
-	Name='map-reduce'.
+	Name=map-reduce.
+
+
+rewrite_query(T, skip, Ind, Name) :-
+	P=p,
+	Client=
+	seq([
+	     ite(P, ndet, assign(P, act, alloc), assign(P, act, lookup)),
+	     send(P, e_pid(db), query, pair(act, P))
+	    ]),
+	Server=seq([
+		    recv(db, e_pid(s), query, pair(act, id))
+		   ]),
+	T=par([Client, Server]),
+	Name=db-easy.
 
 /*========
  Conc DB
