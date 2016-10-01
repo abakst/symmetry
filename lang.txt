@@ -138,7 +138,7 @@ Iter-repeat:
 p:A||q:B,G,D,X ~~> skip||q:B,G,(D;D'),X'[p:=Tp][q:=Tq]
 ----------------------------------------------------
 p:for (i:I): A || q:B,G,D,X
-~~> q:B,G,(D;for(i:I): D'),X'[p:=for(i:I) Tp][q:=for(i:I):Tq]
+~~> q:B,G,(D;for(i:I): D'),X'[p:=for(i:I) T(p)][q:=for(i:I):Tq]
 
 =======
 Iter-match:
@@ -159,10 +159,23 @@ sym-repeat:
 
 q fresh
 A || Π(p:P): B(p),G,D,X
-~~> skip || B(p*) || Π(p:P\{p*}),G,(D;D'(p*)),X'[p*:=T(p*)]
+~~> skip || B(p*) || Π(p:P\{p*})B(p) ,G,(D;D'(p*)),X'[p*:=T(p*)]
 -----------------------------------------------------------
 A || Π(p:P): B(p),G,D,X
 ~~> Π(p:P) B(p),G,(D;p:=*;D'(p)),X'[q:=nondet(p∈P, T(p))]
+
+
+========
+sym-remove
+========
+
+C<B
+A || Π(p:P): B(p),G,D,X ~~> A || C(p*) || Π(p:P\{p*})B(p),G,(D;D'(p*)), X[p*=T(p*)]
+-----------------------------------------------------------
+A || Π(p:P): B(p),G,D,X
+~~> A || A || Π(p:P):C(p),G,(D;for(p:P):D'(p)),X[Π(p:P) T(p)]
+
+
 
 ==========
 unfold-send:
