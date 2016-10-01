@@ -1,0 +1,147 @@
+#========
+# Language
+#========
+x   ∈ Identifier
+p,q ∈ PID Identifier
+I   ∈ Set Identifier
+P   ∈ PidSet Identifier
+
+Processes:
+s ::= sendₚ(e1,e2)       -- p sends e2 to e1
+    | xₚ := recvFromₚ(*) -- p recvs message from any process, bind to x
+    | xₚ := recvFromₚ(e) -- p recvs message from the pid e, bind to x 
+    | xₚ := nondet(P)    -- x is chosen from P nondeterministically
+    | for (xₚ : I): s    -- iteration over collection
+    | while (e): s       -- iteration
+    | ite(e, s, s)       -- case-split
+    | skip               -- no-op
+    | Σ(p:P). s(p)       -- "sum" process over members of P
+    | Π(p:P). s(p)       -- "product" of all processes in P
+    | (s || s)           -- parallel composition
+    | s;s                -- sequential composition
+
+
+#===============
+# Rewrite Rules 
+#===============
+
+#=======
+# Basic 
+#=======
+
+=====
+Send:
+=====
+
+sendₚ(q,v); G[(p,q) := M],D,X ~~> skip,G[(p,q) := M·v],D,X
+
+=========
+recvFrom:
+=========
+
+xₚ:=recvFromₚ(q), G[(q,p) := v·M],D,X ~~> skip,G[(q,p) := M],(D;x:=v),X
+
+======
+const:
+======
+
+D |= x = c
+x is not assigned in P
+----------------------------
+P(x),G,D,X ~~> P(c),G,D,X
+
+=========
+Context
+=========
+
+(A||C),G,Δ,X ~> (A'||C'),G',Δ',X'
+--------------------------
+(A;B||C;D),G,Δ,X ~> (A';B||C';D) ,G',Δ',X'
+
+============
+## Unfolding
+============
+
+=============
+recvWildcard:
+=============
+
+G ⊢ p : conc
+-------------
+G ⊢ B ▹p B
+
+G ⊢ q : fresh
+-----------------------
+G ⊢ Σ(p:P).B(p) ▹q B(q)
+
+G ⊢ q : fresh
+G ⊢ 0 ⊂ P
+------------------------------------------
+G ⊢ Π(p:P).B(p) ▹q B(q) || Π(p:P\{q}).B(p)
+
+G ⊢ B ▹q B' B' ⊒ B''
+xₚ := recvFromₚ(q)||B',G,D,X ~~> B'',G',D',X'
+-----------------------------------------------
+xₚ := recvFrom(*)||B,G,D,X ~~> B'',G',D',X'
+
+=======
+## Ext
+=======
+
+p: send(x,y),G,D,X ~~> skip,G,D,X || p: send(x,y)
+
+=================
+Compose-External:
+=================
+
+B || X',G,D,0 ~~> skip,G,(D;D''),0
+A,G,D,X       ~~> C,G,(D;D'),X'
+------------------------------------------------
+A||B,G,D,X ~~> C,G,(D;D'; D''),0
+
+#======
+## Loops
+#======
+
+===
+For:
+===
+
+p* fresh
+P* fresh
+G' = G ∪ {0 ⊂ P* ⊆ P} ∪ {p* ∈ P*}
+A(p*) || Π(p:P*): B(p),G',D,X
+~~> skip || Π(p:P*\{q}): B(p) || C(q),G',(D;D'(q)),X'[q:=T(q)]
+------------------------------------------------------------
+for (p:P): A(p) || Π(p:P) B(p),G,D,X
+~~> Π(p:P) C(p),G,(D;for(p:P): D(p)),X'[P := Π(p:P) T(p)]
+
+===========
+While-exit:
+===========
+
+D  |= e
+D' |= ¬e
+A||B,G,D,X ~~> skip||C,G,D',X'
+------------------------------------
+while (e) A || B,G,D,X ~~> C,G,D',X'
+
+=====================
+While-continue: [lift X and D]?
+=====================
+
+D  |= e
+D' |= e
+C < B
+A || B,G,D,X ~~> skip || C,G,D',X'
+----------------------------------------------------
+while (e): A || B,G,D,X ~~> while(e): A || C,G,D',X'
+
+============
+Iter-repeat:
+============
+
+p:A||q:B,G,D,X ~~> skip||q:B,G,(D;D'),X || Y
+----------------------------------------------------
+p:for (i:I): A || q:B,G,D,X
+~~> q:B,G,(D;for(i:I): D'),X || Lift(I,Y)
