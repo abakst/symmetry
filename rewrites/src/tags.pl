@@ -3,6 +3,7 @@
 		 tag_recvs/3,
 		 check_tags/1,
 		 tag_term/2,
+		 get_proc/2,
 		 check_race_freedom/2,
 		 tags_independent/2
 		 ], [hidden(false)]).
@@ -170,26 +171,26 @@ sub_sym_set(P, Proc, P1) :-
 	;   P1=P
 	).
 
-get_procs(T) :-
-	/*Recursively traverse T and assert proc(P), if process P performs an action.*/
+assert_procs(T) :-
 	(   simple(T) ->
 	    true
-	;   functor(T, F, _),
-	    ord_member(F, [assign,if,ite,iter,recv,send,while])->
-	    arg(1, T, P),
-	    assert(proc(P))
-	;   functor(T, for, 4)->
-	    arg(1, T, M),
-	    arg(3, T, P),
-	    assert(proc(P)),
-	    assert(proc(M))
-	;   functor(T, sym, 3),
-	    arg(2, T, P),
+	;   get_proc(T, P),
 	    assert(proc(P))
 	;   functor(T, nondet, _)
 	;   (   foreacharg(Arg, T)
-	    do  get_procs(Arg)
+	    do  assert_procs(Arg)
 	    )
+	).
+
+get_proc(T, P) :-
+	/*Recursively traverse T and assert proc(P), if process P performs an action.*/
+	(   functor(T, F, _),
+	    ord_member(F, [assign,if,ite,iter,recv,send,while])->
+	    arg(1, T, P)
+	;   functor(T, for, 4)->
+	    arg(1, T, P)
+	;   functor(T, sym, 3),
+	    arg(2, T, P)
 	).
 
 
@@ -204,7 +205,7 @@ tags_independent(P, Q) :-
 
 tag_term(T, T2)	:-
 	cleanup,
-	get_procs(T),
+	assert_procs(T),
 	tag_sends(T, none, T1),
 	tag_recvs(T1, none, T2).
 

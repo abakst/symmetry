@@ -50,6 +50,26 @@ rewrite_query(T, Rem, Ind, Name) :-
 	Rem=sym(P, set_minus(s1, Q), send(P, e_pid(m), v)),
 	Name=unfold-recv.
 
+/*==============
+while-loop-once:
+================*/
+rewrite_query(T, Rem, Ind, Name) :-
+	Ind=[],
+	P1=seq([
+		recv(m, e_pid(s), id),
+		send(m, e_var(id), m)
+		]),
+	P2=while(P, true,
+		 seq([
+		      send(P, e_pid(m), P),
+		      recv(P, e_pid(m), v)
+		     ])
+		),
+	T= par([P1, sym(P, s, P2)]),
+	Rem=sym(P, s, P2),
+	Name=while-sym-once.
+
+
 /*===========
  For-loop
 ===========*/
@@ -68,6 +88,41 @@ rewrite_query(T, skip, Ind, Name) :-
 	P2=seq([send(P,e_pid(m), P), recv(P, x)]),
 	T=(par([for(m, _, s, P1), sym(P, s, P2)])),
 	Name=unfold-for.
+
+/*===========
+ sym-while
+===========*/
+
+rewrite_query(T, Rem, Ind, Name) :-
+	Ind=[],
+	DB=seq([  recv(db, e_pid(s), id),
+		  send(db, e_var(id), res)
+	       ]),
+	Client=seq([
+		    send(P, e_pid(db), P),
+		    recv(P, v)
+		   ]),
+	T=(par([sym(P, s, Client),while(db, true, DB)])),
+	Name='simple_while_in_proc',
+	Rem=while(db, true, DB).
+
+/*==============
+Iter-loop:
+================*/
+rewrite_query(T, Rem, Ind, Name) :-
+	P1=seq([
+		recv(m, e_pid(s), id),
+		send(m, e_var(id), m)
+		]),
+	P2=while(P, true,
+		 seq([
+		      send(P, e_pid(m), P),
+		      recv(P, e_pid(m), v)
+		     ])
+		),
+	T= par([iter(m, k, P1), sym(P, s, P2)]),
+	Rem=sym(P, s, P2),
+	Name=iter-while-simple.
 
 
 /*==============
@@ -266,32 +321,6 @@ rewrite_query(T, skip, Ind, Name) :-
 	Name='simple ite'.
 
 
-rewrite_query(T, Rem, Ind, Name) :-
-	Ind=[],
-	DB=seq([  recv(db, e_pid(s), id),
-		  send(db, e_var(id), res)
-	       ]),
-	Client=
-	     seq([
-		  send(P, e_pid(db), P),
-		  recv(P, v)
-		 ]),
-	     T=(par([for(db, _, s, DB), sym(P, s, while(P, true, Client))])),
-	     Rem=sym(P, s, while(P, true, Client)),
-	     Name='simple for-while'.
-
-rewrite_query(T, Rem, Ind, Name) :-
-	Ind=[],
-	DB=seq([  recv(db, e_pid(s), id),
-		  send(db, e_var(id), res)
-	       ]),
-	Client=seq([
-		    send(P, e_pid(db), P),
-		    recv(P, v)
-		   ]),
-	T=(par([while(db, true, DB), sym(P, s, Client)])),
-	Name='simple_while_in_proc',
-	Rem=while(db, true, DB).
 
 /*=========================
         Map-reduce
@@ -312,7 +341,7 @@ rewrite_query(T, Rem, Ind, Name) :-
 
 rewrite_query(T, skip, Ind, Name) :-
 	Ind=[(q,m)],
-	P1A=seq([recv(q, id), send(q, e_var(id), 0)]),
+	P1A=seq([recv(q, e_pid(s), id), send(q, e_var(id), 0)]),
 	P1B=seq([recv(q, e_pid(s), id), send(q, e_var(id), 1)]),
 	P2=seq([assign(P, stop, 0), W]),
 	W=while(P, stop=0, seq([send(P, e_pid(q), P), recv(P, stop),
