@@ -27,6 +27,7 @@ data MainOptions = MainOptions { optVerify  :: Bool
                                , optProcess :: Bool
                                , optDir     :: String
                                , optModel   :: Bool
+                               , optQuiet   :: Bool
                                }
 
 instance Options MainOptions where
@@ -39,6 +40,7 @@ instance Options MainOptions where
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
                   <*> simpleOption "outdir" ".symcheck" "Directory to store intermediate results"
                   <*> simpleOption "dump-model" False "<disabled>"
+                  <*> simpleOption "quiet" False "Don't print result"
 
 runCmd               :: Bool -> String -> FilePath -> CreateProcess -> IO Bool
 runCmd verb pre wd c
@@ -126,15 +128,20 @@ runQC verb fp cwd
   where
     cmd = shell (printf "runghc %s" fp)
 
+runProlog :: Bool -> FilePath -> IO Bool
+runProlog verb cwd
+  = runCmd verb "Running Rewriter" cwd cmd
+  where
+    cmdStr = "sicstus --noinfo --nologo --goal \"main,halt.\" -l symverify.pl"
+    cmd    = shell cmdStr
+
 runVerifier opt outd
  | optVerify opt && optQC opt =
     runQC (optVerbose opt) (outd </> "QC.hs") outd
  | optVerify opt =
     runLiquid (optVerbose opt) (outd </> "SymVerify.hs") outd
- | optRewrite opt =
-     let cmd = "sicstus --noinfo --nologo --goal \"main,halt.\" -l symverify.pl" :: String
-     in runCmd True "Testing rewrite..." outd $
-          shell $ printf "echo '$> %s'; %s" cmd cmd
+ | optRewrite opt
+   = runProlog (optVerbose opt) outd
  | otherwise = return True
   
 
@@ -182,7 +189,7 @@ checkerMain main
       es <- forM cfgs $ run1Cfg optsImplied outd
       let status = and es
 
-      when (optVerify opts) $ report status
+      when (not (optQuiet opts)) $ report status
 
       unless status exitFailure
       exitSuccess
