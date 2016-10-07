@@ -311,7 +311,7 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
     where
       var    = prologRecv (t,pat)
       who    = toPrologExpr p
-      ty     = ty_rule [toPrologExpr t]
+      ty     = toPrologExpr t
       whence = toPrologExprPid e
   toPrologExpr (p, Recv{rcvMsg = (t,pat)})
     = recv_t_rule [who,ty,var]
@@ -394,7 +394,7 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
 
   toPrologExpr (p, NonDet { nonDetBody = [s1,s2] })
     = ite_rule [ toPrologExpr p
-               , mkQuery "nondet" 1 [PLNull]
+               , PLTerm "nondet"
                , toPrologExpr (p,s1)
                , toPrologExpr (p,s2)
                ]
