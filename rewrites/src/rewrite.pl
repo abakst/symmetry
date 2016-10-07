@@ -13,7 +13,9 @@
 :- use_module('tags.pl', [
 			  check_race_freedom/2,
 			  tags_independent/2,
-			  get_proc/2
+			  get_proc/2,
+			  parse_send/6,
+			  parse_recv/6
 			 ]).
 
 :- dynamic independent/2, /* independent(p,q): processes p and q are independent.*/
@@ -46,7 +48,7 @@ send(p, x, type, v)  : send a message of type "type".
  for(m, P, S, A)     : process m executes A for each process p in s.
  iter(p, k, A)       : process p executes A k-times.
  while(p, cond, A)   : process p executes A while cond is true.
- nondet(P, A)        : process P is chosen non-deterministically in A.
+ nondet(P, s, A)        : process P is chosen non-deterministically in A.
  assign(p, x, v)     : process p assigns value v to variable x.
  ite(P, Cond, A, B)  : process p executes A if Cond holds and B, otherwise.
  if(P, Cond, A)      : Short for ite(P, Cond, A, skip).
@@ -62,8 +64,6 @@ send(p, x, type, v)  : send a message of type "type".
  prop_subset(P, Q)   : P ⊂ Q.
  set_minus(P, Q)     : P\{Q}.
  assume(cons)        : assume cons holds.
-
-
 
 Terms are expected to be of the form par([ seq([..,]), ...]).
 ==============================================================================
@@ -163,27 +163,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ),
 	  update_constants(P, X, V, Rho, Rho1),
 	  Psi=Psi1
-	/*
-	send(p, x, v)
-	*/
-	; (   functor(T, send, 3) ->
-	      T= send(P, PidExp, V)
-	  ;   functor(T, send, 4) ->
-	      T= send(P, PidExp, Type, V)
-	  ),
-	  parse_pid_exp(PidExp, P, Rho, Q),
-	  (   avl_fetch(P-Q, Gamma, Vs)
-	  ;   Vs=[]
-	  ),
-	  substitute_constants(V, P, Rho, V1),
-	  append(Vs, [V1-Type], Vs1),
-	  avl_store(P-Q, Gamma, Vs1, Gamma1),
-	  T1=skip,
-	  Delta1=Delta,
-	  Rho1=Rho,
-	  Psi=Psi1
-	/*
 
+	/*
 	sym(P, S, A): reduce A in sym(P, S, A)
 	*/
 	; functor(T, sym, 3),
@@ -335,6 +316,20 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Rho1=Rho,
 	  Psi1=Psi
 
+	/*
+	nondet(P, S, A): instantiate P to a fresh constant in set S.
+	*/
+	; functor(T, nondet, 3) ->
+	  T = nondet(P, S, A),
+	  fresh_pred_sym(Proc),
+	  assert(is_valid(element(Proc, S))),
+	  assert(is_valid(fresh(Proc))),
+	  copy_instantiate(A, P, Proc, T1),
+	  Gamma1=Gamma,
+	  Delta1=Delta,
+	  Rho1=Rho,
+	  Psi1=Psi
+
 	/**********************
 	        Unfolding
 	**********************/
@@ -396,13 +391,15 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Sym=sym(Q, S, B),
 	  fresh_pred_sym(Proc),
 	  fresh_pred_sym(S1),
+	  assert(symset(Proc, S)),
 	  copy_instantiate(A, P, Proc, A1),
 	  assert(is_valid(prop_subset(emp, S1))),
 	  assert(is_valid(subset(S1, S))),
 	  assert(is_valid(element(Proc, S1))),
           TA=par([A1, sym(Q, S1, B)]),
 	  (   TB=par([sym(Q, set_minus(S1, Proc1), B), C])
-	  ;   TB=sym(Q, set_minus(S1, Proc1), B)
+	  ;   TB=sym(Q, set_minus(S1, Proc1), B),
+	      C=skip
 	  ),
 	  rewrite(TA, Gamma, [], Rho, Psi, TB, Gamma, Delta2, Rho2, Psi2) ->
 	  clear_talkto,
@@ -460,7 +457,6 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
         ;  functor(T, par, 2),
            arg(1, T, B),
 	   arg(2, T, TA),
-           functor(B, F, _),
            functor(TA, sym, 3),
            TA=sym(P, S, A),
            TA1=par(sym(P, set_minus(S, Proc), A), AProc),
@@ -480,7 +476,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	   append(Delta, [nondet(Fresh1, seq(Delta3))], Delta1),
 	  (   avl_delete(Proc, Psi2, Ext0, Psi3) ->
 	      substitute_term(Fresh2, Proc, Ext0, Ext),
-	      add_external(Psi3, nondet(Fresh2, seq(Ext)), S, Psi1),
+	      add_external(Psi3, nondet(Fresh2, S, seq(Ext)), S, Psi1),
 	      assert(symset(Fresh2, S))
 	  ;   Psi1=Psi
 	  )
@@ -559,7 +555,21 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	       add_external(Psi3, sym(P, S, seq(Ext)), S, Psi1)
 	   ;   Psi1=Psi
 	   )
+	/*
+	send(p, x, v)
+	*/
+	; parse_send(T, Rho, P, Q, Type, V),
+	  (   avl_fetch(P-Q, Gamma, Vs)
+	  ;   Vs=[]
+	  ),
 
+	  substitute_constants(V, P, Rho, V1),
+	  append(Vs, [V1-Type], Vs1),
+	  avl_store(P-Q, Gamma, Vs1, Gamma1),
+	  T1=skip,
+	  Delta1=Delta,
+	  Rho1=Rho,
+	  Psi=Psi1
         /*
 	par(iter(p, k, A), iter(q, k, B) ): merge two iter loops.
 	*/
@@ -584,16 +594,16 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  arg(1, T, A),
 	  arg(2, T, TB),
 	  functor(TB, while, 3),
-	  TB=while(P, Cond, B),
-	  check_cond(Cond, P, Rho),
-	  empty_avl(Psi),
+          TB=while(P, Cond, B),
+          check_cond(Cond, P, Rho),
+          mk_pair(A, TB, _, Switched),
           mk_pair(A, B, Pair, Switched),
-          unswitch_pair(Pair1, Switched, par(A1, skip)),
-	  rewrite(Pair, Gamma, [], Rho, Psi, Pair1, Gamma, Delta2, Rho1, Psi1)->
-%          smaller_than(A1, A) ->
+          mk_pair(A1, skip, Pair1, Switched),
+	  empty_avl(Psi),
+	  rewrite(Pair, Gamma, [], Rho, Psi, Pair1, Gamma2, Delta2, Rho1, Psi1)->
 	  T1=par(A1, TB),
 	  append(Delta, [Delta2], Delta1),
-          Gamma1=Gamma
+          Gamma1=Gamma2
 	  /*
 	  par(A, B): rewrite ordered pairs.
 	  */
@@ -621,7 +631,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	).
 
 rewrite(T, Gamma, Delta, Rho, Psi, T2, Gamma2, Delta2, Rho2, Psi2) :-
-	(   match(T, T2),
+	(   subsumed_by(T, T2),
 	    Gamma=Gamma2, Delta=Delta2, Rho=Rho2, Psi= Psi2
 	;   rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1)->
 	    sanity_check([T1, Gamma1, Delta1, Rho1, Psi1]),
@@ -637,18 +647,27 @@ smaller_than(T, T1) :-
 	    contains_term(T, T1)
 	).
 
-match(T, T1) :-
-	/*
-	Try to match T and T1 by permuting the elements of L in par(L).
-	*/
+subsumed_by(T, T1) :-
+/* All behaviour of T is also behaviour of T1. */
 	(   T=T1->
+	    true
+	;   parse_recv(T,  _, P, Q, Type, V),
+	    parse_recv(T1, _, P, Q, Type, V)->
 	    true
 	;   functor(T, par, 1),
 	    functor(T1, par, 1),
 	    T=par(L),
 	    T1=par(L1),
-	    permutation(L, L1)
+	    permutation(L1, L2),
+	    subsumed_by(L, L2)
+	;   same_functor(T, T1),
+	    (   foreacharg(Arg, T),
+		foreacharg(Arg1, T1)
+	    do  subsumed_by(Arg, Arg1)->
+		true
+	    )
 	).
+
 
 mk_pair(A, B, Pair, Switched) :-
 	(   Pair=par(A, B),
@@ -691,44 +710,6 @@ unpack_par(T, L) :-
 	    append([L1,L2],L)
 	).
 
-
-parse_send(T, Rho, P, Q, Type, V) :-
-	/*
-	send(p, q, type, v): p sends a message v of type "type" to process q.
-	*/
-	(   functor(T, send, 3) ->
-	    T=send(P, Exp, V)
-	;   functor(T, send, 4) ->
-	    T=send(P, Exp, Type, V)
-	),
-	parse_pid_exp(Exp, P, Rho, Q).
-
-
-parse_recv(T, Rho, P, Q, Type, V) :-
-	/*
-	recv(p, q, type, v): p receives a message v of type "type" from process q.
-	*/
-	(   (   functor(T, recv, 2)->
-		T=recv(P, V)
-	    ;	functor(T, recv, 3)->
-		T=recv(P, Exp, V),
-		(   Exp=type(Type) ->
-		    true
-		;   PidExp=Exp
-		)
-	    ;   functor(T, recv, 4) ->
-		T=recv(P, PidExp, Type, V)
-	    ),
-	    atomic(P),
-	    (   nonvar(PidExp) ->
-		parse_pid_exp(PidExp, P, Rho, Q0),
-		(   symset(Q, Q0)
-		;   Q=Q0
-		)
-	    ;   true
-	    )
-	).
-
 is_recv_from(T) :-
   /*
 	Check that T is a receive from a specific process.
@@ -742,19 +723,6 @@ is_recv_from(T) :-
   ;   F==e_pid
   ).
 
-parse_pid_exp(PidExp, P, Rho, Q) :-
-	/*
-	If PidExp is of the form e_pid(q), return q.
-	If PidExp is of the form e_var(x) return rho(p, x).
-        Throws an exception otherwise.
-	*/
-	(   functor(PidExp, e_pid, 1) ->
-	    arg(1, PidExp, Q)
-	;   functor(PidExp, e_var, 1) ->
-	    arg(1, PidExp, X),
-	    avl_fetch(P-X, Rho, Q)
-	;   throw(parse-pid-error(PidExp))
-	).
 
 update_constants(P, X, V, Rho, Rho1) :-
 	(   atomic(V) ->
@@ -852,10 +820,8 @@ format_result(Goal, Res) :-
 	;   Res='\e[31mfailed\e[0m'
 	).
 
-here(X) :- X=1.
-
 unit_test :-
-%	consult([examples]),
+	consult([examples]),
 	format('================================================================~n',[]),
 	format('~p:~30|~p~t~10+~p~t~13+~p~t~70|~n', ['Name','rewrite','race-check','time']),
 	format('================================================================~n',[]),
@@ -867,12 +833,14 @@ unit_test :-
 	do (
 	     set_output(Null),
 	     cleanup,
-	     statistics(runtime, [T0|_]),
-	     format_result(catch(check_race_freedom(T, _), _, fail), Race),
-	     format_result(rewrite(T, Rem, Ind, _, _, _), Rewrite),
-	     statistics(runtime, [T1|_]),
-	     Time is (T1-T0),
+	     statistics(runtime, [Time0|_]),
+	     format_result(catch(check_race_freedom(T, T1), _, fail), Race) ->
+%	     findall(P-Q, tags_independent(P, Q), IndSet),
+	     format_result(rewrite(T1, Rem, Ind, _, _, _), Rewrite)->
+	     statistics(runtime, [Time1|_]),
+	     Time is (Time1-Time0),
 	     set_output(Out),
+%	     format('Independent processes:~p~n',[IndSet]),
 	     format('~p:~t~30|~p~t~21+~p~t~18+~t~d~3+~t ms~50|~n', [Name,Rewrite,Race,Time])
 	   )
 	),
