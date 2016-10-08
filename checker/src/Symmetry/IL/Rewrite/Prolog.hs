@@ -71,7 +71,7 @@ sym_rule     = mkQuery "sym"    3 -- sym(P, S, A)
 for_rule     = mkQuery "for"    4 -- for(m, P, S, A)
 iter_rule    = mkQuery "iter"   3 -- iter(p, k, A)
 while_rule   = mkQuery "while"  3 -- while(p, cond, A)
-nondet_rule  = mkQuery "nondet" 2 -- nondet(P, A)
+nondet_rule  = mkQuery "nondet" 3 -- nondet(X, S, A(X))
 assign_rule  = mkQuery "assign" 3 -- assign(p, x, v)
 ite_rule     = mkQuery "ite"    4 -- ite(P, Cond, A, B)
 if_rule      = mkQuery "if"     3 -- if(P, Cond, A)
@@ -403,10 +403,10 @@ instance P.Pretty a => ToPrologExpr (Pid, Stmt a) where
                           , chooseSet = i
                           , chooseBody = s
                           })
-    = seq_rule [ PLList [ nondet_rule [toPrologExpr x, toPrologExpr i]
-                        , toPrologExpr (p, s)
-                        ]
-               ]
+    = nondet_rule [ toPrologExpr (upperV x)
+                  , toPrologExpr i
+                  , toPrologExpr (p, s)
+                  ]
 
   toPrologExpr p  = unhandled p
 
