@@ -6,20 +6,35 @@ p,q ∈ PID Identifier
 I   ∈ Set Identifier
 P   ∈ PidSet Identifier
 
-Processes:
-s ::= sendₚ(e1,e2)       -- p sends e2 to e1
-    | xₚ := recvFromₚ(*) -- p recvs message from any process, bind to x
-    | xₚ := recvFromₚ(e) -- p recvs message from the pid e, bind to x 
+- all variables are indexed by owning process
+- s(p) means the form (statement) where p appears free, so
+  s(q) means substituting q for p in s
+- assume an extension operator ∘ so that we can extend processes, e.g.
+  (p: A || q: B) ∘ (p: X || q: Y) = (p: A; X || q: B; Y)
+
+e :: c         -- const
+   | x         -- var
+   | e `op` e  -- prim operation
+   | *∈I       -- nondet value
+
+Statements:
+s ::= sendₚ(e1,e2)       -- send e2 to e1
+    | xₚ := e
+    | xₚ := recvFrom(*)  -- recv message from any process, bind to x
+    | xₚ := recvFrom(e)  -- recv message from the pid e, bind to x 
     | xₚ := nondet(P)    -- x is chosen from P nondeterministically
     | for (xₚ : I): s    -- iteration over collection
     | while (e): s       -- iteration
     | ite(e, s, s)       -- case-split
     | skip               -- no-op
-    | Σ(p:P). s(p)       -- "sum" process over members of P
-    | Π(p:P). s(p)       -- "product" of all processes in P
-    | (s || s)           -- parallel composition
     | s;s                -- sequential composition
 
+proc ::= p ▹ s        -- single proc
+       | Σ(p:P). proc -- "sum" process over members of P
+       | Π(p:P). proc -- "product" of all processes in P
+
+Process Soup:
+  P ::= - | proc | (P || P)
 
 #===============
 # Rewrite Rules 
@@ -29,17 +44,21 @@ s ::= sendₚ(e1,e2)       -- p sends e2 to e1
 # Basic 
 #=======
 
-=====
+======
 Send:
-=====
+======
 
-sendₚ(q,v); G[(p,q) := M],D,X ~~> skip,G[(p,q) := M·v],D,X
+Δ ⊨ p does not send to q in X
+------------------------------------------------------------
+p ▹ send(q,v),G[(p,q) := M],D,X ~~> skip,G[(p,q) := M·v],D,X
 
 =========
 recvFrom:
 =========
 
-xₚ:=recvFromₚ(q), G[(q,p) := v·M],D,X ~~> skip,G[(q,p) := M],(D;x:=v),X
+Δ ⊨ q does not send to p in X
+-------------------------------------------------------------------------
+p ▹ x:=recvFrom(q), G[(q,p) := v·M],D,X ~~> p ▹ skip,G[(q,p) := M],(D;x:=v),X
 
 ======
 const:
@@ -47,16 +66,16 @@ const:
 
 D |= x = c
 x is not assigned in P
-----------------------------
+-------------------------
 P(x),G,D,X ~~> P(c),G,D,X
 
-=========
+========
 Context
-=========
-
-(A||C),G,Δ,X ~> (A'||C'),G',Δ',X'
+========
+A ⊒ A'   C ⊒ C'
+(A||C),G,Δ,X ~~> (A'||C'),G',Δ',X'
 --------------------------
-(A;B||C;D),G,Δ,X ~> (A';B||C';D) ,G',Δ',X'
+(A∘B||C∘D),G,Δ,X ~~> (A'∘B||C'∘D) ,G',Δ',X'
 
 ============
 ## Unfolding
@@ -68,40 +87,71 @@ recvWildcard:
 
 G ⊢ p : conc
 -------------
-G ⊢ B ▹p B
+G ⊢ B ▹(l,p) B, C, skip
 
 G ⊢ q : fresh
------------------------
-G ⊢ Σ(p:P).B(p) ▹q B(q)
+B ⊐ C or P ∈ ProcSets(G) (i.e. P is "everyone")
+-------------------------------
+G ⊢ Σ(p:P).B(p) ▹(l,q) B(q), C, q := P
 
 G ⊢ q : fresh
-G ⊢ 0 ⊂ P
+G ⊢ 0 ⊂ P\Q
+   B ⊐ C and ∀q_l' ∈ Q, l' = l
+or Q = ∅ (i.e. P is "everyone")
 ------------------------------------------
-G ⊢ Π(p:P).B(p) ▹q B(q) || Π(p:P\{q}).B(p)
+G ⊢ Π(p:P\Qₗ).B(p) ▹(l,q) B(q) || Π(p:P\(Qₗ ∪ {q})).B(p), C, q := P
 
-G ⊢ B ▹q B' B' ⊒ B''
-xₚ := recvFromₚ(q)||B',G,D,X ~~> B'',G',D',X'
+G ⊢ B ▹(l,q) B',B'',δ
+p ▹ xₚ := recvFrom_l(q)||B',G,D;δ,X ~~> B'',G,D',X
 -----------------------------------------------
-xₚ := recvFrom(*)||B,G,D,X ~~> B'',G',D',X'
+p ▹ xₚ := recvFrom_l(*)||B,G,D,X ~~> B'',G,D',X
 
 =======
 ## Ext
 =======
 
-p: send(x,y),G,D,X ~~> skip,G,D,X || p: send(x,y)
+Canonical form for X:
+X ≡ X' || p ▹ s and p ▹ t ∉ X
+==> Γ ⊢ X ⊕ p ▹ s' ≡ X' || p ▹ s;s'
+
+xₚ*, yₚ* fresh  Γ ⊢ X' ≡ X ⊕ p: send(x*,y*)
+-------------------------------------------------
+p: send(x,y),G,D,X ~~> skip,G,D;xₚ*:=x;yₚ*:=y,X'
 
 =================
 Compose-External:
 =================
 
-B || X',G,D,0 ~~> skip,G,(D;D''),0
-A,G,D,X       ~~> C,G,(D;D'),X'
-------------------------------------------------
-A||B,G,D,X ~~> C,G,(D;D'; D''),0
+A,G,D,0     ~~> skip,G,D',X
+B||X,G,D',0 ~~> skip,G,D'',0
+-------------------------------
+A||B,G,D,0  ~~> C,G,D'',0
 
 #======
 ## Loops
 #======
+
+=========
+sym-fold:
+=========
+
+q: B(q) || Π(p:P\{q}): B(p),G∪{q ∈ P},D,X||q:T(q) ~~> Π(p:P) B(p),G,D,X||Σ(p:P).T(p)
+
+========
+sym-remove
+========
+
+C ⊐ B
+P* fresh
+G' = G ∪ {∅ ⊆ P* ⊂ P}
+D1 = for(p:P*): D'(p)
+X1(P*) = X || i ▹ Tₐ || Π(p:P*). p ▹ T(p)
+i ▹ A || Π(p:P\P*): B(p),G',D;D1,X||X1
+~~> i ▹ A || C(p*) || Π(p:P\(P*∪{p*})).B(p),G',(D;D1;D'(p*)), X||X1||p* ▹ T(p)
+-----------------------------------------------------------
+A || Π(p:P): B(p),G,D,X
+~~> A || Π(p:P):C(p),G,(D;for(p:P):D'(p)),X1(P)
+
 
 ===
 For:
@@ -109,39 +159,55 @@ For:
 
 p* fresh
 P* fresh
-G' = G ∪ {0 ⊂ P* ⊆ P} ∪ {p* ∈ P*}
-A(p*) || Π(p:P*): B(p),G',D,X
-~~> skip || Π(p:P*\{q}): B(p) || C(q),G',(D;D'(q)),X'[q:=T(q)]
+G' = G ∪ {∅ ⊆ P* ⊂ P} ∪ {p* ∈ P*}
+D1 = for(p:P*): D'(p)
+X1(P*) = X || i ▹ for(p:P*): Tₐ || Π(p:P*). p ▹ T(p)
+A(p*) || Π(p:P\P*): B(p),G',D,X
+~~> skip || Π(p:P\(P*∪{q})): B(p) || C(q),G',(D;D'(q)),X||X1(P*)||p*▹T(p*)
 ------------------------------------------------------------
 for (p:P): A(p) || Π(p:P) B(p),G,D,X
-~~> Π(p:P) C(p),G,(D;for(p:P): D(p)),X'[P := Π(p:P) T(p)]
-
-===========
-While-exit:
-===========
-
-D  |= e
-D' |= ¬e
-A||B,G,D,X ~~> skip||C,G,D',X'
-------------------------------------
-while (e) A || B,G,D,X ~~> C,G,D',X'
-
-=====================
-While-continue: [lift X and D]?
-=====================
-
-D  |= e
-D' |= e
-C < B
-A || B,G,D,X ~~> skip || C,G,D',X'
-----------------------------------------------------
-while (e): A || B,G,D,X ~~> while(e): A || C,G,D',X'
+~~> Π(p:P) C(p),G,(D;for(p:P): D(p)),X ||X1(P)
 
 ============
 Iter-repeat:
 ============
 
-p:A||q:B,G,D,X ~~> skip||q:B,G,(D;D'),X || Y
+I* fresh
+i* fresh
+D1 = for(i:I*): D'
+X1(I*) = p:Tₚ || Π(i:I*). Σ(q:Q). T_b
+G' = G ∪ {i* ∉ I*}
+p:A||Π(q:Q):B,G',D;D1,X||X1(I*) ~~> skip||Π(q:Q):B,G',(D;D1;D'),X||X1(I*)||q* ▹ T_b
 ----------------------------------------------------
-p:for (i:I): A || q:B,G,D,X
-~~> q:B,G,(D;for(i:I): D'),X || Lift(I,Y)
+p:for (i:I): A || Π(q:Q).B,G,D,X ~~> Π(q:Q).B,G,(D;for(i:I): D'),X || X1(I)
+
+============
+Iter-match:
+============
+
+D1 = for(i:I*): D'
+X1 = p: for(i:I*): Tp || q: for(i:I*): Tq
+G' = G ∪ {i* ∉ I*}
+p:A||q:B,G,D;D1,X||X1(I*) ~~> skip,(D;D1;D'),X||X1(I*∪{i*})
+----------------------------------------------------
+p:for (i:I): A || q:for(i:I): B,G,D,X
+~~> skip,G,(D;for (i:I) D'),X||X1(I)
+
+===========
+While-exit:
+===========
+
+D  |= e and D' |= ¬e
+A||B,G,D,X ~~> skip||C,G,D',X'
+------------------------------------
+while (e) A || B,G,D,X ~~> C,G,D',X'
+
+===============
+While-continue:
+===============
+
+C ⊒ B
+D  |= e and D' |= e
+A || B,G,D,X ~~> skip || C,G,D',X'
+----------------------------------------------------
+while (e): A || B,G,D,X ~~> while(e): A || C,G,D',X'

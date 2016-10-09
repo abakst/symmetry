@@ -1,0 +1,294 @@
+=============
+# Soundness Proof
+=============
+
+A ⊐ B if ∃X s.t. A ≡ X;B and X ≢ skip.
+A ⊒ if A ≡ B or A ⊐ B.
+These can be lifted to P || Q ... 
+
+Definition: race freedom:
+  + unfolded proc (which are not in source programs)
+    if Π(p:P\Q) B || qₗ ▹ B'
+    either (1) Q = {qₗ} or
+           (2) B ⊐ B' and B' can not send to the receive labeled by l
+  
+
+Lemma:
+  Let P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ'.
+  If P : race-free then P' : race-free.
+Proof:
+  By induction on the derivation of ~~>, splitting cases on the last step.
+  (see ./race-free.txt)
+
+Definition: Left mover.
+  s is a left mover if
+  ∀ σ,μ,σ',μ',p,q,s,t, p != q ->
+        <σ,μ, p:t; q:s> ~~> <σ',μ',skip>
+     -> <σ,μ, q:s; p:t> ~~> <σ',μ',skip>
+
+Prop (1): "Send is a left mover"
+
+Prop (2): "An enabled RecvFrom is a left mover"
+  ∀ σ,μ,σ',μ',r,p,q,s,
+       r != q
+    -> ∃ m M, μ(p,q) = m · M
+    -> <σ,μ,q: r:s; q:x:=recvFrom(p)> ~~> <σ',μ',skip>
+    -> <σ,μ,q: q:x:=recvFrom(p); r:s> ~~> <σ',μ',skip>
+
+=============
+## Main Theorem
+=============
+Lemma:
+ If P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ' then,
+ (1)
+   ∀ σ,μ,Q,E
+       Δ;(Ψ;P∘Q | E) : race-free + Ψ ⊥ (P ∘ Q)
+    => <⊥, [[Γ]],  Δ ;(Ψ;P ∘Q | E)> -->* <σ,μ,skip>
+    => <⊥, [[Γ']], Δ';(Ψ;P'∘Q | E)> -->* <σ,μ,skip>.
+ (2)
+     Δ;(Ψ;P∘Q | E) : race-free => Δ;(Ψ;P'∘Q | E) : race-free
+
+ Where [[Γ]]     = "message buffers in Γ"
+
+## Proof
+
+Proof: by induction on derivation of - ~~> -, splitting cases on
+last step.
+
+# P = p:send(q,v):
+  To show:
+  Assuming that p:send(q,_) does not appear in Ψ,
+  (a)
+    ∀ σ,μ,Q,E
+       Δ;(Ψ;p:send(q,v);Q | E) : race-free
+    => (     <⊥, [[Γ]],  Δ;(Ψ;p:send(q,v) ∘Q | E)> -->* <σ,μ,skip>
+         => <⊥, [[Γ']], Δ;(Ψ;Q | E)>       -->* <σ,μ,skip> ).
+  (b)
+      Δ;(Ψ;p:send(q,v)∘Q | E) : race-free => Δ;(Ψ;Q | E) : race-free
+  
+  (a):
+  Assume 
+    <⊥, [[Γ]],  Δ ;(Ψ;p:send(q,v) ∘Q | E)> -->* <σ,μ,skip>
+  Since p:send(q,_) does not occur in Ψ, the effect of running
+  p:send(q,v);Ψ is the same as Ψ;p:send(q,v), so:
+    <⊥, [[Γ]],  Δ ;p:send(q,v);Ψ ∘Q | E)> -->* <σ,μ,skip>
+  And hence
+    <σ0, [[Γ]][(p,q) := [[Γ]](p,q)·v],  (Ψ;Q | E)> -->* <σ,μ,skip>
+  
+  Now, for all σ',μ', if
+    <⊥, [[Γ]](p,q) := [[Γ]](p,q)·v, (Δ;(Ψ;Q | E)> -->* <σ',μ',skip> 
+  Then, since Δ is a left mover, we have
+    <σ0, [[Γ]](p,q) := [[Γ]](p,q)·v, (Δ;(Ψ;Q | E)> -->* <σ',μ',skip>,
+  so instantiating σ' := σ and μ' := μ proves the goal
+
+(b): (Removing a send trivially preserves race freedom)
+
+# P = q: x:=recvFrom(p).
+
+  To show:
+  Assuming that p:send(q,_) does not appear in Ψ,
+  (a)
+    ∀ σ,μ,Q,E
+       Δ;(Ψ;q: x:=recvFrom(p);Q | E) : race-free
+    => (     <⊥, [[Γ]],  Δ;(Ψ;q: x:=recvFrom(p) ∘Q | E)> -->* <σ,μ,skip>
+         => <⊥, [[Γ']], Δ;(Ψ;Q | E)>       -->* <σ,μ,skip> ).
+  (b)
+      Δ;(Ψ;q: x:=recvFrom(p)∘Q | E) : race-free => Δ;(Ψ;Q | E) : race-free
+
+  Assume 
+    <⊥, [[Γ]],  Δ ;(Ψ;q:x:=recvFrom(p);Q | E)> -->* <σ,μ,skip>
+  Since p:send(q,_) does not occur in Ψ, the effect of running
+  q:x:=recvFrom(p);Ψ is the same as Ψ;q:x:=recvFrom(p), so since
+  recvFrom(p) and Ψ are left movers:
+    <⊥, [[Γ]],  Δ ;q:x:=recvFrom(p);Ψ;(Q | E)> -->* <σ,μ,skip>
+  And hence
+    <σ0, [[Γ]][(p,q) := tail [[Γ]](p,q)],  (Ψ;Q | E)> -->* <σ,μ,skip>
+  
+  Now, for all σ',μ', if
+    <⊥, [[Γ]][(p,q) := tail [[Γ]](p,q)], Δ;(Ψ;Q | E)> -->* <σ',μ',skip> 
+  Then, since Δ and Ψ are left movers, we have
+    <σ0, [[Γ]][(p,q) := tail [[Γ]](p,q)], Δ;Ψ;(Q | E)> -->* <σ',μ',skip>,
+  so instantiating σ' := σ and μ' := μ proves the goal
+
+  (b): (Removing a recv trivially preserves race freedom)
+
+# P  = P(x)
+  P' = P(v)
+
+  Since D |= x = v, and x is never assigned in P, in all executions of
+  (E | P(x) | [[Ψ]]) x is equal to v. Thus,
+    E | P(x) | [[Ψ]] ≡ E | P(v) | [[Ψ]],
+  which proves the goal.
+
+# Context
+ To show:
+ (a)
+   ∀ σ,μ,Q,E
+      Δ;(Ψ;(A∘B)∘Q | E) : race-free
+   => (     <⊥, [[Γ]],  Δ ;(Ψ;(A∘B) ∘Q | E)> -->* <σ,μ,skip>
+        => <⊥, [[Γ']], Δ';(Ψ;(A'∘B)∘Q | E)> -->* <σ,μ,skip> ).
+ (b)
+     Δ;(Ψ;(A∘B)∘Q | E) : race-free => Δ;(Ψ;(A'∘B)∘Q | E) : race-free
+
+  By IH:
+  (a)
+    ∀ σ,μ,Q,E
+       Δ;(Ψ;A∘Q | E) : race-free
+    => (     <⊥, [[Γ]],  Δ ;(Ψ;A ∘Q | E)> -->* <σ,μ,skip>
+         => <⊥, [[Γ']], Δ';(Ψ;A' ∘Q | E)> -->* <σ,μ,skip> ).
+  (b)
+     Δ;(Ψ;A∘Q | E) : race-free => Δ;(Ψ;A'∘Q | E) : race-free
+  So letting (Q := B∘Q) in the IH proves the goal
+
+- (P = xₚ := recvFromₚ(*)) recvWildCard
+  
+ By IH:
+   ∀ σ,μ,X,Y,E,
+   Δ;δ;(Ψ;(xₚ := recvFromₚ(q);X | B';Y) | E) : race-free
+     + Ψ does not send to  xₚ := recvFromₚ(q);X | B';Y
+   => (    <⊥, [[Γ]],  Δ ;(Ψ;xₚ := recvFromₚ(q);X | E)> -->* <σ,μ,skip>
+        => <⊥, [[Γ']], Δ';(Ψ;X | B'';Y | E)>            -->* <σ,μ,skip> ).
+
+ Assuming for some σ,μ,X,Y
+  (A) Δ;(Ψ;xₚ := recvFromₚ(*);X | B';Y | E) : race-free
+ we must show that
+   (    <⊥, [[Γ]],  Δ ;(Ψ;xₚ := recvFromₚ(*);X | E)> -->* <σ,μ,skip>
+     => <⊥, [[Γ']], Δ';(Ψ;X | B'';Y | E)>            -->* <σ,μ,skip> ).
+
+ By race-freedom we know that either
+  (C1) ∃q ∈ concrete-procs(Γ) such that p receives q's message
+ or
+  (C2) ∃q ∈ Q and Q ∈ pid-sets(Γ)
+
+  Splitting cases on G ⊢ B ▹q B':
+  - G ⊢ q : conc
+  Then B = B' and by (A)
+    Δ;(Ψ;(xₚ := recvFromₚ(q);X | B';Y) | E) : race-free
+ 
+  (The conclusion should follow from this, the IH, and from the
+  definition of race-freedom)
+
+  (These cases should follow since we are case splitting on the sending process)
+  - G ⊢ q : fresh & B ≡ Π(p:P\Q).A(p) for some A
+  Since B' is simply B with an unfolded proc, race freedom from (A) is preserved.
+  Now we must show that E does not contain any senders who could potentially
+  send a message to p. By race freedom, if E contains qₗ ▹ C, where q ∈ Q, then
+  C ⊐ A, and C can not send to the input recvFrom.
+
+  The race freedom property is maintained by the requirement that B'' ⊐ B'.
+
+  - G ⊢ q : fresh & B ≡ Σ(p:P).A(p) for some A
+
+- P = sendₚ(x,y) and G' = G (Ext)
+
+To show:
+   Given σ,μ,E,Q  
+          (1) Δ;(Ψ;p:send(x,y);Q | E) : race-free
+   Then (   <⊥, [[Γ]],  Δ;(Ψ;sendₚ(x,y);Q | E)> -->* <σ,μ,skip>
+         => <⊥, [[Γ]], Δ;(Ψ[p:Ψ(p);sendₚ(x,y)];Q | E)> -->* <σ,μ,skip> ).
+
+   - Reachability equivalence is immediately obvious since Ψ only contains
+     sends, so Δ and Ψ can be executed in both programs, and any send in
+     Ψ preceeds send(x,y).
+   - Race freedom is preserved trivially.
+
+
+- Compose-External
+  Assume:
+  A,G,D,0     ~~> skip,G,D',X
+  B||X,G,D',0 ~~> skip,G,D'',0
+
+  Show:
+  (1)
+    ∀ σ,μ,Q,E
+       Δ;(Ψ;(A||B)∘Q | E) : race-free
+    => (     <⊥, [[Γ]],  Δ ;(Ψ;(A||B)∘Q | E)> -->* <σ,μ,skip>
+         => <⊥, [[Γ']], Δ';(Ψ;Q | E)> -->* <σ,μ,skip> ).
+  (2)
+      Δ;(Ψ;(A||B)∘Q | E) : race-free => Δ;(Q | E) : race-free
+
+  By IH:
+  (1a)
+    ∀ σ,μ,Q,E
+       Δ;(A∘Q | E) : race-free
+    => (     <⊥, [[Γ]],  Δ ;(A∘Q | E)> -->* <σ,μ,skip>
+         => <⊥, [[Γ']], Δ';(Ψ;Q | E)> -->* <σ,μ,skip> ).
+  (1b)
+    ∀ σ,μ,Q,E
+       Δ;((B||Ψ)∘Q | E) : race-free
+    => (     <⊥, [[Γ]], Δ' ;((B||Ψ)∘Q | E)> -->* <σ,μ,skip>
+         => <⊥, [[Γ]], Δ'';(Q | E)> -->* <σ,μ,skip> ).
+  (2a)
+      Δ;(A;Q | E) : race-free => Δ';(Ψ;Q | E) : race-free
+  (2b)
+      Δ';((B||Ψ);Q | E) : race-free => Δ'';(Q | E) : race-free
+
+  (1) can be rewritten (letting Q = Q₁ || Q₂)
+
+    ∀ σ,μ,Q₁Q₂,E
+       Δ;Ψ;((A∘Q₁||B∘Q₂) | E) : race-free
+    => (     <⊥, [[Γ]],  Δ ;(Ψ;(A∘Q₁||B∘Q₂) | E)> -->* <σ,μ,skip>
+         => <⊥, [[Γ]], Δ';(Ψ;Q | E)> -->* <σ,μ,skip> ).
+
+
+  Instantiating (1a) with (E := B∘Q₂ | E) and (Q := Q₁) gives
+
+       Δ;(A∘Q₁ | B∘Q₂ | E) : race-free
+    => (     <⊥, [[Γ]],  Δ ;(Ψ;A∘Q₁ | B∘Q₂ | E)> -->* <σ,μ,skip>
+         => <⊥, [[Γ]], Δ';(Ψ;Q₁   | B∘Q₂ | E)> -->* <σ,μ,skip> ).
+
+  Instantiating (1b) with (E := E) (Q₁ := Q₂) (Q₂ := Q₁) gives
+
+       Δ;((B∘Q₂||Ψ∘Q1) | E) : race-free
+    => (     <⊥, [[Γ]], Δ' ;((B∘Q₂|Ψ∘Q₁) | E) -->* <σ,μ,skip>
+         => <⊥, [[Γ]], Δ'';(Q₂ | Q₁ | E)> -->* <σ,μ,skip> ).
+
+  Since race-freedom holds at each step, transitivity implies the goal
+
+# sym-fold
+
+  - Since the number of syntactic parallel composed processes is reduced,
+    race freedom is trivially preserved
+
+  - The output form simply existentially packages up the input "q", so
+    the output program contains at least all the traces of the input.
+
+# sym-remove
+
+  The proof of this case is by induction on the size of P.
+  - |P| = 0. The proof here is trivial.
+  - |P| = 1 + |P'|
+
+  By the IH (on P),
+(1) ∀ P' s.t. |P'| = |P| - 1,
+      Δ;(Ψ;(A || Π(p:P'):B(p))∘X || E)
+    ≈ lift(P',Δ);(Ψ||lift(P',Ψ');(A || Π(p:P'):C(p))∘X || E)
+
+  The (outer-level) IH says:
+(2) ∀ P*,X,Y,E 
+      Δ;lift(P\P*,Δ'(p))(Ψ||Ψ1(P*);(A;X || Π(p:P*):B(p)∘Y) || E)
+    ≈ lift(P*∪{q},Δ);(Ψ||Ψ1(P*∪{q});(A;X || Π(p:P*\{q}):B(p)∘Y || q:C(q);Y) || E)
+  (when the LHS is race-free).
+
+  We have to prove
+      Δ;(Ψ;(A || Π(p:P):B(p))∘X || E)
+    ≈ Δ;lift(P,Δ');(Ψ;(A || Π(p:P):C(p))∘X || E)
+    assuming the LHS is race-free.
+
+  Instantiate (2)
+      Δ;lift(P\P)(Ψ;(A || Π(p:P):B(p)∘Y) || E)
+    ≈ Δ;lift(P\P,Δ');Δ';(Ψ;(A || Π(p:(P\{q}):B(p)∘X || q:C(q);Y) || E)
+    ≈ Δ;lift(P\(P\{q}),Δ');(Ψ||Ψ';(A || Π(p:(P\{q}):B(p)∘X || q:C(q);Y) || E)
+    the lhs is race-free by assumption and thus the rhs is as well (as a consequence of the IH).
+
+    ≈ Δ;lift(P\(P\{q}),Δ');(Ψ;(A || Π(p:(P\{q}):B(p)∘X || q:C(q);Y) || E)
+  Since |P\{q}| = |P'|, (1) takes care of the final step by letting (E := q:C(q) || E).
+    
+# For/Iter-repeat/Iter-match
+
+  The reasoning is identical to sym-remove (perform induction on the
+  loop variable, then apply both IH)
+
+# While-exit and While-continue
+
+  Both rules just encode the unfolding of a single iteration of a while loop.
