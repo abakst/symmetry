@@ -887,7 +887,7 @@ render c@(Config { cTypes = ts, cSets = bs, cGlobals = gs })
     <$$> renderMain pMap unfolded
   where
     unfolded               = freshIds
-                           . instAbs
+                           -- . instAbs
                            . unfoldLoops
                            . filterBoundedAbs
                            $ unfold c
