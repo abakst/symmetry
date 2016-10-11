@@ -28,6 +28,7 @@ data MainOptions = MainOptions { optVerify  :: Bool
                                , optProcess :: Bool
                                , optModel   :: Bool
                                , optDir     :: String
+                               , optName    :: String
                                }
 
 instance Options MainOptions where
@@ -37,6 +38,7 @@ instance Options MainOptions where
                   <*> simpleOption "dump-process" False "Display Intermediate Process Description"
                   <*> simpleOption "dump-model" False "Dump Spin model"
                   <*> simpleOption "pmlfile" ".symcheck" "Directory to store intermediate results"
+                  <*> simpleOption "name" "" "Name of the benchmark"
 
 spinCmd :: FilePath -> CreateProcess
 spinCmd f = shell ("spin -m -a " ++ f)
@@ -140,7 +142,10 @@ checkerMain main
 
       d <- getCurrentDirectory
 
-      let  dir  = optDir opts
+      let  name = optName opts
+           dir  = if   null name
+                  then optDir opts
+                  else optDir opts <.> name
            outd = d </> dir
            optsImplied = opts { optModel = optModel opts ||
                                            optVerify opts }

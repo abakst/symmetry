@@ -1,6 +1,9 @@
 #!/bin/zsh
 # vim: set foldmethod=marker:
 
+# traps the 'Ctrl-C' signal, and kills all the children
+trap "kill 0" SIGINT
+
 # colors {{{
 autoload colors
 if [[ "$terminfo[colors]" -gt 8 ]]; then
@@ -17,22 +20,30 @@ IGNORED=$(cat <<EOF
 PingMulti2Party.hs
 PingLoopBounded.hs
 EOF
-)
+       )
 
 check_file() {
-  local FILE="$1"
-  stack runghc -- $FILE --verify &>/dev/null \
-    && ( echo "${BOLD_GREEN}PASS${RESET}: $FILE" ) \
-    || ( echo "${BOLD_RED}FAIL${RESET}: $FILE" )
+    local FILE="$1"
+    local NAME=${FILE:r}          # without the extension
+    stack runghc -- $FILE --verify &>/dev/null --name "$NAME" \
+        && { echo "${BOLD_GREEN}PASS${RESET}: $FILE" } \
+        || { echo "${BOLD_RED}FAIL${RESET}: $FILE" }
 }
 
+stack build --fast
+
 if [[ $# -eq 1 ]]; then
-  check_file $@
-  exit 0
+    check_file $@
+    exit 0
 fi
 
 # for hs in *.hs; do
 for hs in *.hs; do
-  ( echo $IGNORED | grep $hs &>/dev/null ) && continue
-  check_file $hs
+    ( echo $IGNORED | grep $hs &>/dev/null ) && continue
+    check_file $hs &            # run the benchmark in background
 done
+
+# wait for benchmarks to finish
+wait
+
+echo "DONE"
