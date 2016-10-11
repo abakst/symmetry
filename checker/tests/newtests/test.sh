@@ -13,8 +13,26 @@ done
 eval RESET='$reset_color'
 # }}}
 
+IGNORED=$(cat <<EOF
+PingMulti2Party.hs
+PingLoopBounded.hs
+EOF
+)
+
+check_file() {
+  local FILE="$1"
+  stack runghc -- $FILE --verify &>/dev/null \
+    && ( echo "${BOLD_GREEN}PASS${RESET}: $FILE" ) \
+    || ( echo "${BOLD_RED}FAIL${RESET}: $FILE" )
+}
+
+if [[ $# -eq 1 ]]; then
+  check_file $@
+  exit 0
+fi
+
+# for hs in *.hs; do
 for hs in *.hs; do
-  stack runghc -- $hs --verify &>/dev/null \
-    && { echo "${BOLD_GREEN}PASS${RESET}: $hs" } \
-    || { echo "${BOLD_RED}FAIL${RESET}: $hs" }
+  ( echo $IGNORED | grep $hs &>/dev/null ) && continue
+  check_file $hs
 done

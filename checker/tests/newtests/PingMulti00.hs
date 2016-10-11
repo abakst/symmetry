@@ -13,19 +13,21 @@ import Symmetry.Language
 import Symmetry.Verify
 import SrcHelper
 
+noOfWorkers = 3  
+
 pongServer :: (DSL repr) => repr (Process repr ())
 pongServer = do myPid <- self
-                (p :: repr (T "Ping" (Pid RSing))) <- recv
-                send (forget p) (lift (TyName :: TyName "Pong") myPid)
+                (p :: repr (Pid RSing)) <- recv
+                send p myPid
 
 master :: (DSL repr) => repr (RMulti -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do ps <- spawnMany r n pongServer
       myPid <- self
-      doMany "l0" ps (lam $ \p -> send p (lift (TyName :: TyName "Ping") myPid))
-      doMany "l1" ps (lam $ \_ ->
-                   do (_ :: repr (T "Pong" (Pid RSing)))  <- recv
-                      return tt)
+      doMany ps (lam $ \p -> send p myPid)
+      doMany ps (lam $ \_ ->
+                    do (_ :: repr (Pid RSing))  <- recv
+                       return tt)
       return tt
 
 mainProc :: (DSL repr) => repr (Int -> ())
@@ -33,4 +35,4 @@ mainProc = lam $ \n -> exec $ do r <- newRMulti
                                  app2 master r n
 
 main :: IO ()
-main = checkerMain (arb |> mainProc)
+main = checkerMain (int noOfWorkers |> mainProc)

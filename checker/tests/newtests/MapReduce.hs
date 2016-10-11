@@ -38,9 +38,9 @@ mapperProcess =  lam $ \masterPid -> lam $ \workQueuePid -> app (fixM (app (app 
 
 workQueueProcess :: (DSL repr) => repr (Int -> Pid RMulti -> Process repr ())
 workQueueProcess = lam $ \n -> lam $ \ps -> 
-  do doN "wq0" n allotWork
-     doMany "wq1" ps $ lam $ \_ -> do mapperPid <- recv
-                                      send mapperPid mkTerm
+  do doN n allotWork
+     doMany ps $ lam $ \_ -> do mapperPid <- recv
+                                send mapperPid mkTerm
      return tt
   where
     allotWork
@@ -48,8 +48,8 @@ workQueueProcess = lam $ \n -> lam $ \ps ->
                        send mapperPid (mkWork x)
 
 masterProc :: DSL repr => repr (Int -> Process repr ())
-masterProc = lam $ \n -> do doN "l1" n (lam $ \_ -> do (x :: repr Int) <- recv
-                                                       ret x)
+masterProc = lam $ \n -> do doN n (lam $ \_ -> do (x :: repr Int) <- recv
+                                                  ret x)
                             ret tt
 
 master :: (DSL repr) => repr (RMulti -> Int -> Int -> Process repr ())
@@ -60,6 +60,9 @@ master = lam $ \mapperRole  -> lam $ \k -> lam $ \n ->
                   mappers       <- spawnMany mapperRole k (app (app mapperProcess masterPid) myPid)
                   app (app workQueueProcess n) mappers
 
+mapperCount = 3
+workCount   = 3
+
 mainProc :: (DSL repr) => repr (Int -> Int -> ())
 mainProc = lam $ \k -> lam $ \n -> exec $ do r <- newRMulti
                                              app (app (app master r) k) n
@@ -67,4 +70,4 @@ mainProc = lam $ \k -> lam $ \n -> exec $ do r <- newRMulti
 
 
 main :: IO ()
-main = checkerMain (app (app mainProc arb) arb)
+main = checkerMain (mainProc `app` int mapperCount `app` int workCount)

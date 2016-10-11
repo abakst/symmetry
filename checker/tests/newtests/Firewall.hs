@@ -11,23 +11,26 @@ import Symmetry.Verify
 
 type ClientReq_ = (Pid RSing) :+: (Pid RSing)
 
-type ClientReq  = T "ClientReq" ClientReq_
-type ForwardMsg = T "Forward" ClientReq_
-type FWResponse = T "FWInt" Int
+-- type ClientReq  = T "ClientReq" ClientReq_
+-- type ForwardMsg = T "Forward" ClientReq_
+-- type FWResponse = T "FWInt" Int
+type ClientReq  = ClientReq_
+type ForwardMsg = ClientReq_
+type FWResponse = Int
 
 mkFWResponse :: DSL repr => repr Int -> repr FWResponse
-mkFWResponse = lift (TyName :: TyName "FWInt")
+mkFWResponse = id
 
 mkReqGood :: DSL repr => repr (Pid RSing) -> repr ClientReq
-mkReqGood p = lift (TyName :: TyName "ClientReq") (inl p)
+mkReqGood p = inl p
 
 mkForward :: DSL repr => repr ClientReq_ -> repr ForwardMsg
-mkForward = lift (TyName :: TyName "Forward")
+mkForward = id
 
 server :: DSL repr => repr (Process repr ())
 server =
   do msg :: repr ForwardMsg <- recv
-     match (forget msg)
+     match msg
        (lam $ \p -> send p (int 0))
        (lam $ \_ -> die)
 
@@ -36,7 +39,7 @@ firewall :: DSL repr
 firewall = lam $ \server ->
   do msg :: repr ClientReq <- recv
      me <- self
-     match (forget msg)
+     match msg
        (lam $ \p -> do send server (mkForward (inl me))
                        x :: repr Int <- recv
                        send p (mkFWResponse x))

@@ -11,6 +11,8 @@ import Prelude hiding ((>>=), (>>), fail, return)
 import Symmetry.Language
 import Symmetry.Verify
 
+noOfWorkers = 3
+
 pingServer :: (DSL repr) => repr (Pid RSing -> Pid RSing -> Process repr ())
 pingServer = lam $ \m -> lam $ \m2 ->
   do myPid <- self
@@ -21,14 +23,14 @@ pingServer = lam $ \m -> lam $ \m2 ->
 master :: (DSL repr) => repr (RMulti -> Int -> Process repr ())
 master = lam $ \r -> lam $ \n ->
    do r2 <- newRSing
-      m2 <- spawn r2 (do doN "l2" n (lam $ \_ ->
-                                       do m :: repr () <- recv
-                                          return tt)
+      m2 <- spawn r2 (do doN n (lam $ \_ ->
+                                   do m :: repr () <- recv
+                                      return tt)
                          return tt)
       myPid <- self
       ps <- spawnMany r n (app (app pingServer myPid) m2)
-      doMany "l0" ps (lam $ \p -> do p <- recv
-                                     send p myPid)
+      doMany ps (lam $ \p -> do p <- recv
+                                send p myPid)
       return tt
 
 mainProc :: (DSL repr) => repr (Int -> ())
@@ -36,4 +38,4 @@ mainProc = lam $ \n -> exec $ do r <- newRMulti
                                  app (app master r) n
 
 main :: IO ()
-main = checkerMain (arb |> mainProc)
+main = checkerMain (int noOfWorkers |> mainProc)

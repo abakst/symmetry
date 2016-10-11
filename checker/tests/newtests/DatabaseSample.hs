@@ -77,7 +77,7 @@ get  = lam $ \db -> lam $ \k ->
 
 worker :: DSL repr => repr (Process repr ())
 worker
-  = do forever workerLoop nil
+  = do forever workerLoop
        return tt
   where
     workerLoop
@@ -92,6 +92,7 @@ worker
              (lam $ \m ->
                 do let (k, v) = (proj1 m, proj2 m)
                    return (cons (pair k v) map))
+           return tt
 
 master :: DSL repr => repr (Process repr ())
 master  = do db <- createDB

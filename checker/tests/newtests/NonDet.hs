@@ -12,15 +12,14 @@ import Data.Either
 
 pingServer :: (DSL repr) => repr (Process repr ())
 pingServer = do myPid <- self
-                (p :: repr (T "Msg" (Int :+: Int)) ) <- recv
+                (p :: repr (Int :+: Int) ) <- recv
                 return tt
 
 master :: (DSL repr) => repr
           (RSing -> Process repr ())
 master = lam $ \r -> do p     <- spawn r pingServer
                         myPid <- self
-                        msg   <- nondetVal (lift (TyName :: TyName "Msg") (inl (int 0)))
-                                           (lift (TyName :: TyName "Msg") (inr (int 1)))
+                        msg   <- nondetVal (inl (int 0)) (inr (int 1))
                         _     <- send p msg
                         return tt
 

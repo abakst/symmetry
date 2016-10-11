@@ -12,30 +12,27 @@ import Symmetry.SymbEx
 
 
 type Req      = (Int, (Pid RSing, Value))
-type Request  = T "Req" Req
-type Response = T "Resp" (() :+: ())
+type Request  =  Req
+type Response = (() :+: ())
 type Value    = Int
 
 mkAlloc :: DSL repr => repr (Pid RSing -> Request)
-mkAlloc = lam $ \p -> lift (TyName :: TyName "Req") (pair (int 0) (pair p (int 0)))
+mkAlloc = lam $ \p -> pair (int 0) (pair p (int 0))
 
 mkValue :: DSL repr => repr (Pid RSing -> Int -> Request)
-mkValue = lam $ \p -> lam $ \v ->
-          lift (TyName :: TyName "Req") (pair (int 1) (pair p v))
+mkValue = lam $ \p -> lam $ \v -> pair (int 1) (pair p v)
 
 mkRequest :: DSL repr => repr (Int -> Pid RSing -> Value -> Request)
-mkRequest = lam $ \c -> lam $ \p -> lam $ \v ->
-              lift (TyName :: TyName "Req") (pair c (pair p v))
+mkRequest = lam $ \c -> lam $ \p -> lam $ \v -> pair c (pair p v)
 
 mkLookup :: DSL repr => repr (Pid RSing -> Value -> Request)
-mkLookup = lam $ \p -> lam $ \k ->
-           lift (TyName :: TyName "Req") (pair (int 2) (pair p k))
+mkLookup = lam $ \p -> lam $ \k -> pair (int 2) (pair p k)
 
 mkFree :: DSL repr => repr Response
-mkFree = lift (TyName :: TyName "Resp") (inl tt)
+mkFree = inl tt
 
 mkAllocd :: DSL repr => repr Response
-mkAllocd = lift (TyName :: TyName "Resp") (inr tt)
+mkAllocd = inr tt
 
 client :: forall repr. DSL repr => repr (Pid RSing -> Process repr ())
 client
@@ -47,7 +44,7 @@ client
                       -- Did I alloc?
                       (lam $ \_ -> do resp :: repr Response <- recv
                                       let x = arb :: repr Int
-                                      match (forget resp)
+                                      match resp
                                         (lam $ \_ -> send db x) -- value
                                         (lam $ \_ -> return tt))
                       -- Did I Lookup?
@@ -59,7 +56,7 @@ database
   where
     dbLoop = lam $ \_ ->
                 do msg :: repr Request <- recv
-                   let m = forget msg
+                   let m = msg
                        p = proj1 (proj2 m)
                    match (proj1 m `eq` int 0)
                            (lam $ \_ ->
