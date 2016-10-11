@@ -13,19 +13,19 @@ module Main where
 import Prelude hiding ((>>=), (>>), fail, return) 
 import Symmetry.Language
 import Symmetry.Verify
-import SrcHelper
+--import SrcHelper
 
-type HW  = T "HasWork" Boolean
+type HW  = Boolean
 liftHW :: (DSL repr) => repr Boolean -> repr HW
-liftHW =  lift (TyName :: TyName "HasWork")
+liftHW =  id
 
-type MP = T "MasterPid" (Pid RSing)
+type MP = (Pid RSing)
 liftMP :: (DSL repr) => repr (Pid RSing) -> repr MP
-liftMP =  lift (TyName :: TyName "MasterPid")
+liftMP =  id
 
-type WP = T "WorkerPid" (Pid RSing)
+type WP = (Pid RSing)
 liftWP :: (DSL repr) => repr (Pid RSing) -> repr WP
-liftWP =  lift (TyName :: TyName "WorkerPid")
+liftWP =  id
 
 workerProcess :: (DSL repr) => repr (Pid RSing -> Process repr ())
 workerProcess = lam $ \masterPid ->
@@ -34,7 +34,7 @@ workerProcess = lam $ \masterPid ->
                 do myPid <- self
                    send masterPid (liftWP myPid)
                    (hw :: repr HW) <- recv
-                   match (forget hw)
+                   match hw
                      (lam $ \_ -> app f tt)
                      (lam $ \_ -> ret tt)
   in do app (fixM fix_f) tt
@@ -42,12 +42,12 @@ workerProcess = lam $ \masterPid ->
 
 workQueueProcess :: (DSL repr) => repr (Int -> Pid RMulti -> Process repr ())
 workQueueProcess = lam $ \k -> lam $ \ps -> 
-  do doN "wq0" k $ lam $ \x ->
+  do doN k $ lam $ \x ->
        do (workerPid :: repr WP) <- recv
-          send (forget workerPid) (liftHW (inl tt)) -- send true
-     doMany "wq1" ps $ lam $ \_ ->
+          send workerPid (liftHW (inl tt)) -- send true
+     doMany ps $ lam $ \_ ->
        do (workerPid :: repr WP) <- recv
-          send (forget workerPid) (liftHW (inr tt)) -- send false
+          send workerPid (liftHW (inr tt)) -- send false
      return tt
 
 master :: (DSL repr) => repr (Int -> Int -> Process repr ())
@@ -56,9 +56,11 @@ master = lam $ \n -> -- worker count
   do workerR   <- newRMulti -- workers
      masterPid <- self
      workers   <- spawnMany workerR n (app workerProcess masterPid)
-     app2 workQueueProcess k workers
+     workQueueProcess `app` k `app` workers
      ret tt
 
+mapperCount = int 3
+workCount   = int 3
 
 main :: IO ()
-main = checkerMain $ exec (app2 master arb arb)
+main = checkerMain $ exec $ master `app` workCount `app` mapperCount

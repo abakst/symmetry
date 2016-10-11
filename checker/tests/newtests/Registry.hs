@@ -2,6 +2,7 @@
 {-# Language ScopedTypeVariables #-}
 {-# Language FlexibleContexts    #-}
 {-# Language DataKinds           #-}
+{-# Language TypeOperators #-}
 module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return)
@@ -10,14 +11,16 @@ import Symmetry.Verify
 
 -- From TransDPOR
 
-type MasterMsg = T "MasterMsg" (Pid RSing)
-type ClientMsg = T "ClientMsg" (Pid RSing)
+type Msg = (Pid RSing) :+: (Pid RSing)
+
+type MasterMsg = Msg
+type ClientMsg = Msg
 
 mkMaster :: DSL repr => repr (Pid RSing) -> repr MasterMsg
-mkMaster = lift (TyName :: TyName "MasterMsg")
+mkMaster p = inl p
 
 mkClient :: DSL repr => repr (Pid RSing) -> repr ClientMsg
-mkClient = lift (TyName :: TyName "ClientMsg")
+mkClient p = inr p
 
 master :: DSL repr
        => repr (Pid RMulti -> Pid RSing -> Process repr ())
@@ -28,7 +31,7 @@ master = lam $ \clients -> lam $ \reg ->
      send reg (mkMaster me)
 
      -- Tell the clients about the registry
-     doMany "l1" clients $ lam $ \c ->
+     doMany clients $ lam $ \c ->
        send c (mkMaster reg)
 
      -- Barrier from registry
@@ -41,19 +44,22 @@ registry = lam $ \nClients ->
      master :: repr MasterMsg <- recv
 
      -- Wait for clients
-     doN "l2" nClients $ lam $ \_ ->
+     doN nClients $ lam $ \_ ->
        do p :: repr ClientMsg <- recv
-          return tt
+          match p (lam $ \_ -> die)
+                  (lam $ \_ -> return tt)
 
      -- Tell master OK
-     send (forget master) tt
+     match master (lam $ \m -> send m tt)
+                  (lam $ \_ -> die)
 
 client :: DSL repr
        => repr (Process repr ())
 client =
   do me                         <- self
      registry :: repr MasterMsg <- recv
-     send (forget registry) (mkClient me)
+     match registry (lam $ \m -> send m (mkClient me))
+                    (lam $ \_ -> die)
 
 go :: DSL repr
      => repr (Int -> Process repr ())
@@ -65,5 +71,7 @@ go = lam $ \nClients ->
      cs        <- spawnMany rClients nClients client
      (app (app master cs) reg)
 
+clientCount = int 3
+
 main :: IO ()
-main = checkerMain (exec (arb |> go))
+main = checkerMain (exec (clientCount |> go))

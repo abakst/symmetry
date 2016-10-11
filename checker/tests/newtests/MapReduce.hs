@@ -60,8 +60,8 @@ master = lam $ \mapperRole  -> lam $ \k -> lam $ \n ->
                   mappers       <- spawnMany mapperRole k (app (app mapperProcess masterPid) myPid)
                   app (app workQueueProcess n) mappers
 
-mapperCount = 3
-workCount   = 3
+mapperCount = int 3
+workCount   = int 3
 
 mainProc :: (DSL repr) => repr (Int -> Int -> ())
 mainProc = lam $ \k -> lam $ \n -> exec $ do r <- newRMulti
@@ -70,4 +70,4 @@ mainProc = lam $ \k -> lam $ \n -> exec $ do r <- newRMulti
 
 
 main :: IO ()
-main = checkerMain (mainProc `app` int mapperCount `app` int workCount)
+main = checkerMain $ mainProc `app` mapperCount `app` workCount

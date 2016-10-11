@@ -16,11 +16,11 @@ done
 eval RESET='$reset_color'
 # }}}
 
-IGNORED=$(cat <<EOF
-PingMulti2Party.hs
-PingLoopBounded.hs
-EOF
-       )
+# IGNORED=$(cat <<EOF
+# PingMulti2Party.hs
+# PingLoopBounded.hs
+# EOF
+# )
 
 check_file() {
     local FILE="$1"
@@ -39,11 +39,12 @@ fi
 
 # for hs in *.hs; do
 for hs in *.hs; do
-    ( echo $IGNORED | grep $hs &>/dev/null ) && continue
+    { echo $IGNORED | grep $hs &>/dev/null } && continue
     check_file $hs &            # run the benchmark in background
 done
 
 # wait for benchmarks to finish
 wait
 
-echo "DONE"
+echo
+echo "${BOLD_GREEN}DONE${RESET}"
