@@ -29,6 +29,7 @@ data MainOptions = MainOptions { optVerify  :: Bool
                                , optModel   :: Bool
                                , optDir     :: String
                                , optName    :: String
+                               , optInfty   :: Int
                                }
 
 instance Options MainOptions where
@@ -39,9 +40,10 @@ instance Options MainOptions where
                   <*> simpleOption "dump-model" False "Dump Spin model"
                   <*> simpleOption "pmlfile" ".symcheck" "Directory to store intermediate results"
                   <*> simpleOption "name" "" "Name of the benchmark"
+                  <*> simpleOption "infty" 2 "Max buffer length"
 
-spinCmd :: FilePath -> CreateProcess
-spinCmd f = shell ("spin -m -a " ++ f)
+spinCmd :: FilePath -> MainOptions -> CreateProcess
+spinCmd f opt = shell (printf "spin -D__K__=%d -m -a %s" (optInfty opt) f)
 
 ccCmd :: CreateProcess
 ccCmd     = shell ("cc -O2 -DVECTORSZ=2048 -DSAFETY -DNOBOUNDCHECK -DNOCOMP -DSFH -DNOFAIR"
@@ -101,7 +103,7 @@ run1Cfg opt outd cfg
          renderToFile (outf outd) cfgOut
 
        when (optVerify opt) $ do 
-         runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName)
+         runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName opt)
          runCmd verb "COMPILING VERIFIER:" outd ccCmd
          runCmd verb "CHECKING MODEL:" outd panCmd
 

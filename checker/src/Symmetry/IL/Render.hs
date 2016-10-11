@@ -864,8 +864,8 @@ decMacro = macrify [ "#define __DEC(_x) atomic { assert (_x > 0);"
 
 macros :: [Doc]
 macros =
-  [ text "#define __K__" <+> int infty
-  , text "#define __INC(_x) _x = (_x < __K__ -> _x + 1 : _x)"
+  [ -- text "#define __K__" <+> int infty ,
+    text "#define __INC(_x) _x = (_x < __K__ -> _x + 1 : _x)"
   , text decMacro
   ]
 
