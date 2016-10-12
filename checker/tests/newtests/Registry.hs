@@ -11,10 +11,10 @@ import Symmetry.Verify
 
 -- From TransDPOR
 
-type Msg = (Pid RSing) :+: (Pid RSing)
+-- type Msg = (Pid RSing) :+: (Pid RSing)
 
-type MasterMsg = Msg
-type ClientMsg = Msg
+type MasterMsg = (Pid RSing) :+: ()
+type ClientMsg = () :+: (Pid RSing)
 
 mkMaster :: DSL repr => repr (Pid RSing) -> repr MasterMsg
 mkMaster p = inl p

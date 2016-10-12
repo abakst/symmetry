@@ -59,7 +59,7 @@ loop  = lam $ \workers ->
                                  (lam $ \m -> app2 helper (inl m) (proj1 m))
                                  (lam $ \m -> app2 helper (inr m) (proj1 m))
                                return tt
-             forever loop_h tt
+             forever (app loop_h tt)
 
 createDB :: DSL repr => repr (Process repr Database)
 createDB  = do r <- newRSing
@@ -77,7 +77,7 @@ get  = lam $ \db -> lam $ \k ->
 
 worker :: DSL repr => repr (Process repr ())
 worker
-  = do forever workerLoop
+  = do forever (app workerLoop nil)
        return tt
   where
     workerLoop
@@ -110,9 +110,10 @@ master  = do db <- createDB
              return tt
 
 workerCount       :: DSL repr => repr Int
-workerCount       = arb
+workerCount       = int 2
+
 workerCount_div_2 :: DSL repr => repr Int
-workerCount_div_2 = arb
+workerCount_div_2 = int 1
 
 main :: IO ()
 main  = checkerMain $ exec master
