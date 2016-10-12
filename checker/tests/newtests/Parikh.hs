@@ -12,46 +12,48 @@ import Data.Either
 import SrcHelper
 import Symmetry.SymbEx
 
-type Msg = (Int, (Pid RSing, Int)) -- Cmd, K, V
-                      -- Cmd=0 = Init
-                      -- Cmd=1 = Get
-                      -- Cmd=2 = Set V
-                      -- Cmd=3 = Bye
+type Msg = (Pid RSing) :+:        -- Init
+           ((Pid RSing) :+:       -- Get
+            ((Pid RSing, Int) :+: -- Set V
+             (Pid RSing)))        -- Bye
 
-expectMsg :: DSL repr => repr (Process repr Msg)
-expectMsg = recv
+initMsg :: (DSL repr) => repr (Pid RSing -> Msg)
+initMsg = lam $ \p -> inl p
+
+setMsg :: (DSL repr) => repr (Pid RSing -> Int -> Msg)
+setMsg = lam $ \p -> lam $ \n -> inr (inr (inl (pair p n)))
+
+byeMsg :: (DSL repr) => repr (Pid RSing -> Msg)
+byeMsg = lam $ \p -> inr (inr (inr p))
 
 server :: forall repr. DSL repr => repr (Process repr Int)
-server = do m1 <- expectMsg
-            match (proj1 m1 `eq` int 0)
-                  (lam $ \_ -> do
-                     send (proj1 (proj2 m1)) tt
-                  )
+server = do m1 :: repr Msg <- recv
+            match m1
+                  (lam $ \m -> send m tt) -- Init
                   (lam $ \_ -> die)
             int 0 |> fixM serveLoop
   where
     serveLoop :: repr ((Int -> Process repr Int) -> Int -> Process repr Int)
     serveLoop = lam $ \f -> lam $ \s ->
-      do m <- expectMsg
-         match (proj1 m `eq` int 0)
-                 (lam $ \_ -> die)
-                 (lam $ \_ ->
-                    match (proj1 m `eq` int 1)
-                            (lam $ \_ -> do
-                               send (proj1 (proj2 m)) s
-                               s |> f)
-                            (lam $ \_ -> match (proj1 m `eq` int 2)
-                                         (lam $ \_ -> s |> f)
-                                         (lam $ \_ -> return s)))
+      do m :: repr Msg <- recv
+         match m
+           (lam $ \_ -> die) -- Init
+           (lam $ \m' ->
+               match m'
+                 (lam $ \m -> do send m s -- Get
+                                 s |> f)
+                 (lam $ \m'' -> match m''
+                                  (lam $ \_ -> s |> f)     -- Set
+                                  (lam $ \_ -> return s))) -- Bye
 
 
 client :: DSL repr => repr (Pid RSing -> Process repr ())
 client = lam $ \server ->
   do me <- self
-     send server (pair (int 0) (pair me (int 0)))
+     send server (app initMsg me)
      _ :: repr () <- recv
-     send server (pair (int 2) (pair me (int 0)))
-     send server (pair (int 3) (pair me (int 0)))
+     send server (app2 setMsg me (int 0))
+     send server (app byeMsg me)
      return tt
 
 main :: IO ()

@@ -111,6 +111,11 @@ data Stmt a = SSkip { annot :: a }
                      , annot  :: a
                      }
 
+            | SRecvFrom { rcvMsg :: (TId, CId, MConstr)
+                        , fromPid :: Pid
+                        , annot  :: a
+                        }
+
             | SIter { iterVar  :: Var
                     , iterSet  :: Set
                     , iterBody :: Stmt a

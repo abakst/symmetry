@@ -19,7 +19,7 @@ master :: (DSL repr) => repr
           (RSing -> Process repr ())
 master = lam $ \r -> do p     <- spawn r pingServer
                         myPid <- self
-                        msg   <- nondetVal (inl (int 0)) (inr (int 1))
+                        msg :: repr (Int :+: Int) <- return arb
                         _     <- send p msg
                         return tt
 

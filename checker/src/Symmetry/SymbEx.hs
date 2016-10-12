@@ -740,6 +740,11 @@ symRecv
 freshVal :: ArbPat SymbEx a => SymbExM (AbsVal a)
 freshVal = runSE arb >>= fresh
 
+symRecvFrom p
+  = SE $ do v     <- freshVal
+            s     <- recvToIL v
+            return $ AProc Nothing s v
+
 -------------------------------------------------
 symSend :: (?callStack :: CallStack, Typeable a)
         => SymbEx (Pid RSing)
@@ -905,6 +910,7 @@ instance Symantics SymbEx where
   proj2 = symProj2
 
   recv = symRecv
+  recvFrom = symRecvFrom
   send = symSend
 
   match = symMatch

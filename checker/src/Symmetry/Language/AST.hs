@@ -74,6 +74,8 @@ class Symantics repr where
             => repr (Pid RSing) -> repr a -> repr (Process repr ())
   recv      :: (?callStack :: CallStack, Typeable a, ArbPat repr a)
             => repr (Process repr a)
+  recvFrom  :: (?callStack :: CallStack, Typeable a, ArbPat repr a)
+            => repr (Pid RSing) -> repr (Process repr a)
 
   newRSing  :: (?callStack :: CallStack)
             => repr (Process repr RSing)

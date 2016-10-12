@@ -37,7 +37,7 @@ mkAllocd = inr tt
 client :: forall repr. DSL repr => repr (Pid RSing -> Process repr ())
 client
   = lam $ \db -> do me  <- self
-                    tag <- nondetVal (int 0) (int 1)
+                    tag :: repr Int <- return arb
                     let msg = mkRequest `app` tag `app` me `app` (int 3)
                     send db msg
                     match (tag `eq` int 0)
@@ -52,7 +52,7 @@ client
                                       return tt)
 database :: forall repr. DSL repr => repr (Process repr ())
 database
-  = forever dbLoop tt
+  = forever (app dbLoop tt)
   where
     dbLoop = lam $ \_ ->
                 do msg :: repr Request <- recv
@@ -71,10 +71,13 @@ database
                                            send p v)
                    return tt
 
+clientCount :: (DSL repr) => repr Int
+clientCount = int 3
+  
 mainProc :: DSL repr => repr (Process repr ())
 mainProc = do rcs <- newRMulti
               db  <- self
-              cs  <- spawnMany rcs arb (db |> client)
+              cs  <- spawnMany rcs clientCount (db |> client)
               database
 
 main :: IO ()
