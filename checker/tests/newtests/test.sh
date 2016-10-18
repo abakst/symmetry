@@ -16,41 +16,20 @@ done
 eval RESET='$reset_color'
 # }}}
 
-# IGNORED=$(cat <<EOF
-# PingMulti2Party.hs
-# PingLoopBounded.hs
-# EOF
-# )
-
-check_file() {
-    local FILE="$1"
-    local NAME=${FILE:r}          # without the extension
-    shift
-    stack runghc -- $FILE --verify --name "$NAME" $@ &>/dev/null \
-        && { echo "${BOLD_GREEN}PASS${RESET}: $FILE" } \
-        || { echo "${BOLD_RED}FAIL${RESET}: $FILE" }
-}
-
 stack build --fast
 
 # Parse --name and --infty and leave the rest
-zparseopts -E -D -infty::=INFTY -name::=NAME
+zparseopts -E -D -infty::=INFTY -name::=NAME -worker::=WORKER -job::=JOB
 
 if [[ $# -gt 0 ]]; then
     for f in "$@"; do
-        check_file $f $INFTY $NAME
+        echo "check_file $f $INFTY $NAME $WORKER $JOB"
+        check_file $f $INFTY $NAME $WORKER $JOB
     done
     exit 0
 fi
 
-# for hs in *.hs; do
-for hs in *.hs; do
-    { echo $IGNORED | grep $hs &>/dev/null } && continue
-    check_file $hs $INFTY $NAME & # run the benchmark in background
-done
-
-# wait for benchmarks to finish
-wait
+ls *.hs | parallel --no-notice -j+0 "./check_file.sh {} $INFTY $NAME $WORKER $JOB"
 
 echo
 echo "${BOLD_GREEN}DONE${RESET}"

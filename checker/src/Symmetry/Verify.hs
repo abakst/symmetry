@@ -30,6 +30,8 @@ data MainOptions = MainOptions { optVerify  :: Bool
                                , optDir     :: String
                                , optName    :: String
                                , optInfty   :: Int
+                               , optWorker  :: Int
+                               , optJob     :: Int
                                }
 
 instance Options MainOptions where
@@ -40,7 +42,15 @@ instance Options MainOptions where
                   <*> simpleOption "dump-model" False "Dump Spin model"
                   <*> simpleOption "pmlfile" ".symcheck" "Directory to store intermediate results"
                   <*> simpleOption "name" "" "Name of the benchmark"
-                  <*> simpleOption "infty" 2 "Max buffer length"
+                  <*> simpleOption "infty" 3 "Max buffer length"
+                  <*> simpleOption "worker" 3 "number of workers in the system"
+                  <*> simpleOption "job" 3 "number of jobs in the system"
+
+workerCount :: IO Int
+workerCount =  runCommand $ \opts args -> return $ (optWorker opts)
+
+jobCount :: IO Int
+jobCount =  runCommand $ \opts args -> return (optJob opts)
 
 spinCmd :: FilePath -> MainOptions -> CreateProcess
 spinCmd f opt = shell (printf "spin -D__K__=%d -m -a %s" (optInfty opt) f)

@@ -6,14 +6,12 @@
 module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return)
+import qualified Prelude as Pre ((>>=), (>>), fail, return)
 import Symmetry.Language
 import Symmetry.Verify
 
 type ClientReq_ = (Pid RSing) :+: (Pid RSing)
 
--- type ClientReq  = T "ClientReq" ClientReq_
--- type ForwardMsg = T "Forward" ClientReq_
--- type FWResponse = T "FWInt" Int
 type ClientReq  = ClientReq_
 type ForwardMsg = ClientReq_
 type FWResponse = Int

@@ -6,6 +6,7 @@
 module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return, id, lookup)
+import qualified Prelude as Pre ((>>=), (>>), fail, return, id, lookup)
 import Symmetry.Language
 import Symmetry.Verify
 import Symmetry.SymbEx
@@ -71,14 +72,14 @@ database
                                            send p v)
                    return tt
 
-clientCount :: (DSL repr) => repr Int
-clientCount = int 3
-  
-mainProc :: DSL repr => repr (Process repr ())
-mainProc = do rcs <- newRMulti
-              db  <- self
-              cs  <- spawnMany rcs clientCount (db |> client)
-              database
+mainProc :: DSL repr => repr (Int -> Process repr ())
+mainProc = lam $ \wc ->
+  do rcs <- newRMulti
+     db  <- self
+     cs  <- spawnMany rcs wc (db |> client)
+     database
 
 main :: IO ()
-main = checkerMain (exec mainProc)
+main = do
+  workerCount Pre.>>= \n ->
+    checkerMain (exec $ (int n) |> mainProc)

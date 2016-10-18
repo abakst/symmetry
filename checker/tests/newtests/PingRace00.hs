@@ -10,11 +10,10 @@
 module PingMulti02 where
 
 import Prelude hiding ((>>=), (>>), fail, return) 
+import qualified Prelude as Pre ((>>=), (>>), fail, return) 
 import Symmetry.Language
 import Symmetry.Verify
 import SrcHelper
-
-noOfWorkers = 3  
 
 pingServer :: (DSL repr) => repr (Pid RSing -> Process repr ())
 pingServer = lam $ \m -> do
@@ -39,4 +38,6 @@ mainProc = lam $ \n -> exec $ do
   app2 master r n
 
 main :: IO ()
-main = checkerMain (int noOfWorkers |> mainProc)
+main =
+  workerCount Pre.>>= \noOfWorkers ->
+  checkerMain (int noOfWorkers |> mainProc)

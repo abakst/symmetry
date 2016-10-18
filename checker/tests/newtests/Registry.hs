@@ -6,12 +6,11 @@
 module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return)
+import qualified Prelude as Pre ((>>=), (>>), fail, return) 
 import Symmetry.Language
 import Symmetry.Verify
 
 -- From TransDPOR
-
--- type Msg = (Pid RSing) :+: (Pid RSing)
 
 type MasterMsg = (Pid RSing) :+: ()
 type ClientMsg = () :+: (Pid RSing)
@@ -71,7 +70,7 @@ go = lam $ \nClients ->
      cs        <- spawnMany rClients nClients client
      (app (app master cs) reg)
 
-clientCount = int 3
-
 main :: IO ()
-main = checkerMain (exec (clientCount |> go))
+main =
+  workerCount Pre.>>= \clientCount ->
+  checkerMain $ exec $ (int clientCount) |> go

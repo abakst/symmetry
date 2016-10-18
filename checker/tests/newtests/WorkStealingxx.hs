@@ -11,6 +11,7 @@
 module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return) 
+import qualified Prelude as Pre ((>>=), (>>), fail, return) 
 import Symmetry.Language
 import Symmetry.Verify
 --import SrcHelper
@@ -59,8 +60,8 @@ master = lam $ \n -> -- worker count
      workQueueProcess `app` k `app` workers
      ret tt
 
-mapperCount = int 3
-workCount   = int 3
-
 main :: IO ()
-main = checkerMain $ exec $ master `app` workCount `app` mapperCount
+main =
+  workerCount Pre.>>= \mapperCount ->
+  jobCount Pre.>>= \workCount ->
+  checkerMain $ exec $ master `app` int workCount `app` int mapperCount

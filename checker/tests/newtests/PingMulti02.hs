@@ -8,10 +8,9 @@
 module PingMulti02 where
 
 import Prelude hiding ((>>=), (>>), fail, return) 
+import qualified Prelude as Pre ((>>=), (>>), fail, return) 
 import Symmetry.Language
 import Symmetry.Verify
-
-noOfWorkers = 3  
 
 pingServer :: (DSL repr) => repr (Process repr ())
 pingServer = do myPid <- self
@@ -33,4 +32,6 @@ mainProc = lam $ \n -> exec $ do r <- newRMulti
                                  app (app master r) n
 
 main :: IO ()
-main = checkerMain (int noOfWorkers |> mainProc)
+main =
+  workerCount Pre.>>= \noOfWorkers ->
+  checkerMain (int noOfWorkers |> mainProc)

@@ -8,6 +8,7 @@
 module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return) 
+import qualified Prelude as Pre ((>>=), (>>), fail, return) 
 import Symmetry.Language
 import Symmetry.Verify
 
@@ -49,5 +50,7 @@ mainProc = lam $ \n -> exec $ do r <- newRMulti
                                  ret tt
 
 main :: IO ()
-main = checkerMain (int 2 |> mainProc)
+main =
+  workerCount Pre.>>= \noOfWorkers ->
+  checkerMain (int noOfWorkers |> mainProc)
 

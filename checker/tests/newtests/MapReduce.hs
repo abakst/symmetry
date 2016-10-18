@@ -10,6 +10,7 @@
 module Main where
 
 import Prelude hiding ((>>=), (>>), fail, return) 
+import qualified Prelude as Pre ((>>=), (>>), fail, return) 
 import Symmetry.Language
 import Symmetry.Verify
 import SrcHelper
@@ -60,14 +61,13 @@ master = lam $ \mapperRole  -> lam $ \k -> lam $ \n ->
                   mappers       <- spawnMany mapperRole k (app (app mapperProcess masterPid) myPid)
                   app (app workQueueProcess n) mappers
 
-mapperCount = int 3
-workCount   = int 3
-
 mainProc :: (DSL repr) => repr (Int -> Int -> ())
 mainProc = lam $ \k -> lam $ \n -> exec $ do r <- newRMulti
                                              app (app (app master r) k) n
                                              ret tt
 
-
 main :: IO ()
-main = checkerMain $ mainProc `app` mapperCount `app` workCount
+main =
+  workerCount Pre.>>= \n ->
+    jobCount Pre.>>= \j ->
+      checkerMain $ mainProc `app` (int n) `app` (int j)
