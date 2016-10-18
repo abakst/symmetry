@@ -8,17 +8,7 @@ trap "kill 0" SIGINT
 
 OUTPUT_ROOT="${0:A:h}/results"
 
-# colors {{{
-autoload colors
-if [[ "$terminfo[colors]" -gt 8 ]]; then
-    colors
-fi
-for COLOR in RED GREEN YELLOW BLUE MAGENTA CYAN BLACK WHITE; do
-    eval $COLOR='$fg_no_bold[${(L)COLOR}]'
-    eval BOLD_$COLOR='$fg_bold[${(L)COLOR}]'
-done
-eval RESET='$reset_color'
-# }}}
+source colors.sh
 
 run_spin() {
   if [[ $# -le 3 ]]; then 
@@ -46,10 +36,13 @@ run_spin() {
   local OUT_LOG=${OUTPUT}/${NAME}.log
 
   ./pan -X -n -m1000000 > ${OUT_LOG} || \
-      { echo "${BOLD_RED}FAIL${RESET}: $FILE [pan]"; exit 1 }
+      { echo "${BOLD_RED}FAIL${RESET}: $FILE [pan]"; exit 0 }
   
   grep -qPi 'pan:[0-9]+:\s+invalid end state' ${OUT_LOG} && \
       { echo "${BOLD_RED}FAIL${RESET}: $FILE [pan - invalid end state]"; exit 1 }
+
+  grep -qPi 'timeout' ${OUT_LOG} && \
+      { echo "${BOLD_RED}FAIL${RESET}: $FILE [pan - timeout]"; exit 1 }
 
   printf "${BOLD_GREEN}DONE${RESET}: %-20s $@\n" ${FILE} 
   popd

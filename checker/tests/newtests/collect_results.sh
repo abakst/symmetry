@@ -1,29 +1,26 @@
 #!/bin/zsh
 
+set -e
+
 # traps the 'Ctrl-C' signal, and kills all the children
 trap "kill 0" SIGINT
 
-# colors {{{
-autoload colors
-if [[ "$terminfo[colors]" -gt 8 ]]; then
-    colors
-fi
-for COLOR in RED GREEN YELLOW BLUE MAGENTA CYAN BLACK WHITE; do
-    eval $COLOR='$fg_no_bold[${(L)COLOR}]'
-    eval BOLD_$COLOR='$fg_bold[${(L)COLOR}]'
-done
-eval RESET='$reset_color'
-# }}}
+source colors.sh
 
-typeset -A INFTY_MAP
 # worker count -> buffer size
+typeset -A INFTY_MAP
 INFTY_MAP=( 
-    1 2
-    2 2 
-    3 3
-    4 4
+    1  2
+    2  2 
+    3  3
+    4  4
+    5  5
+    6  6
+    7  7
+    8  8
+    9  9
+    10 10
 )
-CUR_NO=4
 
 ONLY_WORKER=( ConcDB.hs
               DatabaseSample.hs
@@ -46,9 +43,9 @@ TEST_ROOT=${0:A:h}
 OUTPUT_ROOT="${TEST_ROOT}/results"
 
 # only workers, from 1 .. 10
+for worker_no in $(echo "${(@k)INFTY_MAP}" | tr ' ' '\n' | sort -n); do
+    [[ $worker_no -lt 9 ]] && continue
 
-#for worker_no in $(seq 1 10); do
-for worker_no in $(seq ${CUR_NO} ${CUR_NO}); do
     mkdir -p ${OUTPUT_ROOT}/${worker_no}
     
     infty=$INFTY_MAP[$worker_no]

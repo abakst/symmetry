@@ -4,17 +4,7 @@
 # traps the 'Ctrl-C' signal, and kills all the children
 trap "kill 0" SIGINT
 
-# colors {{{
-autoload colors
-if [[ "$terminfo[colors]" -gt 8 ]]; then
-    colors
-fi
-for COLOR in RED GREEN YELLOW BLUE MAGENTA CYAN BLACK WHITE; do
-    eval $COLOR='$fg_no_bold[${(L)COLOR}]'
-    eval BOLD_$COLOR='$fg_bold[${(L)COLOR}]'
-done
-eval RESET='$reset_color'
-# }}}
+source colors.sh
 
 stack build --fast
 
