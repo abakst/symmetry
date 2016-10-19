@@ -47,15 +47,11 @@ NF > 0 {
   }
 
   if ($0 ~ /memory usage/) {
-    # memory=$1 " " $4;
-    # looks like it's always Mbytes
-    memory=$1;
+    memory=$1 " " $4;
   }
 
   if ($0 ~ /.*elapsed time .* seconds/) {
-    # time=$4 " " $5;
-    # looks like it's always seconds
-    time=$4;
+    time=$4 " " $5;
   }
 }
 
@@ -64,8 +60,8 @@ END {
     exit
   }
 
-  printf("%s,%d,%d,%d,%d,%d,%s,%s\\n", 
-    benchmark, worker, stored, matched, transitions, steps, memory, time);
+  printf("%s,%d,%d,%d,%d,%s,%s\\n", 
+    file, stored, matched, transitions, steps, memory, time);
 }
 EOF
 )
@@ -73,18 +69,9 @@ EOF
 # echo $PARSER
 # exit 0
 
-only_worker_csv() {
-    echo "benchmark,worker,stored,matched,transitions,steps,memory (Mbytes),time (seconds)";
-    for n in $(seq 1 ${NO_OF_TESTS}); do
-        for f in ${ONLY_WORKER}; do
-            log="results/$n/${f:r}.log"
-            awk --posix -f <(echo $PARSER) \
-                --assign benchmark=${log:t:r} \
-                --assign worker=$n \
-                $log
-        done
+for n in $(seq 1 ${NO_OF_TESTS}); do
+    for f in ${ONLY_WORKER}; do
+        log="results/$n/${f:r}.log"
+        awk --posix -f <(echo $PARSER) --assign file=${log:t:r} $log
     done
-}
-
-only_worker_csv > only_worker.csv
-
+done

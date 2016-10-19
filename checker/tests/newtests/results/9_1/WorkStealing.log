@@ -1,0 +1,5 @@
+Depth=     171 States=    1e+06 Transitions= 1.34e+06 Memory=  1427.872	t=     2.29 R=   4e+05
+Depth=     171 States=    2e+06 Transitions= 2.68e+06 Memory=  2721.231	t=     4.38 R=   5e+05
+Depth=     171 States=    3e+06 Transitions= 4.05e+06 Memory=  4014.591	t=      6.4 R=   5e+05
+Depth=     171 States=    4e+06 Transitions= 5.49e+06 Memory=  5308.341	t=     8.56 R=   5e+05
+Depth=     171 States=    5e+06 Transitions= 6.85e+06 Memory=  6601.700	t=     10.7 R=   5e+05

@@ -1,0 +1,582 @@
+
+[01;34mWORKER COUNT: 1[00m
+[01;34mJOB COUNT: 1[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=2 --worker=1 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=2 --worker=1 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=2 --worker=1 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 2[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=4 --worker=1 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=4 --worker=1 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=4 --worker=1 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 3[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=6 --worker=1 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=6 --worker=1 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=6 --worker=1 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 4[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=8 --worker=1 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=8 --worker=1 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=8 --worker=1 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 5[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=10 --worker=1 --job=5
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=10 --worker=1 --job=5
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=10 --worker=1 --job=5
+FINISHED CPU 0.13 MEM 178240 MAXMEM 178240 STALE 0 MAXMEM_RSS 184160
+<time name="ALL">230</time>
+[01;34mJOB COUNT: 6[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=12 --worker=1 --job=6
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=12 --worker=1 --job=6
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=12 --worker=1 --job=6
+FINISHED CPU 1.82 MEM 0 MAXMEM 860688 STALE 0 MAXMEM_RSS 862368
+<time name="ALL">1820</time>
+[01;34mJOB COUNT: 7[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=14 --worker=1 --job=7
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=14 --worker=1 --job=7
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=14 --worker=1 --job=7
+FINISHED CPU 15.13 MEM 0 MAXMEM 6839576 STALE 0 MAXMEM_RSS 6782204
+<time name="ALL">15230</time>
+[01;34mJOB COUNT: 8[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=16 --worker=1 --job=8
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=16 --worker=1 --job=8
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;31mFAIL[00m: WorkStealingxx.hs [pan]
+MEM CPU 15.10 MEM 8125624 MAXMEM 8125624 STALE 0 MAXMEM_RSS 8063248
+<time name="ALL">15210</time>
+[01;34mJOB COUNT: 9[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=18 --worker=1 --job=9
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=18 --worker=1 --job=9
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 10[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=20 --worker=1 --job=10
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=20 --worker=1 --job=10
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+
+[01;34mWORKER COUNT: 2[00m
+[01;34mJOB COUNT: 1[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=2 --worker=2 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=2 --worker=2 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=2 --worker=2 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 2[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=4 --worker=2 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=4 --worker=2 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=4 --worker=2 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 3[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=6 --worker=2 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=6 --worker=2 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=6 --worker=2 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 4[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=8 --worker=2 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=8 --worker=2 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=8 --worker=2 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 5[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=10 --worker=2 --job=5
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=10 --worker=2 --job=5
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=10 --worker=2 --job=5
+FINISHED CPU 0.62 MEM 0 MAXMEM 259848 STALE 0 MAXMEM_RSS 265012
+<time name="ALL">640</time>
+[01;34mJOB COUNT: 6[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=12 --worker=2 --job=6
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=12 --worker=2 --job=6
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=12 --worker=2 --job=6
+FINISHED CPU 4.38 MEM 0 MAXMEM 1892100 STALE 0 MAXMEM_RSS 1884696
+<time name="ALL">4380</time>
+[01;34mJOB COUNT: 7[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=14 --worker=2 --job=7
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=14 --worker=2 --job=7
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;31mFAIL[00m: WorkStealingxx.hs [pan]
+MEM CPU 15.68 MEM 8031780 MAXMEM 8031780 STALE 0 MAXMEM_RSS 7968044
+<time name="ALL">15790</time>
+[01;34mJOB COUNT: 8[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=16 --worker=2 --job=8
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=16 --worker=2 --job=8
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 9[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=18 --worker=2 --job=9
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=18 --worker=2 --job=9
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 10[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=20 --worker=2 --job=10
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=20 --worker=2 --job=10
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+
+[01;34mWORKER COUNT: 3[00m
+[01;34mJOB COUNT: 1[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=3 --worker=3 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=3 --worker=3 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=3 --worker=3 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 2[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=6 --worker=3 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=6 --worker=3 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=6 --worker=3 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 3[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=9 --worker=3 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=9 --worker=3 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=9 --worker=3 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 4[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=12 --worker=3 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=12 --worker=3 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=12 --worker=3 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 5[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=15 --worker=3 --job=5
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=15 --worker=3 --job=5
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=15 --worker=3 --job=5
+FINISHED CPU 0.56 MEM 0 MAXMEM 281664 STALE 0 MAXMEM_RSS 287188
+<time name="ALL">610</time>
+[01;34mJOB COUNT: 6[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=18 --worker=3 --job=6
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=18 --worker=3 --job=6
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=18 --worker=3 --job=6
+FINISHED CPU 6.23 MEM 0 MAXMEM 2392252 STALE 0 MAXMEM_RSS 2379888
+<time name="ALL">6230</time>
+[01;34mJOB COUNT: 7[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=21 --worker=3 --job=7
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=21 --worker=3 --job=7
+FINISHED CPU 0.13 MEM 0 MAXMEM 0 STALE 0 MAXMEM_RSS 0
+<time name="ALL">140</time>
+[01;31mFAIL[00m: WorkStealingxx.hs [pan]
+MEM CPU 16.33 MEM 8036628 MAXMEM 8036628 STALE 0 MAXMEM_RSS 7972716
+<time name="ALL">16440</time>
+[01;34mJOB COUNT: 8[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=24 --worker=3 --job=8
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=24 --worker=3 --job=8
+FINISHED CPU 0.10 MEM 0 MAXMEM 0 STALE 0 MAXMEM_RSS 0
+<time name="ALL">100</time>
+[01;34mJOB COUNT: 9[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=27 --worker=3 --job=9
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=27 --worker=3 --job=9
+FINISHED CPU 0.10 MEM 0 MAXMEM 0 STALE 0 MAXMEM_RSS 0
+<time name="ALL">100</time>
+[01;34mJOB COUNT: 10[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=30 --worker=3 --job=10
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=30 --worker=3 --job=10
+FINISHED CPU 0.12 MEM 175760 MAXMEM 175760 STALE 0 MAXMEM_RSS 0
+<time name="ALL">150</time>
+
+[01;34mWORKER COUNT: 4[00m
+[01;34mJOB COUNT: 1[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=4 --worker=4 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=4 --worker=4 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=4 --worker=4 --job=1
+FINISHED CPU 0.13 MEM 0 MAXMEM 0 STALE 0 MAXMEM_RSS 0
+<time name="ALL">130</time>
+[01;34mJOB COUNT: 2[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=8 --worker=4 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=8 --worker=4 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=8 --worker=4 --job=2
+FINISHED CPU 0.14 MEM 177856 MAXMEM 177856 STALE 0 MAXMEM_RSS 182908
+<time name="ALL">240</time>
+[01;34mJOB COUNT: 3[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=12 --worker=4 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=12 --worker=4 --job=3
+FINISHED CPU 0.10 MEM 0 MAXMEM 0 STALE 0 MAXMEM_RSS 0
+<time name="ALL">100</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=12 --worker=4 --job=3
+FINISHED CPU 0.37 MEM 240880 MAXMEM 240880 STALE 0 MAXMEM_RSS 244352
+<time name="ALL">470</time>
+[01;34mJOB COUNT: 4[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=16 --worker=4 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=16 --worker=4 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=16 --worker=4 --job=4
+FINISHED CPU 0.62 MEM 322488 MAXMEM 322488 STALE 0 MAXMEM_RSS 247520
+<time name="ALL">660</time>
+[01;34mJOB COUNT: 5[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=20 --worker=4 --job=5
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=20 --worker=4 --job=5
+FINISHED CPU 0.62 MEM 318024 MAXMEM 318024 STALE 0 MAXMEM_RSS 323284
+<time name="ALL">750</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=20 --worker=4 --job=5
+FINISHED CPU 0.86 MEM 0 MAXMEM 309964 STALE 0 MAXMEM_RSS 312728
+<time name="ALL">860</time>
+[01;34mJOB COUNT: 6[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=24 --worker=4 --job=6
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=24 --worker=4 --job=6
+FINISHED CPU 0.68 MEM 0 MAXMEM 370968 STALE 0 MAXMEM_RSS 373448
+<time name="ALL">680</time>
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=24 --worker=4 --job=6
+FINISHED CPU 7.14 MEM 0 MAXMEM 2450832 STALE 0 MAXMEM_RSS 2437012
+<time name="ALL">7240</time>
+[01;34mJOB COUNT: 7[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=28 --worker=4 --job=7
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=28 --worker=4 --job=7
+FINISHED CPU 1.40 MEM 0 MAXMEM 452980 STALE 0 MAXMEM_RSS 452120
+<time name="ALL">1410</time>
+[01;31mFAIL[00m: WorkStealingxx.hs [pan]
+MEM CPU 16.72 MEM 8103288 MAXMEM 8103288 STALE 0 MAXMEM_RSS 8037736
+<time name="ALL">16830</time>
+[01;34mJOB COUNT: 8[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=32 --worker=4 --job=8
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=32 --worker=4 --job=8
+FINISHED CPU 1.60 MEM 0 MAXMEM 499844 STALE 0 MAXMEM_RSS 500960
+<time name="ALL">1630</time>
+[01;34mJOB COUNT: 9[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=36 --worker=4 --job=9
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=36 --worker=4 --job=9
+FINISHED CPU 1.11 MEM 549940 MAXMEM 549940 STALE 0 MAXMEM_RSS 558248
+<time name="ALL">1210</time>
+[01;34mJOB COUNT: 10[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=40 --worker=4 --job=10
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: MapReduce.hs         --intfy=40 --worker=4 --job=10
+FINISHED CPU 1.58 MEM 0 MAXMEM 588728 STALE 0 MAXMEM_RSS 594680
+<time name="ALL">1620</time>
+
+[01;34mWORKER COUNT: 5[00m
+[01;34mJOB COUNT: 1[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=5 --worker=5 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=5 --worker=5 --job=1
+FINISHED CPU 0.12 MEM 199652 MAXMEM 199652 STALE 0 MAXMEM_RSS 205280
+<time name="ALL">180</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=5 --worker=5 --job=1
+FINISHED CPU 0.86 MEM 400552 MAXMEM 400552 STALE 0 MAXMEM_RSS 401948
+<time name="ALL">950</time>
+[01;34mJOB COUNT: 2[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=10 --worker=5 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=10 --worker=5 --job=2
+FINISHED CPU 0.53 MEM 295804 MAXMEM 295804 STALE 0 MAXMEM_RSS 298272
+<time name="ALL">610</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=10 --worker=5 --job=2
+FINISHED CPU 2.06 MEM 1039280 MAXMEM 1039280 STALE 0 MAXMEM_RSS 1041080
+<time name="ALL">2170</time>
+[01;34mJOB COUNT: 3[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=15 --worker=5 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=15 --worker=5 --job=3
+FINISHED CPU 0.52 MEM 330144 MAXMEM 330144 STALE 0 MAXMEM_RSS 333848
+<time name="ALL">600</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=15 --worker=5 --job=3
+FINISHED CPU 3.95 MEM 0 MAXMEM 1719616 STALE 0 MAXMEM_RSS 1714708
+<time name="ALL">4050</time>
+[01;34mJOB COUNT: 4[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=20 --worker=5 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=20 --worker=5 --job=4
+FINISHED CPU 0.80 MEM 0 MAXMEM 303884 STALE 0 MAXMEM_RSS 309096
+<time name="ALL">800</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=20 --worker=5 --job=4
+FINISHED CPU 5.61 MEM 0 MAXMEM 2548220 STALE 0 MAXMEM_RSS 2526616
+<time name="ALL">5610</time>
+[01;34mJOB COUNT: 5[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=25 --worker=5 --job=5
+FINISHED CPU 0.49 MEM 320852 MAXMEM 320852 STALE 0 MAXMEM_RSS 321968
+<time name="ALL">570</time>
+[01;32mDONE[00m: WorkStealing.hs      --intfy=25 --worker=5 --job=5
+FINISHED CPU 0.69 MEM 336204 MAXMEM 336204 STALE 0 MAXMEM_RSS 337544
+<time name="ALL">740</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=25 --worker=5 --job=5
+FINISHED CPU 10.22 MEM 0 MAXMEM 3287540 STALE 0 MAXMEM_RSS 3258168
+<time name="ALL">10220</time>
+[01;34mJOB COUNT: 6[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=30 --worker=5 --job=6
+FINISHED CPU 0.47 MEM 0 MAXMEM 293784 STALE 0 MAXMEM_RSS 300320
+<time name="ALL">470</time>
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=30 --worker=5 --job=6
+FINISHED CPU 5.76 MEM 0 MAXMEM 2494464 STALE 0 MAXMEM_RSS 2479736
+<time name="ALL">5840</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=30 --worker=5 --job=6
+FINISHED CPU 10.43 MEM 0 MAXMEM 4032112 STALE 0 MAXMEM_RSS 3997288
+<time name="ALL">10530</time>
+[01;34mJOB COUNT: 7[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=35 --worker=5 --job=7
+FINISHED CPU 0.33 MEM 307520 MAXMEM 307520 STALE 0 MAXMEM_RSS 312992
+<time name="ALL">400</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=35 --worker=5 --job=7
+FINISHED CPU 10.99 MEM 0 MAXMEM 4775068 STALE 0 MAXMEM_RSS 4732148
+<time name="ALL">11040</time>
+[01;31mFAIL[00m: WorkStealingxx.hs [pan]
+MEM CPU 14.85 MEM 8001076 MAXMEM 8001076 STALE 0 MAXMEM_RSS 7937816
+<time name="ALL">14950</time>
+[01;34mJOB COUNT: 8[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=40 --worker=5 --job=8
+FINISHED CPU 0.72 MEM 0 MAXMEM 318024 STALE 0 MAXMEM_RSS 321704
+<time name="ALL">720</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=40 --worker=5 --job=8
+FINISHED CPU 13.31 MEM 0 MAXMEM 5598420 STALE 0 MAXMEM_RSS 5551580
+<time name="ALL">13410</time>
+[01;34mJOB COUNT: 9[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=45 --worker=5 --job=9
+FINISHED CPU 0.58 MEM 350344 MAXMEM 350344 STALE 0 MAXMEM_RSS 354508
+<time name="ALL">680</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=45 --worker=5 --job=9
+FINISHED CPU 15.96 MEM 0 MAXMEM 6378948 STALE 0 MAXMEM_RSS 6324344
+<time name="ALL">15960</time>
+[01;34mJOB COUNT: 10[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=50 --worker=5 --job=10
+FINISHED CPU 0.63 MEM 324892 MAXMEM 324892 STALE 0 MAXMEM_RSS 330676
+<time name="ALL">710</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=50 --worker=5 --job=10
+FINISHED CPU 16.60 MEM 0 MAXMEM 7204320 STALE 0 MAXMEM_RSS 7141104
+<time name="ALL">16680</time>
+
+[01;34mWORKER COUNT: 6[00m
+[01;34mJOB COUNT: 1[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=6 --worker=6 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=6 --worker=6 --job=1
+FINISHED CPU 1.67 MEM 903916 MAXMEM 903916 STALE 0 MAXMEM_RSS 908568
+<time name="ALL">1780</time>
+[01;32mDONE[00m: MapReduce.hs         --intfy=6 --worker=6 --job=1
+FINISHED CPU 6.16 MEM 0 MAXMEM 2532556 STALE 0 MAXMEM_RSS 2518348
+<time name="ALL">6240</time>
+[01;34mJOB COUNT: 2[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=12 --worker=6 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=12 --worker=6 --job=2
+FINISHED CPU 4.28 MEM 0 MAXMEM 1885232 STALE 0 MAXMEM_RSS 1872060
+<time name="ALL">4340</time>
+[01;31mFAIL[00m: MapReduce.hs [pan]
+MEM CPU 17.71 MEM 8084324 MAXMEM 8084324 STALE 0 MAXMEM_RSS 8015708
+<time name="ALL">17800</time>
+[01;34mJOB COUNT: 3[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=18 --worker=6 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=18 --worker=6 --job=3
+FINISHED CPU 5.94 MEM 0 MAXMEM 2378112 STALE 0 MAXMEM_RSS 2367272
+<time name="ALL">5940</time>
+[01;34mJOB COUNT: 4[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=24 --worker=6 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=24 --worker=6 --job=4
+FINISHED CPU 5.72 MEM 2523552 MAXMEM 2523552 STALE 0 MAXMEM_RSS 2413544
+<time name="ALL">5810</time>
+[01;34mJOB COUNT: 5[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=30 --worker=6 --job=5
+FINISHED CPU 0.76 MEM 355596 MAXMEM 355596 STALE 0 MAXMEM_RSS 304348
+<time name="ALL">800</time>
+[01;32mDONE[00m: WorkStealing.hs      --intfy=30 --worker=6 --job=5
+FINISHED CPU 5.91 MEM 0 MAXMEM 2526380 STALE 0 MAXMEM_RSS 2511756
+<time name="ALL">5910</time>
+[01;34mJOB COUNT: 6[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=36 --worker=6 --job=6
+FINISHED CPU 5.55 MEM 0 MAXMEM 2549004 STALE 0 MAXMEM_RSS 2531488
+<time name="ALL">5550</time>
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=36 --worker=6 --job=6
+FINISHED CPU 6.30 MEM 0 MAXMEM 2509008 STALE 0 MAXMEM_RSS 2495528
+<time name="ALL">6380</time>
+[01;34mJOB COUNT: 7[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=42 --worker=6 --job=7
+FINISHED CPU 5.55 MEM 0 MAXMEM 2551024 STALE 0 MAXMEM_RSS 2536536
+<time name="ALL">5550</time>
+[01;31mFAIL[00m: WorkStealingxx.hs [pan]
+MEM CPU 18.09 MEM 8024104 MAXMEM 8024104 STALE 0 MAXMEM_RSS 7959148
+<time name="ALL">18200</time>
+[01;34mJOB COUNT: 8[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=48 --worker=6 --job=8
+FINISHED CPU 5.97 MEM 2606372 MAXMEM 2606372 STALE 0 MAXMEM_RSS 2497600
+<time name="ALL">6080</time>
+[01;34mJOB COUNT: 9[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=54 --worker=6 --job=9
+FINISHED CPU 7.46 MEM 0 MAXMEM 2564760 STALE 0 MAXMEM_RSS 2549188
+<time name="ALL">7570</time>
+[01;34mJOB COUNT: 10[00m
+[01;32mDONE[00m: WorkStealing.hs      --intfy=60 --worker=6 --job=10
+FINISHED CPU 7.43 MEM 0 MAXMEM 2579304 STALE 0 MAXMEM_RSS 2564164
+<time name="ALL">7510</time>
+
+[01;34mWORKER COUNT: 7[00m
+[01;34mJOB COUNT: 1[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=7 --worker=7 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;32mDONE[00m: WorkStealing.hs      --intfy=7 --worker=7 --job=1
+FINISHED CPU 16.68 MEM 0 MAXMEM 6799176 STALE 0 MAXMEM_RSS 6737312
+<time name="ALL">16740</time>
+[01;31mFAIL[00m: MapReduce.hs [pan]
+MEM CPU 16.79 MEM 8100600 MAXMEM 8100600 STALE 0 MAXMEM_RSS 8034552
+<time name="ALL">16900</time>
+[01;34mJOB COUNT: 2[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=14 --worker=7 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;31mFAIL[00m: WorkStealing.hs [pan]
+MEM CPU 18.74 MEM 8075816 MAXMEM 8075816 STALE 0 MAXMEM_RSS 8011780
+<time name="ALL">18850</time>
+[01;34mJOB COUNT: 3[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=21 --worker=7 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 4[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=28 --worker=7 --job=4
+FINISHED CPU 0.11 MEM 0 MAXMEM 0 STALE 0 MAXMEM_RSS 0
+<time name="ALL">110</time>
+[01;34mJOB COUNT: 5[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=35 --worker=7 --job=5
+FINISHED CPU 0.61 MEM 358020 MAXMEM 358020 STALE 0 MAXMEM_RSS 299592
+<time name="ALL">660</time>
+[01;34mJOB COUNT: 6[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=42 --worker=7 --job=6
+FINISHED CPU 5.99 MEM 0 MAXMEM 2505372 STALE 0 MAXMEM_RSS 2492680
+<time name="ALL">6100</time>
+[01;34mJOB COUNT: 7[00m
+[01;31mFAIL[00m: WorkStealingxx.hs [pan]
+MEM CPU 16.08 MEM 8125104 MAXMEM 8125104 STALE 0 MAXMEM_RSS 8058804
+<time name="ALL">16190</time>
+
+[01;34mWORKER COUNT: 8[00m
+[01;34mJOB COUNT: 1[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=8 --worker=8 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;31mFAIL[00m: WorkStealing.hs [pan]
+MEM CPU 16.39 MEM 8027048 MAXMEM 8027048 STALE 0 MAXMEM_RSS 7954376
+<time name="ALL">16460</time>
+[01;31mFAIL[00m: MapReduce.hs [pan]
+MEM CPU 12.47 MEM 8046592 MAXMEM 8046592 STALE 0 MAXMEM_RSS 7974452
+<time name="ALL">12550</time>
+[01;34mJOB COUNT: 2[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=16 --worker=8 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 3[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=24 --worker=8 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 4[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=32 --worker=8 --job=4
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 5[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=40 --worker=8 --job=5
+FINISHED CPU 0.85 MEM 0 MAXMEM 316004 STALE 0 MAXMEM_RSS 321968
+<time name="ALL">850</time>
+[01;34mJOB COUNT: 6[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=48 --worker=8 --job=6
+FINISHED CPU 7.29 MEM 0 MAXMEM 2558700 STALE 0 MAXMEM_RSS 2542536
+<time name="ALL">7390</time>
+[01;34mJOB COUNT: 7[00m
+[01;31mFAIL[00m: WorkStealingxx.hs [pan]
+MEM CPU 16.06 MEM 8043092 MAXMEM 8043092 STALE 0 MAXMEM_RSS 7971432
+<time name="ALL">16170</time>
+
+[01;34mWORKER COUNT: 9[00m
+[01;34mJOB COUNT: 1[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=9 --worker=9 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;31mFAIL[00m: WorkStealing.hs [pan]
+MEM CPU 12.56 MEM 8035652 MAXMEM 8035652 STALE 0 MAXMEM_RSS 7972952
+<time name="ALL">12670</time>
+[01;31mFAIL[00m: MapReduce.hs [pan]
+MEM CPU 13.84 MEM 8131572 MAXMEM 8131572 STALE 0 MAXMEM_RSS 8064524
+<time name="ALL">13930</time>
+[01;34mJOB COUNT: 2[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=18 --worker=9 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 3[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=27 --worker=9 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 4[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=36 --worker=9 --job=4
+FINISHED CPU 0.12 MEM 0 MAXMEM 0 STALE 0 MAXMEM_RSS 0
+<time name="ALL">120</time>
+[01;34mJOB COUNT: 5[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=45 --worker=9 --job=5
+FINISHED CPU 0.86 MEM 0 MAXMEM 318024 STALE 0 MAXMEM_RSS 323024
+<time name="ALL">860</time>
+[01;34mJOB COUNT: 6[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=54 --worker=9 --job=6
+FINISHED CPU 5.93 MEM 2621320 MAXMEM 2621320 STALE 0 MAXMEM_RSS 2510836
+<time name="ALL">6040</time>
+[01;34mJOB COUNT: 7[00m
+[01;31mFAIL[00m: WorkStealingxx.hs [pan]
+MEM CPU 15.94 MEM 8102076 MAXMEM 8102076 STALE 0 MAXMEM_RSS 8037072
+<time name="ALL">16050</time>
+
+[01;34mWORKER COUNT: 10[00m
+[01;34mJOB COUNT: 1[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=10 --worker=10 --job=1
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;31mFAIL[00m: WorkStealing.hs [pan]
+MEM CPU 12.34 MEM 8107704 MAXMEM 8107704 STALE 0 MAXMEM_RSS 8047316
+<time name="ALL">12450</time>
+[01;31mFAIL[00m: MapReduce.hs [pan]
+MEM CPU 12.08 MEM 8162840 MAXMEM 8162840 STALE 0 MAXMEM_RSS 8102736
+<time name="ALL">12180</time>
+[01;34mJOB COUNT: 2[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=20 --worker=10 --job=2
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 3[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=30 --worker=10 --job=3
+FINISHED CPU 0.00 MEM 0 MAXMEM -1 STALE 0 MAXMEM_RSS -1
+[01;34mJOB COUNT: 4[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=40 --worker=10 --job=4
+FINISHED CPU 0.12 MEM 0 MAXMEM 0 STALE 0 MAXMEM_RSS 0
+<time name="ALL">120</time>
+[01;34mJOB COUNT: 5[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=50 --worker=10 --job=5
+FINISHED CPU 0.61 MEM 337416 MAXMEM 337416 STALE 0 MAXMEM_RSS 343088
+<time name="ALL">720</time>
+[01;34mJOB COUNT: 6[00m
+[01;32mDONE[00m: WorkStealingxx.hs    --intfy=60 --worker=10 --job=6
+FINISHED CPU 6.66 MEM 0 MAXMEM 2600312 STALE 0 MAXMEM_RSS 2579716
+<time name="ALL">6660</time>
+[01;34mJOB COUNT: 7[00m
+[01;31mFAIL[00m: WorkStealingxx.hs [pan]
+MEM CPU 16.26 MEM 8113792 MAXMEM 8113792 STALE 0 MAXMEM_RSS 8047828
+<time name="ALL">16360</time>
