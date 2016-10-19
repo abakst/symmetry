@@ -1,9 +1,6 @@
-pan: error, VECTORSZ too small, recompile pan.c with -DVECTORSZ=N with N>2332
-pan:1: aborting (at depth 0)
-pan: wrote out.pml.trail
+Depth=     159 States=    1e+06 Transitions= 1.59e+06 Memory=  2473.966	t=     5.11 R=   2e+05
 
 (Spin Version 6.4.5 -- 1 January 2016)
-Warning: Search not completed
 	+ Partial Order Reduction
 
 Full statespace search for:
@@ -12,15 +9,15 @@ Full statespace search for:
 	cycle checks       	- (disabled by -DSAFETY)
 	invalid end states	+
 
-State-vector 2332 byte, depth reached 0, errors: 1
-        0 states, stored
-        0 states, matched
-        0 transitions (= stored+matched)
-        0 atomic steps
-hash conflicts:         0 (resolved)
+State-vector 2424 byte, depth reached 159, errors: 0
+  1041350 states, stored
+   616119 states, matched
+  1657469 transitions (= stored+matched)
+   905237 atomic steps
+hash conflicts:      5349 (resolved)
 
-  134.513	memory usage (Mbyte)
+ 2570.450	memory usage (Mbyte)
 
 
-pan: elapsed time 7.78e+07 seconds
-pan: rate         0 states/second
+pan: elapsed time 5.31 seconds
+pan: rate 196111.11 states/second

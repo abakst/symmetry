@@ -1,4 +1,4 @@
-Depth=     132 States=    1e+06 Transitions= 2.37e+06 Memory=  1225.138	t=     4.56 R=   2e+05
+Depth=     132 States=    1e+06 Transitions= 2.37e+06 Memory=  1225.528	t=     3.75 R=   3e+05
 
 (Spin Version 6.4.5 -- 1 January 2016)
 	+ Partial Order Reduction
@@ -16,8 +16,8 @@ State-vector 1120 byte, depth reached 132, errors: 0
   2457721 atomic steps
 hash conflicts:     15207 (resolved)
 
- 1439.200	memory usage (Mbyte)
+ 1439.591	memory usage (Mbyte)
 
 
-pan: elapsed time 5.67 seconds
-pan: rate 210957.14 states/second
+pan: elapsed time 4.44 seconds
+pan: rate 269397.97 states/second

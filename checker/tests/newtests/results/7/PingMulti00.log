@@ -15,8 +15,8 @@ State-vector 608 byte, depth reached 111, errors: 0
    180059 atomic steps
 hash conflicts:       135 (resolved)
 
-  202.677	memory usage (Mbyte)
+  202.872	memory usage (Mbyte)
 
 
-pan: elapsed time 0.24 seconds
-pan: rate 475633.33 states/second
+pan: elapsed time 0.23 seconds
+pan: rate 496313.04 states/second

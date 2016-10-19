@@ -1,5 +1,5 @@
-Depth=      97 States=    1e+06 Transitions= 1.62e+06 Memory=  1509.317	t=     2.82 R=   4e+05
-Depth=      97 States=    2e+06 Transitions= 3.36e+06 Memory=  2884.708	t=     6.09 R=   3e+05
-Depth=      97 States=    3e+06 Transitions= 5.03e+06 Memory=  4260.099	t=     9.18 R=   3e+05
-Depth=      97 States=    4e+06 Transitions= 6.54e+06 Memory=  5635.684	t=       12 R=   3e+05
-Depth=      97 States=    5e+06 Transitions= 8.23e+06 Memory=  7011.075	t=     15.2 R=   3e+05
+Depth=      97 States=    1e+06 Transitions= 1.62e+06 Memory=  1509.513	t=     3.01 R=   3e+05
+Depth=      97 States=    2e+06 Transitions= 3.36e+06 Memory=  2884.903	t=     6.91 R=   3e+05
+Depth=      97 States=    3e+06 Transitions= 5.03e+06 Memory=  4260.294	t=      9.9 R=   3e+05
+Depth=      97 States=    4e+06 Transitions= 6.54e+06 Memory=  5635.684	t=     12.6 R=   3e+05
+Depth=      97 States=    5e+06 Transitions= 8.23e+06 Memory=  7011.075	t=     15.5 R=   3e+05

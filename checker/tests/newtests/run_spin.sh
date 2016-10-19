@@ -30,7 +30,7 @@ run_spin() {
   spin -m -a -D__K__=${INFTY} out.pml &>/dev/null || \
       { echo "${BOLD_RED}FAIL${RESET}: $FILE [spin]"; exit 1 }
 
-  cc -O2 -DVECTORSZ=2048 -DSAFETY -DNOBOUNDCHECK -DNOCOMP -DSFH -DNOFAIR -o pan pan.c &>/dev/null || \
+  cc -O2 -DVECTORSZ=4096 -DSAFETY -DNOBOUNDCHECK -DNOCOMP -DSFH -DNOFAIR -o pan pan.c &>/dev/null || \
       { echo "${BOLD_RED}FAIL${RESET}: $FILE [cc]"; exit 1 }
   
   local OUT_LOG=${OUTPUT}/${NAME}.log
@@ -41,6 +41,9 @@ run_spin() {
       { echo "${BOLD_RED}FAIL${RESET}: $FILE [pan]"; exit 0 }
   
   grep -qPi 'pan:[0-9]+:\s+invalid end state' ${OUT_LOG} && \
+      { echo "${BOLD_RED}FAIL${RESET}: $FILE [pan - invalid end state]"; exit 1 }
+
+  grep -qPi 'pan:.*error' ${OUT_LOG} && \
       { echo "${BOLD_RED}FAIL${RESET}: $FILE [pan - invalid end state]"; exit 1 }
 
   grep -qPi 'timeout' ${OUT_LOG} && \
