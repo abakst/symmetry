@@ -1,0 +1,8 @@
++ results
++ results/**
++ run.log
++ collect_results.sh
++ run_spin.sh
++ .rsync-filter
+
+- *

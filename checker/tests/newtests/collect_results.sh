@@ -44,7 +44,7 @@ OUTPUT_ROOT="${TEST_ROOT}/results"
 
 # only workers, from 1 .. 10
 for worker_no in $(echo "${(@k)INFTY_MAP}" | tr ' ' '\n' | sort -n); do
-    [[ $worker_no -lt 9 ]] && continue
+    # [[ $worker_no -lt 8 ]] && continue
 
     mkdir -p ${OUTPUT_ROOT}/${worker_no}
     

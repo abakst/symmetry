@@ -35,7 +35,9 @@ run_spin() {
   
   local OUT_LOG=${OUTPUT}/${NAME}.log
 
-  ./pan -X -n -m1000000 > ${OUT_LOG} || \
+  # https://github.com/pshved/timeout/blob/master/timeout
+  # put a 8G memory limit
+  timeout -m 8000000 -c ./pan -X -n -m100000 > ${OUT_LOG} || \
       { echo "${BOLD_RED}FAIL${RESET}: $FILE [pan]"; exit 0 }
   
   grep -qPi 'pan:[0-9]+:\s+invalid end state' ${OUT_LOG} && \

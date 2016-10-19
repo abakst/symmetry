@@ -1,0 +1,6 @@
+Depth=     159 States=    1e+06 Transitions= 3.05e+06 Memory=  1317.716	t=     5.52 R=   2e+05
+Depth=     159 States=    2e+06 Transitions= 6.41e+06 Memory=  2501.505	t=     11.3 R=   2e+05
+Depth=     159 States=    3e+06 Transitions=    1e+07 Memory=  3685.099	t=     17.9 R=   2e+05
+Depth=     159 States=    4e+06 Transitions= 1.33e+07 Memory=  4868.888	t=     24.1 R=   2e+05
+Depth=     159 States=    5e+06 Transitions= 1.68e+07 Memory=  6052.677	t=     30.5 R=   2e+05
+Depth=     159 States=    6e+06 Transitions= 2.05e+07 Memory=  7236.270	t=     37.5 R=   2e+05
