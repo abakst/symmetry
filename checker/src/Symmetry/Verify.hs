@@ -137,13 +137,13 @@ run1Cfg opt outd cfg
 
          let topspinJar       = fromJust $ optTopspinJar opt
              copyTopspinConf  = shell (printf "cp '%s' '%s' '%s' %s" topspinConfig topspinMakefile topspinHeader outd)
-             topspinCmd f opt = shell (printf "java -jar %s %s" topspinJar f)
+             -- topspinCmd f opt = shell (printf "java -jar %s %s" topspinJar f)
 
-         printf "jar: '%s'\n" topspinJar
+         renderToFile (outf outd) cfgOut
 
          runCmd verb "COPYING TOPSPIN CONFIG:"   outd copyTopspinConf
-         runCmd verb "GENERATING TOPSPIN MODEL:" outd (topspinCmd outName opt)
-         -- runCmd verb "RUNNING TOPSPIN:" outd (shell "make")
+         -- runCmd verb "GENERATING TOPSPIN MODEL:" outd (topspinCmd outName opt)
+         runCmd verb "RUNNING TOPSPIN:" outd (shell $ printf "JAR=%s K=%d make" topspinJar (optInfty opt))
 
        when (optVerify opt) $ do 
          runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName opt)
