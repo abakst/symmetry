@@ -1,0 +1,3 @@
+gap=/home/rami/apps/gap/bin/gap.sh
+saucy=/home/rami/apps/TopSPIN_2.2.5/saucy/saucy
+common=/home/rami/apps/TopSPIN_2.2.5/Common/
