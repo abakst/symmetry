@@ -1,0 +1,244 @@
+#========
+# Language
+#========
+statements:
+s ::= send(e1,e2)       -- send e2 to e1
+    | x := recvFrom(*)  -- recv message from any process, bind to x
+    | x := recvFrom(p) -- recv message from the pid p, bind to x 
+    | nondet(p ∈ P, s)   -- p is nondet chosen from P 
+    | for (i : I): s           -- iteration over collection
+    | while (e): s           -- iteration
+    | s;s                       -- sequence
+    | ite(cond, s, s)      -- case-split
+    | skip                     -no-op
+
+proc ::= p: s               -- process p runs s
+
+process-soup:
+P ::= proc        -- single process
+    | Π(p:S) proc -- parallel composition of elements of S
+    | (P || P)    -- parallel composition
+
+#=============
+# Addintionals Defs.
+#=============
+
+#"smaller-than"
+B<C :iff
+there is A s.t. (A;B)=C.
+
+#parallel compose
+
+ΠX := Π p∈dom(X) X(p)
+
+#==========
+# Rewrite Rules
+#==========
+## Basic
+#==========
+
+===
+send:
+===
+
+q is a value
+------------------------------------------------------------
+p: send(q,v); G[(p,q) := M],D,X ~~> skip,G[(p,q) := M·v],D,X
+
+=======
+recvFrom:
+=======
+
+p is a value
+------------------------------------------------------------
+q: x:=recvFrom(p), G[(p,q) := v·M],D,X
+~~> skip,G[(p,q) := M],(D;x:=v),X
+
+=============
+recvWildcard:
+=============
+
+p in Procs = either a concrete proc or a set of sym procs
+x := recvFrom(p);A||B,G,D,X ~~> A'||B',G',D',X'
+-----------------------------------------------
+_ := recvFrom(*);A||B,G,D,X ~~> A'||B',G',D',X'
+
+======
+const:
+======
+
+D |= x = c
+x is not assigned in P
+----------------------------
+P(x),G,D,X ~~> P(c),G,D,X
+
+=========
+compose-seq:
+=========
+
+(A||C),G,D,X ~> (A'||C'),G',D',X'
+--------------------------
+(A;B||C) ,G,D,X ~> (A';B||C') ,G',D',X'
+
+AB: can this work?
+A,G,D,X ~> A',G',D',X'
+--------------------------
+(A;B||C),G,D,X ~> (A';B||C),G',D',X'
+
+=========
+compose-par:
+=========
+
+A,G,D,X ~~> A',G',D',X'
+--------------------------
+(A||B),G,D,X ~~> (A'||B),G,D,X'
+
+#======
+## Loops
+#======
+
+=========
+For-Remove
+=========
+
+p* fresh
+P* fresh
+G' = G ∪ {0 ⊂ P* ⊆ P} ∪ {p* ∈ P*}
+A(p*) || Π(p:P*): B(p),G',D,X
+~~> skip || Π(p:P*\{q}): B(p) || C(q),G',(D;D'(q)),X'[q:=T(q)]
+----------------------------------------------
+for (p:P): A(p) || Π(p:P) B(p),G,D,X
+~~> Π(p:P) C(p),G,(D;for(p:P): D(p)),X'[P := Π(p:P) T(p)]
+
+=======
+For-repeat:
+=======
+
+p:A||q:B,G,D,X ~~> skip||q:B,G,(D;D'),X'[p:=Tp][q:=Tq]
+----------------------------------------------------
+p:for (i:I): A || q:B,G,D,X
+~~> q:B,G,(D;for(i:I): D'),X'[p:=for(i:I) T(p)][q:=sym(i:I):Tq]
+
+
+=======
+While-remove:
+=======
+
+D  |= e
+D' |= ¬e
+A||B,G,D,X ~~> skip||C,G,D',X'
+------------------------------------
+while (e) A || B,G,D,X ~~> C,G,D',X'
+
+=====================
+While-repeat: [lift X and D]?
+=====================
+
+D  |= e
+D' |= e
+A || B,G,D,X ~~> skip || C,G,D',X'
+----------------------------------------------------
+while (e): A || B,G,D,X ~~> while(e): A || C,G,D',X'
+
+================
+## Symmetric processes
+================
+
+========
+sym-remove
+========
+
+C<B
+A || Π(p:P): B(p),G,D,X ~~> A || C(p*) || Π(p:P\{p*})B(p),G,(D;D'(p*)), X[p*=T(p*)]
+-----------------------------------------------------------
+A || Π(p:P): B(p),G,D,X
+~~> A || Π(p:P):C(p),G,(D;for(p:P):D'(p)),X[Π(p:P) T(p)]
+
+========
+sym-repeat:
+========
+
+q fresh
+A || Π(p:P): B(p),G,D,X
+~~> skip || B(p*) || Π(p:P\{p*})B(p) ,G,(D;D'(p*)),X'[p*:=T(p*)]
+-----------------------------------------------------------
+A || Π(p:P): B(p),G,D,X
+~~> Π(p:P) B(p),G,(D;p:=*;D'(p)),X'[q:=nondet(p∈P, T(p))]
+
+==========
+## Unfolding
+==========
+
+==========
+unfold-send:
+==========
+
+G ⊢ p* ∈ P
+------------------------------------------
+m:send(p*,e) || Π(p:P) B(p),G,D,X
+~~> m:send(p*,e)||B(p*)||Π(p:P\{p*}),G,D,X
+
+==========
+unfold-recv:
+==========
+
+p* fresh
+G ⊢ ∅ ⊂ P' ⊆ P
+------------------------------------------
+m: x := recvFrom(P) || Π(p:P')B(p),G,D,X
+~~> m: x := recvFrom(p*) || B(p*) || Π(p:P'\{p*})B(p),G,D;p*:=*;X
+
+========
+## Nondet
+========
+
+p* fresh
+--------------
+nondet(p∈ P, T(p)),G,D,X ~~>
+T(p*),G ∪ {p* ∈ P, fresh(p*)},D,X
+
+
+===========
+## Recv-nondet
+===========
+
+G ⊢ p ∈ P and G ⊢ fresh(p)
+----------------------
+m: recvFrom(P),G,D,X ~~>
+m: recvFrom(p),G,D,X
+
+=====
+## Ext
+=====
+
+p: send(x,y),G,D,X[p := T] ~~> skip,G,D,X[p := T;send(x,y)]
+
+=============
+Compose-External:
+=============
+
+B || ΠX X',G,D,X ~~> skip,G,(D;D''),0
+A,G,D,X ~~> C,G,(D;D'),X'
+------------------------------------------------
+A||B,G,D,X ~~> C,G,(D;D'; D''),0
+
+========
+Congruence:
+========
+
+- congruence relation
+
+skip||A ≡ skip
+skip;A ≡ skip
+sym(skip) ≡ skip
+
+A≡B
+---------------
+sym(A) ≡ sym(A)
+
+- rewrite rule
+
+A≡B
+---------
+A,G,D,X ~~> B,G,D,X 
+
