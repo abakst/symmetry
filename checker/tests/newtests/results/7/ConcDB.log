@@ -1,6 +1,6 @@
-Depth=      77 States=    1e+06 Transitions= 1.62e+06 Memory=   921.427	t=     1.83 R=   5e+05
-Depth=      77 States=    2e+06 Transitions=  3.4e+06 Memory=  1708.927	t=     4.15 R=   5e+05
-Depth=      77 States=    3e+06 Transitions= 5.28e+06 Memory=  2496.427	t=     6.48 R=   5e+05
+Depth=      77 States=    1e+06 Transitions= 1.62e+06 Memory=   920.059	t=      1.7 R=   6e+05
+Depth=      77 States=    2e+06 Transitions=  3.4e+06 Memory=  1705.997	t=     3.66 R=   5e+05
+Depth=      77 States=    3e+06 Transitions= 5.28e+06 Memory=  2491.934	t=     5.74 R=   5e+05
 
 (Spin Version 6.4.5 -- 1 January 2016)
 	+ Partial Order Reduction
@@ -18,8 +18,8 @@ State-vector 800 byte, depth reached 77, errors: 0
   5338403 atomic steps
 hash conflicts:    218376 (resolved)
 
- 3252.091	memory usage (Mbyte)
+ 3245.841	memory usage (Mbyte)
 
 
-pan: elapsed time 8.67 seconds
-pan: rate 456691.23 states/second
+pan: elapsed time 7.77 seconds
+pan: rate 509589.83 states/second

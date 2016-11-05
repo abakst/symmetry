@@ -1,0 +1,2 @@
+Seq	Host	Starttime	JobRuntime	Send	Receive	Exitval	Signal	Command
+1	:	1476919165.839	    30.035	0	43	42	0	/home/rkici/symmetry/spin-symmetry/checker/tests/newtests/run_spin.sh 'WorkStealingxx.hs' '/home/rkici/symmetry/spin-symmetry/checker/tests/newtests/results/10_7' 70 --worker=10 --job=7

@@ -1,0 +1,22 @@
+
+(Spin Version 6.4.5 -- 1 January 2016)
+	+ Partial Order Reduction
+
+Full statespace search for:
+	never claim         	- (none specified)
+	assertion violations	+
+	cycle checks       	- (disabled by -DSAFETY)
+	invalid end states	+
+
+State-vector 248 byte, depth reached 182, errors: 0
+    68888 states, stored
+    30269 states, matched
+    99157 transitions (= stored+matched)
+    51900 atomic steps
+hash conflicts:        27 (resolved)
+
+  151.700	memory usage (Mbyte)
+
+
+pan: elapsed time 0.04 seconds
+pan: rate   1722200 states/second

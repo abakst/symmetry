@@ -1,0 +1,26 @@
+Depth=     156 States=    1e+06 Transitions= 1.37e+06 Memory=   668.106	t=     1.27 R=   8e+05
+Depth=     156 States=    2e+06 Transitions= 2.78e+06 Memory=  1202.481	t=     2.43 R=   8e+05
+Depth=     156 States=    3e+06 Transitions= 4.26e+06 Memory=  1736.856	t=     3.88 R=   8e+05
+Depth=     156 States=    4e+06 Transitions= 5.77e+06 Memory=  2271.231	t=     5.32 R=   8e+05
+
+(Spin Version 6.4.5 -- 1 January 2016)
+	+ Partial Order Reduction
+
+Full statespace search for:
+	never claim         	- (none specified)
+	assertion violations	+
+	cycle checks       	- (disabled by -DSAFETY)
+	invalid end states	+
+
+State-vector 536 byte, depth reached 156, errors: 0
+  4318760 states, stored
+  1977633 states, matched
+  6296393 transitions (= stored+matched)
+  3224118 atomic steps
+hash conflicts:    163175 (resolved)
+
+ 2441.934	memory usage (Mbyte)
+
+
+pan: elapsed time 5.74 seconds
+pan: rate 752397.21 states/second

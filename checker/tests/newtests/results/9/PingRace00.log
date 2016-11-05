@@ -1,7 +1,7 @@
-Depth=     121 States=    1e+06 Transitions= 3.93e+06 Memory=  1225.138	t=     9.68 R=   1e+05
-Depth=     121 States=    2e+06 Transitions= 8.35e+06 Memory=  2316.349	t=     19.3 R=   1e+05
-Depth=     121 States=    3e+06 Transitions= 1.29e+07 Memory=  3407.364	t=     28.8 R=   1e+05
-Depth=     121 States=    4e+06 Transitions= 1.76e+07 Memory=  4498.575	t=     38.1 R=   1e+05
+Depth=     121 States=    1e+06 Transitions= 3.93e+06 Memory=  1225.528	t=     10.7 R=   9e+04
+Depth=     121 States=    2e+06 Transitions= 8.35e+06 Memory=  2316.544	t=     19.5 R=   1e+05
+Depth=     121 States=    3e+06 Transitions= 1.29e+07 Memory=  3407.559	t=     29.9 R=   1e+05
+Depth=     121 States=    4e+06 Transitions= 1.76e+07 Memory=  4498.966	t=     39.6 R=   1e+05
 
 (Spin Version 6.4.5 -- 1 January 2016)
 	+ Partial Order Reduction
@@ -19,8 +19,8 @@ State-vector 1120 byte, depth reached 121, errors: 0
  18837513 atomic steps
 hash conflicts:   1056278 (resolved)
 
- 4635.099	memory usage (Mbyte)
+ 4635.294	memory usage (Mbyte)
 
 
-pan: elapsed time 39.2 seconds
-pan: rate 105315.22 states/second
+pan: elapsed time 40.7 seconds
+pan: rate 101331.29 states/second
