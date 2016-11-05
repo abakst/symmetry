@@ -57,7 +57,7 @@ EOF
 )
 
 print_title() {
-    echo "benchmark,worker,job,stored,matched,transitions,steps,memory (Mbytes),time (seconds)";
+    echo "benchmark,worker,stored,matched,transitions,steps,memory (Mbytes),time (seconds)";
 }
 
 list_wjob_tests() {
