@@ -22,16 +22,25 @@ run_spin() {
     local INFTY=$3
     shift 3
 
-    stack runghc -- $FILE --dump-model --name "$NAME" $@ &>/dev/null ||
+    # stack runghc -- $FILE --dump-model --name "$NAME" $@ &>/dev/null ||
+    stack runghc -- $FILE --dump-model --name "$NAME" $@ ||
         { echo "${BOLD_RED}FAIL${RESET}: $FILE [runghc]"; exit 1 }
+
+    echo 1
 
     pushd .symcheck.${NAME}
 
-    spin -m -a -D__K__=${INFTY} out.pml &>/dev/null ||
+    # spin -m -a -D__K__=${INFTY} out.pml &>/dev/null ||
+    spin -m -a -D__K__=${INFTY} out.pml ||
         { echo "${BOLD_RED}FAIL${RESET}: $FILE [spin]"; exit 1 }
 
-    cc -O2 -DVECTORSZ=4096 -DSAFETY -DNOBOUNDCHECK -DNOCOMP -DSFH -DNOFAIR -o pan pan.c &>/dev/null ||
+    echo 2
+
+    # cc -O2 -DVECTORSZ=10240 -DSAFETY -DNOBOUNDCHECK -DNOCOMP -DSFH -DNOFAIR -o pan pan.c &>/dev/null ||
+    cc -O2 -DVECTORSZ=4096 -DSAFETY -DNOBOUNDCHECK -DNOCOMP -DSFH -DNOFAIR -o pan pan.c ||
         { echo "${BOLD_RED}FAIL${RESET}: $FILE [cc]"; exit 1 }
+
+    echo 3
 
     local OUT_LOG=${OUTPUT}/${NAME}.log
 

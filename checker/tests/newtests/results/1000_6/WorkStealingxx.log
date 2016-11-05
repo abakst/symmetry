@@ -1,0 +1,30 @@
+error: max search depth too small
+Depth=   99999 States=    1e+06 Transitions= 1.88e+06 Memory=   669.474	t=     1.53 R=   7e+05
+Depth=   99999 States=    2e+06 Transitions= 3.75e+06 Memory=  1203.653	t=     3.46 R=   6e+05
+Depth=   99999 States=    3e+06 Transitions= 5.62e+06 Memory=  1737.833	t=     5.37 R=   6e+05
+Depth=   99999 States=    4e+06 Transitions=  7.5e+06 Memory=  2272.013	t=     6.97 R=   6e+05
+Depth=   99999 States=    5e+06 Transitions= 9.37e+06 Memory=  2806.192	t=      8.5 R=   6e+05
+Depth=   99999 States=    6e+06 Transitions= 1.12e+07 Memory=  3340.372	t=       10 R=   6e+05
+Depth=   99999 States=    7e+06 Transitions= 1.31e+07 Memory=  3874.552	t=     11.8 R=   6e+05
+
+(Spin Version 6.4.5 -- 1 January 2016)
+	+ Partial Order Reduction
+
+Full statespace search for:
+	never claim         	- (none specified)
+	assertion violations	+
+	cycle checks       	- (disabled by -DSAFETY)
+	invalid end states	+
+
+State-vector 536 byte, depth reached 99999, errors: 0
+  7953999 states, stored
+  7038137 states, matched
+ 14992136 transitions (= stored+matched)
+ 10378720 atomic steps
+hash conflicts:    916090 (resolved)
+
+ 4384.317	memory usage (Mbyte)
+
+
+pan: elapsed time 13.4 seconds
+pan: rate 595359.21 states/second

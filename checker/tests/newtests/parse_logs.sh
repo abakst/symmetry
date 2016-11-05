@@ -4,25 +4,6 @@ set -e
 
 source colors.sh
 
-ONLY_WORKER=( ConcDB.hs
-              DatabaseSample.hs
-              PingMulti00.hs
-              PingMulti02.hs
-              PingMulti03.hs
-              PingMulti2Party.hs
-              PingMultiSize.hs
-              PingRace00.hs
-              Registry.hs
-              WorkPushing.hs
-            )
-
-WITH_JOBS=( WorkStealing.hs
-            WorkStealingxx.hs
-            MapReduce.hs
-          )
-
-NO_OF_TESTS=10
-
 PARSER=$(cat <<'EOF'
 BEGIN {
   ok = 0;
@@ -64,54 +45,60 @@ END {
     exit
   }
 
-  if (job == 0) {
+#  if (job == 0) {
     printf("%s,%d,%d,%d,%d,%d,%s,%s\\n",
       benchmark, worker, stored, matched, transitions, steps, memory, time);
-  } else {
-    printf("%s,%d,%d,%d,%d,%d,%d,%s,%s\\n",
-      benchmark, worker, job, stored, matched, transitions, steps, memory, time);
-  }
+#  } else {
+#    printf("%s,%d,%d,%d,%d,%d,%d,%s,%s\\n",
+#      benchmark, worker, job, stored, matched, transitions, steps, memory, time);
+#  }
 }
 EOF
 )
 
-with_jobs_csv() {
-  echo "benchmark,worker,job,stored,matched,transitions,steps,memory (Mbytes),time (seconds)";
-  local max_worker=10;
-  local max_job=10;
-
-  for worker_count in $(seq 1 ${max_worker}); do
-    for job_count in $(seq 1 ${max_job}); do
-
-      local folder="results/${worker_count}_${job_count}"
-
-      [[ -d $folder ]] || continue
-
-      for log in ${folder}/*.log; do
-        awk --posix -f <(echo $PARSER) \
-          --assign benchmark=${log:t:r} \
-          --assign worker=${worker_count} \
-          --assign job=${job_count} \
-          $log
-      done
-    done
-  done
+print_title() {
+    echo "benchmark,worker,job,stored,matched,transitions,steps,memory (Mbytes),time (seconds)";
 }
 
-with_jobs_csv > worker_with_jobs.csv
+list_wjob_tests() {
+    for d in results/*_*/*.log; do echo $d; done | \
+        sed -n 's|results/\([0-9]\+\)_\([0-9]\+\)/\(.*\)\.log|\3 \1 \2|p' | \
+        sort -k 1 -k 2 -n -k 3 -n
+
+}
+
+with_jobs_csv() {
+    list_wjob_tests | while read benchmark worker_count job_count; do
+        [[ ${job_count} -eq 6 ]] || continue
+        # printf "%-20s %-5d %-5d\n" "$benchmark" "$worker_count" "$job_count"
+        awk --posix -f <(echo $PARSER) \
+            --assign benchmark=${benchmark} \
+            --assign worker=${worker_count} \
+            --assign job=${job_count} \
+            "results/${worker_count}_${job_count}/$benchmark.log"
+    done
+}
+
+list_only_worker_tests() {
+    for d in results/*/*.log; do echo $d; done | \
+        sed -n 's|results/\([0-9]\+\)/\(.*\)\.log|\2 \1|p' | \
+        sort -k 1 -k 2 -n
+
+}
 
 only_worker_csv() {
-    echo "benchmark,worker,stored,matched,transitions,steps,memory (Mbytes),time (seconds)";
-    for n in $(seq 1 ${NO_OF_TESTS}); do
-        for f in ${ONLY_WORKER}; do
-            log="results/$n/${f:r}.log"
-            awk --posix -f <(echo $PARSER) \
-                --assign benchmark=${log:t:r} \
-                --assign worker=$n \
-                $log
-        done
+    list_only_worker_tests | while read benchmark worker_count; do
+        # printf "%-20s %-5d\n" "$benchmark" "$worker_count"
+        awk --posix -f <(echo $PARSER) \
+            --assign benchmark=${benchmark} \
+            --assign worker=${worker_count} \
+            "results/${worker_count}/$benchmark.log"
     done
+
 }
 
-only_worker_csv > only_worker.csv
+# redirect the output to spin_results.csv
+print_title      > spin_results.csv
+only_worker_csv >> spin_results.csv
+with_jobs_csv   >> spin_results.csv
 

@@ -1,0 +1,17 @@
+Depth=     231 States=    1e+06 Transitions= 4.98e+06 Memory=   569.278	t=     3.36 R=   3e+05
+Depth=     231 States=    2e+06 Transitions= 1.04e+07 Memory=  1004.044	t=     6.92 R=   3e+05
+Depth=     231 States=    3e+06 Transitions= 1.62e+07 Memory=  1439.395	t=     11.1 R=   3e+05
+Depth=     231 States=    4e+06 Transitions=  2.2e+07 Memory=  1874.161	t=     15.1 R=   3e+05
+Depth=     231 States=    5e+06 Transitions=  2.8e+07 Memory=  2308.927	t=     19.2 R=   3e+05
+Depth=     231 States=    6e+06 Transitions= 3.38e+07 Memory=  2744.278	t=     23.5 R=   3e+05
+Depth=     231 States=    7e+06 Transitions= 3.99e+07 Memory=  3179.044	t=     28.1 R=   2e+05
+Depth=     231 States=    8e+06 Transitions= 4.64e+07 Memory=  3614.395	t=     33.2 R=   2e+05
+Depth=     231 States=    9e+06 Transitions= 5.29e+07 Memory=  4049.161	t=     37.9 R=   2e+05
+Depth=     231 States=    1e+07 Transitions= 5.87e+07 Memory=  4483.927	t=     42.2 R=   2e+05
+Depth=     231 States=  1.1e+07 Transitions= 6.48e+07 Memory=  4919.278	t=     46.5 R=   2e+05
+Depth=     231 States=  1.2e+07 Transitions= 7.13e+07 Memory=  5354.044	t=     51.5 R=   2e+05
+Depth=     231 States=  1.3e+07 Transitions= 7.77e+07 Memory=  5789.395	t=     56.5 R=   2e+05
+Depth=     231 States=  1.4e+07 Transitions= 8.39e+07 Memory=  6224.161	t=       63 R=   2e+05
+Depth=     231 States=  1.5e+07 Transitions= 8.98e+07 Memory=  6658.927	t=     69.1 R=   2e+05
+Depth=     231 States=  1.6e+07 Transitions= 9.61e+07 Memory=  7094.278	t=     75.3 R=   2e+05
+Depth=     231 States=  1.7e+07 Transitions= 1.03e+08 Memory=  7529.044	t=       82 R=   2e+05

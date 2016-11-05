@@ -1,0 +1,25 @@
+pan: error, VECTORSZ too small, recompile pan.c with -DVECTORSZ=N with N>10240
+pan:1: aborting (at depth 5)
+pan: wrote out.pml.trail
+
+(Spin Version 6.4.5 -- 1 January 2016)
+Warning: Search not completed
+	+ Partial Order Reduction
+
+Full statespace search for:
+	never claim         	- (none specified)
+	assertion violations	+
+	cycle checks       	- (disabled by -DSAFETY)
+	invalid end states	+
+
+State-vector 10240 byte, depth reached 5, errors: 1
+        2 states, stored
+        0 states, matched
+        2 transitions (= stored+matched)
+        4 atomic steps
+hash conflicts:         0 (resolved)
+
+  137.247	memory usage (Mbyte)
+
+
+pan: elapsed time 0 seconds
