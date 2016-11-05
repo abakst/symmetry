@@ -23,15 +23,20 @@ import Options
 import Text.PrettyPrint.Leijen  (pretty, nest, text, (<>), line)
 import qualified Data.Map.Strict as M
 
-data MainOptions = MainOptions { optVerify  :: Bool
-                               , optVerbose :: Bool
-                               , optProcess :: Bool
-                               , optModel   :: Bool
-                               , optDir     :: String
-                               , optName    :: String
-                               , optInfty   :: Int
-                               , optWorker  :: Int
-                               , optJob     :: Int
+import Data.Maybe  
+import Paths_checker
+
+data MainOptions = MainOptions { optVerify      :: Bool
+                               , optVerbose     :: Bool
+                               , optProcess     :: Bool
+                               , optModel       :: Bool
+                               , optDir         :: String
+                               , optName        :: String
+                               , optInfty       :: Int
+                               , optWorker      :: Int
+                               , optJob         :: Int
+                               , optTopspin     :: Bool
+                               , optTopspinJar  :: Maybe String
                                }
 
 instance Options MainOptions where
@@ -45,6 +50,8 @@ instance Options MainOptions where
                   <*> simpleOption "infty" 3 "Max buffer length"
                   <*> simpleOption "worker" 3 "number of workers in the system"
                   <*> simpleOption "job" 3 "number of jobs in the system"
+                  <*> simpleOption "topspin" False "build with topspin"
+                  <*> simpleOption "topspin-jar" Nothing "path of the jar file of TopSPIN"
 
 workerCount :: IO Int
 workerCount =  runCommand $ \opts args -> return $ (optWorker opts)
@@ -111,6 +118,32 @@ run1Cfg opt outd cfg
 
        when (optModel opt) $ do
          renderToFile (outf outd) cfgOut
+
+       when (optTopspin opt) $ do
+         topspinMakefile <- getDataFileName "topspin/Makefile"
+         topspinConfig   <- getDataFileName "topspin/config.txt"
+         topspinHeader   <- getDataFileName "topspin/topspin_header_fix.c"
+
+         printf "makefile: %s\n" topspinMakefile
+         printf "config:   %s\n" topspinConfig
+         printf "header:   %s\n" topspinHeader
+
+         when (isNothing $ optTopspinJar opt) $ do
+           setSGR [SetConsoleIntensity BoldIntensity, SetColor Foreground Vivid Red]
+           printf "[ERROR]"
+           setSGR [Reset]
+           printf " topspin jar filename is not provided\n"
+           exitFailure
+
+         let topspinJar       = fromJust $ optTopspinJar opt
+             copyTopspinConf  = shell (printf "cp '%s' '%s' '%s' %s" topspinConfig topspinMakefile topspinHeader outd)
+             -- topspinCmd f opt = shell (printf "java -jar %s %s" topspinJar f)
+
+         renderToFile (outf outd) cfgOut
+
+         runCmd verb "COPYING TOPSPIN CONFIG:"   outd copyTopspinConf
+         -- runCmd verb "GENERATING TOPSPIN MODEL:" outd (topspinCmd outName opt)
+         runCmd verb "RUNNING TOPSPIN:" outd (shell $ printf "JAR=%s K=%d make" topspinJar (optInfty opt))
 
        when (optVerify opt) $ do 
          runCmd verb "GENERATING SPIN MODEL:" outd (spinCmd outName opt)

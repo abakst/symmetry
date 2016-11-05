@@ -16,6 +16,10 @@ build-type:          Simple
 -- extra-source-files:
 cabal-version:       >=1.10
 
+data-files:          topspin/Makefile
+                   , topspin/config.txt
+                   , topspin/topspin_header_fix.c
+
 library
   exposed-modules: Symmetry.Language.AST
                    Symmetry.Language.Syntax
@@ -28,6 +32,7 @@ library
                    Symmetry.SymbEx
                    Symmetry.Verify
                    SrcHelper
+                   Paths_checker
                    Symmetry.IL.TrailParser
   ghc-options: -fwarn-unused-binds
   build-depends:       base >=4.7
