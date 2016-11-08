@@ -107,8 +107,8 @@ prolog_main = PLRule "main" [] stmts
     con   = consult_rule [PLTerm "rewrite"]
     rewq  = rewrite_query_rule [PLVar "T",PLVar "Rem", PLVar "Ind", PLVar "Name"]
     tmp   = PLAsgn (PLVar "Race") (PLTerm "fail")
-    checkRaces   = check_race_freedom_rule [ PLVar "T", PLNull ]
-    checkRewrite = rewrite_rule [ PLVar "T"
+    checkRaces   = check_race_freedom_rule [ PLVar "T", PLVar "T1" ]
+    checkRewrite = rewrite_rule [ PLVar "T1"
                                 , PLVar "Rem"
                                 , PLVar "Ind"
                                 , PLNull
