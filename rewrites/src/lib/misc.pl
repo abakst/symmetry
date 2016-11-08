@@ -89,7 +89,7 @@ format_atom(Format, Arguments, Atom) :-
 
 % Negating A
 
-negate(A=B, A\==B).
+negate(A=B, A=\=B).
 negate(A==B, A\==B).
 negate(A\==B, A==B).
-negate(A=\=B, A==B).
+negate(A=\=B, A=B).
