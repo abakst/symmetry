@@ -22,7 +22,7 @@ master = lam $ \r -> lam $ \n ->
       myPid <- self
       doMany "l0" ps (lam $ \p -> do
                         send p myPid
-                        (_ :: repr (Pid RSing)) <- recv
+                        (_ :: repr (Pid RSing)) <- recvFrom p
                         return tt)
       return tt
 
