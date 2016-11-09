@@ -13,6 +13,8 @@ import System.Exit
 import System.Directory
 import System.FilePath
 import System.IO
+import GHC.IO.Handle
+import GHC.IO.Device
 import System.Process hiding (runCommand)
 import Text.Printf
 import Options
@@ -44,22 +46,24 @@ instance Options MainOptions where
 
 runCmd               :: Bool -> String -> FilePath -> CreateProcess -> IO Bool
 runCmd verb pre wd c
-  = do (_,Just hout,Just herr,p) <- createProcess c { cwd = Just wd
-                                                    , std_out = CreatePipe
+  = do hStdOut <- if verb then return CreatePipe else UseHandle <$> openFile "/dev/null" WriteMode
+       
+       (_,hout,Just herr,p) <- createProcess c { cwd = Just wd
+                                                    , std_out = hStdOut
                                                     , std_err = CreatePipe
                                                     }
-
        when verb $ do
          setSGR [SetConsoleIntensity FaintIntensity]
          putStr (pre ++ "...")
-         output <- hGetContents hout
+         let Just hout' = hout
+         output <- hGetContents hout'
          when (output /= "") $
            putStr ("\n" ++ output)
-         setSGR [Reset]
 
-       b <- checkExit p herr
+       b      <- checkExit p herr
 
        when verb $ do
+         setSGR [Reset]
          setSGR [SetConsoleIntensity FaintIntensity]
          putStr "DONE.\n"
          setSGR [Reset]
@@ -67,11 +71,9 @@ runCmd verb pre wd c
        return b
   where
     checkExit x h = do e <- waitForProcess x
-                       case e of
-                         ExitSuccess -> return True
-                         _           -> do
-                           putStrLn =<< hGetContents h
-                           return False
+                       putStrLn =<< hGetContents h
+                       putStrLn (show e)
+                       return (e == ExitSuccess)
 -- copyMapModule opt d
 --   = do let f' = if optQC opt
 --                    then "SymMapQC.hs"
