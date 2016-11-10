@@ -35,11 +35,15 @@ pos_benchmarks =
 
 neg_benchmarks :: [Benchmark]
 neg_benchmarks =
-  [ B "MapReduce01" "mapreduce-err-01"
-  , B "MapReduce02" "mapreduce-err-02"
-  , B "MapReduce03" "mapreduce-err-03"
-  , B "MapReduce04" "mapreduce-err-04"
-  , B "MapReduce05" "mapreduce-err-05"
+  [ B "MapReduce01"  "mapreduce-err-01"
+  , B "MapReduce02"  "mapreduce-err-02"
+  , B "MapReduce03"  "mapreduce-err-03"
+  , B "MapReduce04"  "mapreduce-err-04"
+  , B "MapReduce05"  "mapreduce-err-05"
+
+  , B "Firewall"     "firewall-err-01"
+  , B "PingMulti"    "pingmulti-err-01"
+  , B "WorkStealing" "ws-err-01"
   ]
 
 data BenchmarkSuite = BS { suite      :: FilePath
@@ -48,7 +52,7 @@ data BenchmarkSuite = BS { suite      :: FilePath
                          }
 
 benchmark_suite = [ BS "pos" pos_benchmarks ExitSuccess
-                  , BS "neg" neg_benchmarks (ExitFailure 1)
+                  , BS "neg-benchmarks" neg_benchmarks (ExitFailure 1)
                   ]
 
 parse_time :: MainOptions -> BenchmarkSuite -> Benchmark -> IO ()
@@ -56,7 +60,7 @@ parse_time opts bs@BS{..} bmk@B{..}= do
   rootDir <- getCurrentDirectory >>= makeAbsolute
 
   let f         = printf "%s.hs" filename
-      time_arg  = printf "%-20s %%U" filename
+      time_arg  = "%U"          -- only get the wall clock time
       exec      = "/usr/bin/time"
       args      = ["-f", time_arg] ++ ["stack", "runghc", "--", f, "--rewrite" ]
       std_in    = ""
@@ -64,27 +68,32 @@ parse_time opts bs@BS{..} bmk@B{..}= do
 
   (ec, out, err) <- readCreateProcessWithExitCode process std_in
 
-  printRow (optTable opts) bmk (toResult ec expected) out err
+  let time = read (last $ lines err)
+
+  printRow (optTable opts) bmk (toResult ec expected) time
 
 -- -----------------------------------------------------------------------------
 -- formatting
 -- -----------------------------------------------------------------------------
 
 data RowFormat = Latex | Regular
-                 deriving (Show)
+               deriving (Show)
 
 data BenchmarkResult = Pass | Fail
                      deriving (Show)
 
 toResult res exp = if res == exp then Pass else Fail
 
-printRow :: RowFormat -> Benchmark -> BenchmarkResult -> String -> String -> IO ()
+printRow :: RowFormat -> Benchmark -> BenchmarkResult -> Double -> IO ()
 
-printRow Latex (B{..}) res std_out std_err =   
+printRow Latex (B{..}) res time =   
   undefined
 
-printRow Regular (B{..}) res std_out std_err =   
-  printf "%s %s\n" (show res) (last $ lines std_err)
+printRow Regular (B{..}) res time =   
+  printf "%4s %-20s %g\n" (toErr res) (filename ++ ":") time
+  where
+    toErr Pass = ""
+    toErr Fail = "FAIL"
 
 -- -----------------------------------------------------------------------------
 -- argument parsing
