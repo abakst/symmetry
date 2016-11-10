@@ -1,12 +1,14 @@
 #!/usr/bin/env stack
--- stack runghc --package directory --package filepath
+-- stack runghc --package directory --package filepath --package text
 
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
 
 import Control.Monad
 import Data.List
+import Data.Text (pack, unpack, strip)
 import System.Directory
 import System.FilePath.Posix
 import Text.Printf
@@ -18,32 +20,32 @@ data Benchmark = B { filename :: String, varname :: String }
 
 pos_benchmarks :: [Benchmark]
 pos_benchmarks =
-  [ B "PingMulti00"      "pmzero"
-  , B "PingMulti02"      "pmtwo"
-  , B "PingMulti03"      "pmthree"
-  , B "PingMulti2Party"  "pmtwoparty"
-  , B "PingMultiSize"    "pmsize"
-  
-  , B "ConcDB"           "concdb"
+  [ B "ConcDB"           "concdb"
   , B "DatabaseSample"   "dbsample"
   , B "Firewall"         "firewall"
   , B "MapReduce"        "mapreduce"
   , B "Parikh"           "parikh"
+  , B "PingMulti00"      "pmzero"
+  , B "PingMulti02"      "pmtwo"
+  , B "PingMulti03"      "pmthree"
+  , B "PingMulti2Party"  "pmtwoparty"
+  , B "PingMultiSize"    "pmsize"
+  , B "PingRace00"       "prace"
   , B "Registry"         "registry"
   , B "WorkStealing"     "ws"
   ]
 
 neg_benchmarks :: [Benchmark]
 neg_benchmarks =
-  [ B "MapReduce01"  "mapreduce-err-01"
-  , B "MapReduce02"  "mapreduce-err-02"
-  , B "MapReduce03"  "mapreduce-err-03"
-  , B "MapReduce04"  "mapreduce-err-04"
-  , B "MapReduce05"  "mapreduce-err-05"
+  [ B "MapReduce01"  "mapreduceErrA"
+  , B "MapReduce02"  "mapreduceErrB"
+  , B "MapReduce03"  "mapreduceErrC"
+  , B "MapReduce04"  "mapreduceErrD"
+  , B "MapReduce05"  "mapreduceErrE"
 
-  , B "Firewall"     "firewall-err-01"
-  , B "PingMulti"    "pingmulti-err-01"
-  , B "WorkStealing" "ws-err-01"
+  , B "Firewall"     "firewallErrA"
+  , B "PingMulti"    "pingmultiErrA"
+  , B "WorkStealing" "wsErrA"
   ]
 
 data BenchmarkSuite = BS { suite      :: FilePath
@@ -70,7 +72,17 @@ parse_time opts bs@BS{..} bmk@B{..}= do
 
   let time = read (last $ lines err)
 
-  printRow (optTable opts) bmk (toResult ec expected) time
+  noOfLines <- readFile (rootDir </> suite </> filename ++ ".hs") >>= (return . length . hsFilter . lines)
+
+  printRow (optTable opts) bmk (toResult ec expected) time noOfLines
+
+hsFilter :: [String] -> [String]
+hsFilter = filter ignoreFilter
+  where
+    prefixes     = isPrefixOf <$> ["--", "{-"]
+    empty_line   = [("" ==)]
+    ignoreFs     = prefixes ++ empty_line
+    ignoreFilter = not . (any id) . (ignoreFs <*>) . (pure . unpack . strip . pack)
 
 -- -----------------------------------------------------------------------------
 -- formatting
@@ -84,14 +96,15 @@ data BenchmarkResult = Pass | Fail
 
 toResult res exp = if res == exp then Pass else Fail
 
-printRow :: RowFormat -> Benchmark -> BenchmarkResult -> Double -> IO ()
+printRow :: RowFormat -> Benchmark -> BenchmarkResult -> Double -> Int -> IO ()
 
-printRow Latex (B{..}) res time =   
-  undefined
+printRow Latex (B{..}) res time nlines =   
+  printf "%-20s & %-5.2g & %-3d \\\\ \n" ("\\" ++ varname) time nlines
 
-printRow Regular (B{..}) res time =   
+printRow Regular (B{..}) res time nlines =   
   printf "%4s %-20s %g\n" (toErr res) (filename ++ ":") time
   where
+    toErr     :: BenchmarkResult -> String
     toErr Pass = ""
     toErr Fail = "FAIL"
 
