@@ -122,6 +122,26 @@ p: send(x,y),G,D,X ~~> skip,G,D;xₚ*:=x;yₚ*:=y,X'
 Compose-External:
 =================
 
+P ∈ params(G)
+G ⊢ q : folded
+-------------------
+G ⊢ Π(p:P). q : folded
+
+P ∈ params(G)
+G ⊢ q : folded
+-------------------
+G ⊢ Σ(p:P). q : folded
+
+p ∈ concreteProcs(G)
+-------------------
+G ⊢ p ▹ s : folded
+
+G ⊢ p : folded
+G ⊢ q : folded
+-------------------
+G ⊢ p || q : folded
+
+G ⊢ X : folded
 A,G,D,0     ~~> skip,G,D',X
 B||X,G,D',0 ~~> skip,G,D'',0
 -------------------------------
@@ -159,7 +179,7 @@ For:
 
 p* fresh
 P* fresh
-G' = G ∪ {∅ ⊆ P* ⊂ P} ∪ {p* ∈ P*}
+G' = G ∪ {∅ ⊆ P* ⊂ P} ∪ {p* ∈ P\P*}
 D1 = for(p:P*): D'(p)
 X1(P*) = X || i ▹ for(p:P*): Tₐ || Π(p:P*). p ▹ T(p)
 A(p*) || Π(p:P\P*): B(p),G',D,X

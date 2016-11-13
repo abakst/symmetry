@@ -1,0 +1,273 @@
+# Proof of Lemma 4.1
+
+## Auxiliary
+
+Simplifying Assumptions:
+(1) Program is written so that each sent message
+    is first assigned to a unique var
+(2) Processes do not send to themselves
+
+## Interpretations
+
+### States
+Remark: It is more convenient to define [[]] over a triple of
+the context, prefix, and residual processes. This is
+equivalent to the presentation in Sec. 4, as the residual
+processes are left movers (sends) and can be executed
+immediately after Δ.
+
+[[ Γ,Δ,Ψ ]] ⊆ (Stores x Buffers)
+
+σ₀ ⊧ ∧[[Assert]]
+(σ₀,emp,Δ) -> (σ, μ, skip)
+∀p,q,t ∈ dom(Buf), μ₀[(p,q,t) = eval(Buf(p,q,t), σ)
+(σ,μ₀,P) -> (σ,μ,skip)
+------------------------------
+(σ,μ) ∈ [[ (Assrt, Buf), Δ, P ]]
+
+### Programs
+
+Given a state σ, the program
+
+Π(q:Q).[A]_q is embedded as Π(q:Q').[if q ∈ σ(Q) then A else skip]_q
+
+This is lifted to compositions of programs P || P' in the usual way.
+
+### Symmetric Race Freedom with Single Unfoldings
+
+We need to extend our definition of symmetric race freedom to cover
+programs with a single unfolded process. A program is additionally
+race free up to symmetry if a recv tagged with {a} has the form
+
+P₀ || Π(q:Q\{u}).[A]_q || [A]ᵤ
+
+where the tag a occurs in both the Π-composed and the unfolded
+processes.
+
+## Main Lemma
+
+We freely apply the following lemmas in the proof of our main lemma:
+
+Lemma Prefix:
+  If Γ,Δ,P,Ψ ~> Γ',Δ',P',Ψ', then Γ,Δ,P ~> Γ,Δ;Δ',P',Ψ'
+Proof:
+  By induction on - ~> -.
+
+Lemma Residual:
+If Γ,Δ,P,Ψ ~> Γ',Δ',P',Ψ',
+  Then assuming Ψ only sends to processes in E(x) for E(x) ∈ Γ,
+  Ψ only sends to processes in E(x) for E(x) ∈ Γ'
+Proof:
+  By induction on - ~> -. There is only one case where processes are
+  added to Ψ, in [R-Send-Resid]. The condition is checked explicitly
+  in the premise.
+
+Lemma Internal-Procs:
+If Γ,Δ,P,Ψ ~> Γ',Δ',P',Ψ',
+  Then assuming E(x) ∈ Γ and Procs(P) ∩ x = ∅,
+  E(x') ∈ Γ' and Procs(P') ∩ x' = ∅.
+Proof:
+  By induction on - ~> -.  It is easy to see that each rewrite step ~>
+  maintains the set E(x), [R-Compose-Resid], which maintains the
+  invariant by construction. The invariant is trivially maintained by
+  the remainder.
+
+Lemma Soundness-Inductive:
+
+Suppose Γ,Δ,P,Ψ ~> Γ',Δ;Δ',P',Ψ'.
+  ∀Ψₓ s.t. Ψₓ only sends to processes in x for E(x) ∈ Γ
+  Let (σ,μ) ∈ [[Γ,Δ,Ψ∘Ψₓ]].
+  Then, ∀Pₓ st. rf(P ∘ Pₓ),
+        ∀X. halted(σ'',μ'',X),
+  (1)   (σ,μ,P∘Pₓ) -> (σ',μ',X)
+      Then
+        ∃(σ',μ') ∈ [[Γ,Δ;Δ',Ψ'∘Ψₓ]] s.t. (σ,μ',Δ) -> (σ'',μ'',skip)
+        and (σ',μ',P'∘Q) -> (σ'',μ'',X)
+  (2) rf(P'∘Pₓ)
+
+### Case [R-Send]:
+
+Let σ, μ, Pₓ, Ψₓ, X, σ'', μ'' be given.
+
+Assume (σ,μ,[send(t,x,n)]ₚ∘Pₓ) -> (σ',μ',X).
+
+By assumption μ(p,eval(σ,x),t) = xs, where
+  xs = xs_Ψ,m (xs_Ψ are the sends from Ψ).
+
+However, it must be the case that xs_Ψ is empty, due to the Residual
+  lemma and the fact that eval(σ,x) is not an external process.
+
+Because send is a left mover, by definition:
+  (σ,μ[(p,q,t) <-xs·eval(σ,n)],Pₓ) -> (σ',μ',X)
+
+By definition of [[Γ,Δ,Ψ]], there is
+   μ' = μ[(p,q,t) <- μ(p,q,t)·eval(σ,n)] s.t. (σ,μ') ∈ [[Γ',Δ,Ψ]]
+Which proves the goal.
+
+### Case [R-Recv]:
+Let σ, μ, Pₓ, Ψₓ, X, σ'', μ'' be given.
+
+Since Ψ∘Ψₓ does not send to p by assumption, we can conclude
+that μ(x,p,t) = v·vs where v = eval(σ,m). Assume
+
+  (σ,μ[(x,p,t) <- v·vs],[y <- recv(t,x)]ₚ∘Pₓ) -> (σ',μ',X).
+
+Since recv(t,x) is a left mover when x is a PID and enabled, we have
+that
+
+  (σ[y <- v],μ[(x,p,t) <- vs],Pₓ) -> (σ',μ',X).
+
+By definition of [[-]], there is (σ',μ') s.t.
+
+  (σ[y <- m], μ'[(x,p,t) <- eval(σ[y <- m],vs)]) ∈ [[Γ',Δ;y <- m, Ψ]].
+
+By assumption (1), eval(σ[y <- m], vs) = eval(σ, vs), which proves the goal.
+
+### Case [R-Send-Unfold]
+Let σ, μ, Pₓ, Ψₓ, X, σ'', μ'' be given.
+By assumption,
+
+  (σ,μ,[send(t,x,n)]ₚ || Π(q:Q).A ∘Pₓ) -> (σ'',μ'',X).
+
+And by definition of [[-]], σ ⊧ q* ∈ Q.
+Therefore, by the definition of Π(q:Q).[A]_q*,
+
+  Π(q:Q).A ≡ Π(q:Q\{q*}).A || [A]_q*
+
+And since
+
+  (σ,μ) ∈ [[Γ,Δ,Ψ]]
+
+It follows that
+
+  (σ,μ,[send(t,x,n)]ₚ || Π(q:Q\{q*}).[A]_q* || [A]_q* ∘Pₓ) -> (σ'',μ'',X).
+
+The unfolded form is race free by definition.
+
+### Case [R-Recv-Unfold]
+Let σ, μ, Pₓ, Ψₓ, X, σ'', μ'' be given.
+By assumption,
+
+  (σ,μ,[x <- recv(Q,t)]ₚ || Π(q:Q').[A]_q ∘ Pₓ) -> (σ'',μ'',X).
+
+By our embedding of programs,
+
+(σ,μ,[x <- recv(Q,t)]ₚ || Π(q:Q).[if q ∈ Q' then A else skip]_q ∘ Pₓ)
+  -> (σ'',μ'',X).
+
+Let q* be a prophecy variable that guesses the sender of the message
+that is eventually received (if it is received at all). Either q* is
+in Q' or in Q∖Q', but only one of these will hold for all program
+traces (by race freedom and by the fact that Ψ only sends to external
+processes).
+
+Thus,
+(σ,μ,[x <- recv(Q,t)]ₚ || Π(q:Q).[if q ∈ Q' then A else skip]_q ∘ Pₓ)
+  -> (σ'',μ'',X)
+<=>
+(σ,μ,[x <- recv(q*,t)]ₚ
+     || [if q* ∈ Q' then A(q*) else skip]_q*
+     || Π(q:Q\{q*}).[if q ∈ Q' then A else skip]_q ∘ Pₓ) -> (σ'',μ'',X)
+
+By the IH,
+
+(σ,μ,[x <- recv(q*,t)]ₚ
+     || [A(q*)]_q*
+     || Π(q:Q\{q*}).[if q ∈ Q' then A else skip]_q ∘ Pₓ) -> (σ'',μ'',X)
+==> (σ',μ',[A'(q*)]_q* || Π(q:Q\{q*}).[if q ∈ Q' then A else skip]_q ∘ Pₓ)
+    -> (σ'',μ'',X)
+
+so q* ∈ Q'. Therefore,
+
+(σ,μ,[x <- recv(Q,t)]ₚ || Π(q:Q).[if q ∈ Q' then A else skip]_q ∘ Pₓ)
+-> (σ'',μ'',X)
+=> (σ,μ,[x <- recv(q*,t)]ₚ
+        || [A(q*)]_q*
+        || Π(q:Q\{q*}).[if q ∈ Q' then A else skip]_q ∘ Pₓ)
+   -> (σ'',μ'',X)
+
+which proves the goal (the singly-unfolded form of the program is race
+free by definition).
+
+### Case [R-Send-Resid]
+Let σ, μ, Pₓ, Ψₓ, X, σ'', μ'' be given.
+By assumption,
+
+  (σ,μ,[send(t,x,n)]ₚ∘Pₓ) -> (σ'',μ'',X).
+
+Because send is a left mover,
+
+  (σ,μ[(p,x,t) <- μ(p,x,t)·eval(σ,n)],Pₓ) -> (σ'',μ'',X).
+
+  let σ' = σ[u <- eval(σ,x)][v <- eval(σ,n)] and
+      μ' = μ[(p, eval(σ',u), t) <- μ(p,eval(σ',u),t)·eval(σ',v)]
+
+By definition of [[-]], since u and v are fresh,
+
+  (σ',μ') ∈ [[Γ,Δ;u<-x,v<-n,Ψ∘[send(t,x,n)]ₚ]]
+
+Since σ = σ' (modulo history variables u and v) and μ = μ',
+
+  (σ',μ',Pₓ) -> (σ'',μ'',X).
+
+### Case [R-Compose-Resid]
+
+By direct application of the IH.
+
+### Case [R-Context]
+
+By direct application of the IH.
+
+### Case [R-Congr]
+
+By definition of congruence, P ≡ Q if their traces are the same, and
+hence the conclusion is immediate.
+
+### Case [R-Loop-Upd]:
+
+Let σ, μ, Pₓ, Ψₓ, X, σ'', μ'' be given.
+By the IH,
+
+  ∀σ,μ ∈ [[Γ,Δ;havoc(Δ,A,B),Ψₓ]],
+  ∀Pₓ st. rf([A]ₚ || Π(q:Q).B ∘ Pₓ), ∀Ψₓ,X. halted(σ'',μ'',X),
+  (1)   (σ,μ,Ψₓ;[A]ₚ || Π(q:Q).[B]_q∘Pₓ) -> (σ',μ',X)
+      Then
+        ∃(σ',μ') ∈ [[Γ, Δ;Δᵤ,Ψₓ∘Ψᵤ∘Ψₚ]] s.t. (σ,μ',Δ) -> (σ'',μ'',skip)
+        and (σ',μ',Π(q:Q\{u}).[B]_q∘Pₓ) -> (σ'',μ'',X)
+  (2) rf(Π(q:Q\{u}).[B]_q∘Pₓ)
+
+The case proceeds by induction on the size of Q in the given state
+(σ,μ,P), which we assume to be non-empty.  Let |Q| = n + 1 for n >= 0.
+
+#### Case: n = 0.
+Then, Q = {q} for some q, and Q* = Q. Thus, `for q in Q do [A(q)]ₚ =
+A(q)` and `Π(q:Q).[B;C]_q = [B;C]_q`. The conclusion follows from the
+premise, instantiating (σ := σ, μ := μ, Pₓ := [C]_q∘Pₓ, Ψₓ := Ψₓ)
+
+#### Case: n = n₀
+
+Then Q = Q₀ ∪ {q} where |Q₀| = n + 1 and q ∉ Q₀, so let q be the
+first element in p's loop. We apply the (outer) IH with
+(Pₓ := Π(q:Q).[C]_q || [for q in Q₀ do [A(q)]ₚ] ∘ Pₓ) to conclude
+
+  (1)   (σ,μ,Ψₓ;[A;for q in Qₒ do A(q)]ₚ || Π(q:Q).[B;C]_q∘Pₓ) -> (σ',μ',X)
+      Then
+        ∃(σ',μ') ∈ [[Γ, Δ;Δᵤ, Ψₓ∘Ψᵤ∘Ψₚ]] s.t. (σ,μ',Δ) -> (σ'',μ'',skip)
+        and (σ',μ',[for q in Qₒ do A(q)]ₚ || Π(q:Q\{u}).[B;C]_q∘Pₓ) -> (σ'',μ'',X)
+  (2) rf(Π(q:Q\{u}).[B]_q∘Pₓ)
+
+Finally, application of the IH (from induction on |Q|) proves the goal.
+
+### Case [R-Loop-Inv]:
+
+The reasoning is the same as Loop-Upd (the induction is on the size of
+I).
+
+### Case [R-While-Repeat] and [R-While-End]:
+
+These cases follow directly from the inductive hypothesis and the
+semantics of while.
+
+### Case [R-If-Then] and [R-If-Else]:
+
+These cases follow directly from the semantics of if-then-else.

@@ -1,7 +1,6 @@
 =============
 # Soundness Proof
 =============
-Definition: tagged program.
 
 Definition: race freedom.
 
@@ -32,11 +31,12 @@ Prop (2): "An enabled RecvFrom is a left mover"
 =============
 Lemma:
  If P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ' then,
-   ∀ σ,μ,Q,E, 
-       Δ;(E | P;Q | [[Ψ]]) : well-formed
-   --> Δ;(E | P;Q | [[Ψ]]) : race-free   -
-   --> (     <⊥, [[Γ]], Δ;(E | P;Q | [[Ψ]])>     --->* <σ,μ,skip>
-         <-> <⊥, [[Γ']], Δ';(E | P';Q | [[Ψ']])> --->* <σ,μ,skip> ).
+   ∀ σ,μ,P0,P1,P0',Q,Q',E,
+      P ≡ P0;P1 | Q 
+   => P ≡ P0';P1 | Q'
+   => Δ;(E | (P0;P1 | Q) | [[Ψ]]) : race-free   -
+   => (     <⊥, [[Γ]], Δ;(E | P0;P1 | Q | [[Ψ]])>      --->* <σ,μ,skip>
+        <-> <⊥, [[Γ']], Δ';(E | P0';P1 | Q' | [[Ψ']])> --->* <σ,μ,skip> ).
 
  Where [[Γ]] = "message buffers in Γ"
        [[Ψ]] = "parallel composition of domain of Ψ"
@@ -61,25 +61,28 @@ last step.
 - P = q: x:=recvFrom(*);A || B
 
   By IH,
-     ∀ σ,μ,E,
-       Δ;(E | x:=recvFrom(p);A | B | [[Ψ]]) : well-formed
-   --> Δ;(E | x:=recvFrom(p);A | B | [[Ψ]]) : race-free   -
-   --> (     <⊥, [[Γ]], Δ;(E | x:=recvFrom(p);A | B | [[Ψ]])> --->* <σ,μ,skip>
-         <-> <⊥, [[Γ']], Δ';(E | A' | B' | [[Ψ']])>           --->* <σ,μ,skip> ).
+   ∀ σ,μ,P0,P1,P0',Q,Q',E,
+      (q: x:=recvFrom(*);A | B) ≡ P0;P1 | Q 
+   => (q: x:=recvFrom(p);A | B) ≡ P0';P1 | Q'
+   => Δ;(E | (P0;P1 | Q) | [[Ψ]]) : race-free   -
+   => (     <⊥, [[Γ]], Δ;(E | P0;P1 | Q | [[Ψ]])>      --->* <σ,μ,skip>
+        <-> <⊥, [[Γ']], Δ';(E | P0';P1 | Q' | [[Ψ']])> --->* <σ,μ,skip> ).
 
   Assume for some σ0,μ0,E0,
   
-   (a) Δ;(E | x:=recvFrom(*);A | B | [[Ψ]]) : well-formed
    (b) Δ;(E | x:=recvFrom(*);A | B | [[Ψ]]) : race-free 
    (c) <⊥, [[Γ]], Δ;(E | x:=recvFrom(*);A | B | [[Ψ]])>     --->* <σ0,μ0,skip>
 
    We need to show:
    <⊥, [[Γ']], Δ';(E | A' | B' | [[Ψ']])> --->* <σ0,μ0,skip>.
 
-  By (b), either there exists a process p such that x is only assigned messages sent by x or
-  there is a set of processes P all running the program S such that x is only assigned messages
-  sent from a single location in S. 
+  By (b), either there exists a process p such that x is only assigned
+  messages sent by x or there is a set of processes P all running the
+  program S such that x is only assigned messages sent from a single
+  location in S.
+
   Thus,
+
   ∃p0:proc.
     [[(E | x:= recvFrom(*) | A | B | [[Ψ]])]] = [[(E | x := recvFrom(p0) | A | B [[Ψ]]]]
   Or
@@ -91,8 +94,8 @@ last step.
     program with recvFrom(p0) is equivalent to the input program
   - If p is not equal to p0, then in Δ;(E | x:=recvFrom(p);A | B), the
     recvFrom(p) will never be enabled. But by the IH,
-    Δ;(E | x:=recvFrom(p);A | B | [[Ψ]]) R Δ';(E | A' | B' | [[Ψ']]), so
-    it must be the case that the recvFrom(p) was eventually enabled. So p
+    Δ;(E | x:=recvFrom(p);A | B | [[Ψ]]) deadlocks iff Δ';(E | A' | B' | [[Ψ']]) deadlocks,
+    soit must be the case that the recvFrom(p) was eventually enabled. So p
     must have been equal to p0.
   The reasoning is similar for the latter case.
 
@@ -104,53 +107,43 @@ last step.
     E | P(x) | [[Ψ]] ≡ E | P(v) | [[Ψ]],
   which proves the goal.
 
-- compose-seq
+- Context
 
-  By IH,
-     ∀ σ,μ,E,
-       Δ;(E | A | C | [[Ψ]]) : well-formed
-   --> Δ;(E | A | C | [[Ψ]]) : race-free   -
-   --> (     <⊥, [[Γ]], Δ;(E | A | C | [[Ψ]])>       --->* <σ,μ,skip>
-         <-> <⊥, [[Γ']], Δ';(E | A' | C' | [[Ψ']])>  --->* <σ,μ,skip> ).
+  By IH
+   ∀ σ,μ,P0,P1,P0',Q,Q',E,
+      (A  | C)  ≡ P0;P1 | Q 
+   => (A' | C') ≡ P0';P1 | Q'
+   => Δ;(E | (P0;P1 | Q) | [[Ψ]]) : race-free    
+   => (     <⊥, [[Γ]], Δ;(E | P0;P1 | Q | [[Ψ]])>      --->* <σ,μ,skip>
+        <-> <⊥, [[Γ']], Δ';(E | P0';P1 | Q' | [[Ψ']])> --->* <σ,μ,skip> ).
 
   Assume for some σ0,μ0,E0,
   
-   (a) Δ;(E | A;B | C | [[Ψ]]) : well-formed
-   (b) Δ;(E | A;B | C | [[Ψ]]) : race-free 
-   (c) <⊥, [[Γ]], Δ;(E | A;B | C | [[Ψ]])>     --->* <σ0,μ0,skip>
+   (b) Δ;(E0 | A;B | C | [[Ψ]]) : race-free 
+   (c) <⊥, [[Γ]], Δ;(E0 | A;B | C | [[Ψ]])>     --->* <σ0,μ0,skip>
 
-  Conclusion follows by IH with (σ:=σ0) (μ:=μ0) (E:=E0).
+  Instantiating the IH with
+    (σ:=σ0) (μ:=μ0) (P0:=A) (P0:=A') (P1:=B) (Q:=C) (Q':=C') (E:=E0)
+  Give us
+      (A;B  | C)  ≡ A;B | C
+   => (A';B | C') ≡ A';P1 | C'
+   => Δ;(E0 | (A;B | C) | [[Ψ]]) : race-free    
+   => (     <⊥, [[Γ]], Δ;(E0 | A;B | C | [[Ψ]])>      --->* <σ,μ,skip>
+        <=> <⊥, [[Γ']], Δ';(E0 | A';B | C' | [[Ψ']])> --->* <σ,μ,skip> ).
+  Which proves the conclusion.
 
-
-Assume:
- P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
- T ∈ [[Γ],(E | P;B | [[Ψ]])] deadlocks.
-
-- P = parallel compose.
-Assume:
- P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
- [[ P,Γ,Δ,Ψ ]] < [[ P',Γ',Δ',Ψ' ]]. Then
- ∀ E,
-   < [[ Γ ]], Δ;(Ψ | P | E) > ~~> DL implies
-   < [[ Γ' ]], Δ',(Ψ' | P' | E) >.
-We need to show that
- ∀ E,
-   < [[ Γ ]], Δ;(Ψ | P | A | E) > ~~> DL implies
-   < [[ Γ' ]], Δ',(Ψ' | P' | A | E) >
-
- which follows by instantiating the IH with (E := E | A).
-
-- P = transitive
-Assume:
-
- P,Γ,Δ,Ψ ~> P',Γ',Δ',Ψ' and
- P',Γ',Δ',Ψ' ~> P'',Γ'',Δ'',Ψ''
- Thus by simple application of the IH,
- [[ P,Γ,Δ,Ψ ]] < [[ P'',Γ'',Δ'',Ψ'' ]].
+- P = nondet(p ∈ P, T(p))
+  prove:
+  ∀ σ,μ,P0,P1,P0',Q,Q',E,
+  nondet(p ∈ P, T(p)) ≡ P0;P1 | Q =>
+  T(p*)               ≡ P0';P1 | Q' =>
+  nondet(p ∈ P, T(p)) : race-free =>
+  (   <⊥, [[Γ]], Δ;(E | nondet(p ∈ P, T(p)) | [[Ψ]]> --->* <σ,μ,skip>
+  <=> <⊥, [[Γ]], Δ;(E | T(p*)               | [[Ψ]]> --->* <σ,μ,skip>
 
 - P = recvFrom(*)
 Assume:
- x := recvFrom(*)|Π(S'): Q,Γ,Δ,Ψ ~>
+  x := recvFrom(*)|Π(S'): Q,Γ,Δ,Ψ ~>
   x := recvFrom(p)|p*: Q|Π(S\p*): Q,Γ,Δ;p* := * in S,Ψ.
 
 Suppose that

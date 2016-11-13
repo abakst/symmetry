@@ -9,6 +9,18 @@ p is a constant
 q: x:=recv(p), G[(p,q) := v·M],D,X
 ~~> skip,G[(p,q) := M],(D;x:=v),X
 
+Ext
+===
+Ext:
+p: send(x,y),G,D,X[p := T] ~~> skip,G,D,X[p := T;send(x,y)]
+
+Compose-External:
+
+B || Π(...) X',G,D,X ~~> skip,G,(D;D''),X''
+A,G,D,X ~~> C,G,(D;D'),X'
+------------------------------------------------
+A||B,G,D,X ~~> C,G,(D;D' ∪ D''),X''
+
 
 Unfolding
 =========
@@ -33,4 +45,9 @@ G ⊢ ∅ ⊂ P' ⊆ P
 ------------------------------------------
 m: x := recv(*) || Π(p:P')B(p),G,D,X
 ~~> m: x := recv(p*) || B(p*) || Π(p:P'\{p*})B(p),G,D,X
-
+EDIT:
+p* fresh
+G ⊢ ∅ ⊂ P' ⊆ P
+------------------------------------------
+m: x := recv(*) || Π(p:P')send(m,v)B(p),G,D,X
+~~> m: x := recv(p*) || B(p*) || Π(p:P'\{p*})send(m,v);B(p),G,D;p*:=*;x:=v,X

@@ -17,25 +17,25 @@ ctx(recv{t}(m,n);P) = (∅, {t}) ⊔ ctx(P)
 ctx(P || Q) = ctx(P) ⊔ ctx(Q)
 
 ctx(x) ⊓ ctx(Q) = ∅
----------------------------
+-------------------
 ⊢ i ▹ x : ext Q
 
 G ⊢ p : pid+
 -------------------------------------------------------------- [ send ]
-G, p:send{A}(q,e) ~~> G[(p,q) := G(p,q)@e, p := send(p)], skip
+G, p:send{A}(q,e) ~~> G[(p,q) := G(p,q)@e, p := send(p)], (skip, skip, skip)
 
 G(p,q) = e:M     G ⊢ p : pid-
 -------------------------------------------------------------------- [ recv ]
-G, q:x <- recv{A}() ~~> G[(p,q) := M, x := e, p := recv(p)], x <- e, skip 
+G, q:x <- recv{A}() ~~> G[(p,q) := M, x := e, p := recv(p)], (x <- e, skip, skip)
 
 ⊢ i ▹ x : ext Q
 -------------------------------------------------------------------- [ extern ]
 G, i ▹ x; P || Q ~~> G, (skip, i ▹ x, Q)
 
 ∘ ∈ {-,+}
-G ∪ {i∘}, P(i*) || Q(i*) ~~> G', (Tᵢ, Tₒ, skip)
+G ∪ {i∘}, P(i*) || Q(i*) ~~> G', (Tᵢ, Tₒ, Q'(i*))
 ------------------------------------------------------------------------ [ loop-1 ]
-G, for (i:I) B || Π(i:I).Q(p) ~~> G', (for (i:I) Tᵢ, for (i:I) Tₒ, skip)
+G, for (i:I) B || Π(i:I).Q(p) ~~> G', (for (i:I) Tᵢ, for (i:I) Tₒ, Π(i:I).Q'(i))
 
 ∘ ∈ {-,+}
 G ∪ {i∘}, P(i*) || Q(i*) ~~> G', (Tᵢ, Tₒ, Q(i*))

@@ -173,7 +173,7 @@ C<B
 A || Π(p:P): B(p),G,D,X ~~> A || C(p*) || Π(p:P\{p*})B(p),G,(D;D'(p*)), X[p*=T(p*)]
 -----------------------------------------------------------
 A || Π(p:P): B(p),G,D,X
-~~> A || A || Π(p:P):C(p),G,(D;for(p:P):D'(p)),X[Π(p:P) T(p)]
+~~> A || Π(p:P):C(p),G,(D;for(p:P):D'(p)),X[Π(p:P) T(p)]
 
 
 
@@ -250,3 +250,15 @@ A≡B
 ---------
 A,G,D,X ~~> B,G,D,X 
 
+
+x := recv(P) || Π(q:Q⊂P): B || q':send()
+
+x := recv(p);A || q: B ~~> q: C where B ⊐ C 
+-----------------------------------------
+x := recv(P);A || Π(x:Q⊂P):B  || Π(x:P\Q):C where B ⊐ C
+
+
+
+inv:
+  q' ∈ P\Q, q':send() ∈ E, then this send
+  does not reach the recv

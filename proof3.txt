@@ -7,12 +7,20 @@ A ⊒ if A ≡ B or A ⊐ B.
 These can be lifted to P || Q ... 
 
 Definition: race freedom:
-  + unfolded proc (which are not in source programs)
-    if Π(p:P\Q) B || qₗ ▹ B'
-    either (1) Q = {qₗ} or
-           (2) B ⊐ B' and B' can not send to the receive labeled by l
+  + X,E are race-free for P,Γ,Δ,Ψ if
+    (1) Ψ does not send to P∘X
+    (2) (P ∘ X || E) is race-free
+     + unfolded proc (which are not in source programs)
+       if Π(p:P\Q) B || qₗ ▹ B'
+       either (1) Q = {qₗ} or
+              (2) B ⊐ B' and B' can not send to the receive labeled by l
+    (3) (fold Ψ || E) is race-free 
+        fold Ψ produces Ψ_f by iterating:
+        if Ψ ≡ Ψ' || Π(p:P\Q). s || q ▹ t(q) and q ∈ Q, then
+          Ψ' || Π(p:P\(Q\{q})): (s + t(p))
+        otherwise
+          Ψ
   
-
 Lemma:
   Let P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ'.
   If P : race-free then P' : race-free.
@@ -40,13 +48,13 @@ Prop (2): "An enabled RecvFrom is a left mover"
 =============
 Lemma:
  If P,Γ,Δ,Ψ ~~> P',Γ',Δ',Ψ' then,
+ ∀ σ,μ,Q,E
+     Q,E race-free for P,Γ,Δ,Ψ
  (1)
-   ∀ σ,μ,Q,E
-       Δ;(Ψ;P∘Q | E) : race-free + Ψ ⊥ (P ∘ Q)
-    => <⊥, [[Γ]],  Δ ;(Ψ;P ∘Q | E)> -->* <σ,μ,skip>
+       <⊥, [[Γ]],  Δ ;(Ψ;P ∘Q | E)> -->* <σ,μ,skip>
     => <⊥, [[Γ']], Δ';(Ψ;P'∘Q | E)> -->* <σ,μ,skip>.
  (2)
-     Δ;(Ψ;P∘Q | E) : race-free => Δ;(Ψ;P'∘Q | E) : race-free
+     Q,E race-free for P',Γ',Δ',Ψ'
 
  Where [[Γ]]     = "message buffers in Γ"
 
@@ -239,9 +247,9 @@ To show:
 
   Instantiating (1b) with (E := E) (Q₁ := Q₂) (Q₂ := Q₁) gives
 
-       Δ;((B∘Q₂||Ψ∘Q1) | E) : race-free
-    => (     <⊥, [[Γ]], Δ' ;((B∘Q₂|Ψ∘Q₁) | E) -->* <σ,μ,skip>
-         => <⊥, [[Γ]], Δ'';(Q₂ | Q₁ | E)> -->* <σ,μ,skip> ).
+       Δ;((B∘Q₂||Ψ∘Q1) || E) : race-free
+    => (     <⊥, [[Γ]], Δ' ;((B∘Q₂||Ψ∘Q₁) || E) -->* <σ,μ,skip>
+         => <⊥, [[Γ]], Δ'';(Q₂ || Q₁ || E)> -->* <σ,μ,skip> ).
 
   Since race-freedom holds at each step, transitivity implies the goal
 
