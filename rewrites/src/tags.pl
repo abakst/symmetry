@@ -4,7 +4,9 @@
 		 check_tags/1,
 		 tag_term/2,
 		 get_proc/2,
+		 sym_set/1,
 		 check_race_freedom/2,
+		 is_recv_from/1,
 		 tags_independent/2,
 		 parse_send/6,
 		 parse_recv/6
@@ -36,6 +38,19 @@ cleanup :-
 	retractall(type(_,_)),
 	retractall(sym_set(_)).
 
+
+is_recv_from(T) :-
+  /*
+	Check that T is a receive from a specific process.
+  */
+  (   functor(T, recv, 3)
+  ;   functor(T, recv, 4)
+  ),
+  arg(2, T, Exp),
+  functor(Exp, F, _),
+  (   F==e_var
+  ;   F==e_pid
+  ).
 
 parse_send(T, Rho, P, Q, Type, V) :-
 	/*
@@ -196,6 +211,8 @@ Checks if all receive tag-sets either
 	    T=tag(Rec, Tags),
 	    functor(Rec, recv, _) ->
 	    (   Tags=[Tag]->
+		true
+	    ;   is_recv_from(Rec) ->
 		true
 	    ;   (   foreach(Tag, Tags),
 		    param(Proc, T)

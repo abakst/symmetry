@@ -14,7 +14,9 @@
 			  check_race_freedom/2,
 			  tags_independent/2,
 			  get_proc/2,
+			  is_recv_from/1,
 			  parse_send/6,
+			  sym_set/1,
 			  parse_recv/6
 			 ]).
 
@@ -53,6 +55,8 @@ send(p, x, type, v)  : send a message of type "type".
  ite(P, Cond, A, B)  : process p executes A if Cond holds and B, otherwise.
  if(P, Cond, A)      : Short for ite(P, Cond, A, skip).
  pair(x, y)          : pair of values x and y.
+ cases(p, x, C, d)   : proccess p performs a case switch on x with cases specified in
+ | C=case(p, exp, A) : C and default case d.
 
 (Set) constraints:
 ------------------
@@ -74,11 +78,8 @@ Terms are expected to be of the form par([ seq([..,]), ...]).
    - conditionals: variables vs constants.
    - recv(p, q, type, v) as primitive, derive others
    - same for send.
-   - Cleanup loop-rules.
-   - send/receive permissions.
    - Fix nondet.
    - check rho assignments.
-   - Pretty printer.
 ===================================*/
 
 replace_proc_id(Proc1, Proc, Rho, Rho1) :-
@@ -242,26 +243,15 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  Gamma1=Gamma, Delta1=Delta,
 	  Rho1=Rho, Psi1=Psi
 	/*
-	par(seq([ite(P, Cond, A, B), C]), D): reduce both par(A,C) and par(B, C) to skip.
+	cases(P, x, Cs, default) with Cs=[C_1,C_2,...] and C_i=case(p, val, A):
+	if x matches to some case C_i, rewrite to C_i. Ignores default case for the moment.
 	*/
-	/*TODO: keep assignments in rho that are occur on both branches.*/
-	; functor(T, par, 2),
-	  T=par(TA, D),
-	  (   functor(TA, seq, 1)->
-	      TA=seq([ITE|C]),
-	      functor(ITE, ite, 4),
-	      ITE=ite(P, Cond, A, B)
-	  ;   functor(TA, ite, 4) ->
-	      TA=ite(P, Cond, A, B),
-	      C=[]
-	  ),
-	  rewrite(par([seq([A|C]),D]), Gamma, [], Rho, Psi, skip, Gamma, DeltaA, _, Psi),
-	  rewrite(par([seq([B|C]),D]), Gamma, [], Rho, Psi, skip, Gamma, DeltaB, _, Psi)->
-	  append(Delta, [ite(Cond, seq(DeltaA), seq(DeltaB))], Delta1),
-	  empty_avl(Rho1),
-	  Gamma1=Gamma,
-	  T1=par(skip, skip),
-	  Psi1=Psi
+	; functor(T, cases, 4),
+	  T = cases(P, X, Cases, _),
+	  match_case(P, X, Cases, Rho, A) ->
+	  T1=A,
+	  Gamma1=Gamma, Delta1=Delta,
+	  Rho1=Rho, Psi1=Psi
 	/*
 	par([A,B,C,...])
 	*/
@@ -294,7 +284,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	; functor(T, seq, 1) ->
 	  arg(1, T, L),
 	  (   L == [] ->
-	      T1=skip, Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi=Psi1
+	      T1=skip, Gamma1=Gamma, Delta1=seq(Delta), Rho1=Rho, Psi=Psi1
 	  ;   L = [A] ->
 	      T1=A, Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi=Psi1
 	  ;   L=[A|B],
@@ -466,7 +456,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
            ;   retractall(in_remove),
 	       fail
 	   ),
-           substitute_term(P, Proc, AProc, A),
+           substitute_term(P, Proc, AProc, A)->
            retractall(in_remove),
            clear_talkto,
            T1=par(skip, sym(P, S, A)),
@@ -499,11 +489,13 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  functor(Sym, sym, 3),
 	  Sym=sym(Q, S1, A),
 	  nonvar(S),
-	  is_valid(prop_subset(emp,S1)),
-	  is_valid(subset(S1,S)) ->
+	  is_valid(prop_subset(emp, S1)),
+	  is_valid(subset(S1,S))->
 	  fresh_pred_sym(Proc),
+          is_valid(subset(S1,S)),
 	  set_talkto(P, Proc),
 	  assert(symset(Proc, S1)),
+	  assert(is_valid(element(Proc, S1))),
 	  copy_instantiate(A, Q, Proc, AP),
 	  Sym1=par(sym(Q, set_minus(S1, Proc), A), AP),
 	  Recv1=recv(P, e_pid(Proc), Type, V),
@@ -586,9 +578,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  T1=par(skip, skip),
 	  Gamma1=Gamma, Rho1=Rho, Psi1=Psi,
 	  append(Delta, [iter(env, K, seq(Delta2))], Delta1)
-
-	/*
-	par(A, while(P, Cond, B)): consume A.
+        /*
+	par(A, while(P, Cond, B)): exit
 	*/
 	; functor(T, par, 2),
 	  arg(1, T, A),
@@ -600,10 +591,52 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
           mk_pair(A, B, Pair, Switched),
           mk_pair(A1, skip, Pair1, Switched),
 	  empty_avl(Psi),
-	  rewrite(Pair, Gamma, [], Rho, Psi, Pair1, Gamma2, Delta2, Rho1, Psi1)->
+	  rewrite(Pair, Gamma, [], Rho, Psi, Pair1, Gamma2, Delta2, Rho1, Psi1),
+          negate(Cond, NegCond),
+          check_cond(NegCond, P, Rho1)->
+	  T1=par(A1, skip),
+	  append(Delta, [Delta2], Delta1),
+          Gamma1=Gamma2
+	/*
+	par(A, while(P, Cond, B)): continue
+	*/
+	; functor(T, par, 2),
+	  arg(1, T, A),
+	  arg(2, T, TB),
+	  functor(TB, while, 3),
+          TB=while(P, Cond, B),
+          check_cond(Cond, P, Rho),
+          mk_pair(A, TB, _, Switched),
+          mk_pair(A, B, Pair, Switched),
+          mk_pair(A1, skip, Pair1, Switched),
+	  empty_avl(Psi),
+	  rewrite(Pair, Gamma, [], Rho, Psi, Pair1, Gamma2, Delta2, Rho1, Psi1),
+          check_cond(Cond, P, Rho1)->
 	  T1=par(A1, TB),
 	  append(Delta, [Delta2], Delta1),
           Gamma1=Gamma2
+	/*
+	par(seq([ite(P, Cond, A, B), C]), D): reduce both par(A,C) and par(B, C) to skip.
+	*/
+	/*TODO: keep assignments in rho that are occur on both branches.*/
+	; functor(T, par, 2),
+	  T=par(TA, D),
+	  (   functor(TA, seq, 1)->
+	      TA=seq([ITE|C]),
+	      functor(ITE, ite, 4),
+	      ITE=ite(P, Cond, A, B)
+	  ;   functor(TA, ite, 4) ->
+	      TA=ite(P, Cond, A, B),
+	      C=[]
+	  ),
+	  rewrite(par([seq([A|C]),D]), Gamma, [], Rho, Psi, skip, Gamma2, DeltaA, _, Psi),
+	  rewrite(par([seq([B|C]),D]), Gamma, [], Rho, Psi, skip, Gamma2, DeltaB, _, Psi)->
+	  append(Delta, [ite(Cond, seq(DeltaA), seq(DeltaB))], Delta1),
+	  empty_avl(Rho1),
+	  Gamma1=Gamma2,
+	  T1=par(skip, skip),
+	  Psi1=Psi
+
 	  /*
 	  par(A, B): rewrite ordered pairs.
 	  */
@@ -620,9 +653,14 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      rewrite_step(Pair, Gamma, Delta, Rho, Psi, Pair1, Gamma1, Delta1, Rho1, Psi1)->
 	      T1=par(A1, par(Sym, C1))
 	  ; functor(A, seq, 1),
-	      A=seq([C|Cs]),
-	      rewrite_step(par(C, B), Gamma, Delta, Rho, Psi, par(C1, B1), Gamma1, Delta1, Rho1, Psi1)->
-	      T1=par(seq([C1|Cs]), B1)
+	      (   cleanup_seq(A, A1)->
+		  T2=par(A1, B),
+		  %Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi1=Psi
+		  rewrite_step(T2, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1)
+	      ;   A=seq([C|Cs]),
+		  rewrite_step(par(C, B), Gamma, Delta, Rho, Psi, par(C1, B1), Gamma1, Delta1, Rho1, Psi1)->
+		  T1=par(seq([C1|Cs]), B1)
+	      )
 	  ;   rewrite_step(A, Gamma, Delta, Rho, Psi, A1, Gamma1, Delta1, Rho1, Psi1)->
 	      T1=par(A1, B)
 	  ;   rewrite_step(B, Gamma, Delta, Rho, Psi, B1, Gamma1, Delta1, Rho1, Psi1)->
@@ -632,11 +670,24 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 
 rewrite(T, Gamma, Delta, Rho, Psi, T2, Gamma2, Delta2, Rho2, Psi2) :-
 	(   subsumed_by(T, T2),
+	    format("Matched: ~p to ~p ~n",[T,T2]),
 	    Gamma=Gamma2, Delta=Delta2, Rho=Rho2, Psi= Psi2
 	;   rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1)->
+	    format("Rewrote: ~p to ~p ~n",[T,T1]),
 	    sanity_check([T1, Gamma1, Delta1, Rho1, Psi1]),
 	    rewrite(T1, Gamma1, Delta1, Rho1, Psi1, T2, Gamma2, Delta2, Rho2, Psi2)
 	;   format('Failed to rewrite term:~p~n' ,[T]), fail
+	).
+
+
+cleanup_seq(T, T1) :-
+	functor(T, seq, 1),
+	(   T=seq([A]),
+	    A\==skip->
+	    T1=A
+	;   T=seq([skip|B]),
+	    B\==[]->
+	    T1=seq(B)
 	).
 
 
@@ -710,24 +761,9 @@ unpack_par(T, L) :-
 	    append([L1,L2],L)
 	).
 
-is_recv_from(T) :-
-  /*
-	Check that T is a receive from a specific process.
-  */
-  (   functor(T, recv, 3)
-  ;   functor(T, recv, 4)
-  ),
-  arg(2, T, Exp),
-  functor(Exp, F, _),
-  (   F==e_var
-  ;   F==e_pid
-  ).
-
 
 update_constants(P, X, V, Rho, Rho1) :-
-	(   atomic(V) ->
-	    avl_store(P-X, Rho, V, Rho1)
-	;   var(V) ->
+	(   var(V) ->
 	    Rho1=Rho
 	;   functor(X, pair, 2),
 	    functor(V, pair, 2),
@@ -735,13 +771,15 @@ update_constants(P, X, V, Rho, Rho1) :-
 	    V=pair(V1, V2) ->
 	    update_constants(P, X1, V1, Rho, Rho2),
 	    update_constants(P, X2, V2, Rho2, Rho1)
+	;   ground(V) ->
+	    avl_store(P-X, Rho, V, Rho1)
 	;   throw(pair-matching-error(X,V))
 	).
 
 substitute_constants(T, P, Rho, T1) :-
 	/*
 	In term T substitute all variable bindings defined in Rho to
-	produce term T1.
+	produce term T1. Throws exception if variable binding doesn't exist.
 	*/
 	avl_domain(Rho, Dom),
 	(   foreach(Q-Var, Dom),
@@ -763,6 +801,26 @@ check_cond(Cond, P, Rho) :-
 	    true
 	;   substitute_constants(Cond, P, Rho, Cond1),
 	    catch(Cond1, _, fail)
+	).
+
+match_case(P, X, Cases, Rho, Res) :-
+	/*
+	Match variable X of process p with Cases.
+        Binds A to the matching case or fails if no matching case exists.
+	Cases=[C_1,C_2,...] with C_i=case(p, exp, A). Throws an exception if
+	multiple cases match.
+	*/
+	substitute_constants(X, P, Rho, X1),
+	(   foreach(case(P, Exp, A), Cases),
+	    fromto(none, In, Out, Res),
+	    param([P, X1])
+	do  (   X1=Exp->
+		(   In==none->
+		    Out=A
+		;   throw(cases-exp-multiple-matches(X1,In,Exp))
+		)
+	    ;   In=Out
+	    )
 	).
 
 is_valid(T) :-
@@ -821,7 +879,7 @@ format_result(Goal, Res) :-
 	).
 
 unit_test :-
-	consult([examples]),
+%	consult([examples]),
 	format('================================================================~n',[]),
 	format('~p:~30|~p~t~10+~p~t~13+~p~t~70|~n', ['Name','rewrite','race-check','time']),
 	format('================================================================~n',[]),
