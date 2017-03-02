@@ -169,7 +169,15 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ),
 	  update_constants(P, X, V, Rho, Rho1),
 	  Psi=Psi1
-
+	/*
+	Case
+	*/
+	; functor(T, cases, 4),
+	  T=cases(P, X, Cs, _),
+	  match_case(P, X, Cs, Rho, A) ->
+	  T1=A,
+	  Gamma1=Gamma, Delta1=Delta,
+	  Rho1=Rho, Psi1=Psi
 	/*
 	sym(P, S, A): reduce A in sym(P, S, A)
 	*/
@@ -182,7 +190,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  rewrite_step(A1, Gamma, [], Rho2, Psi, B, Gamma, Delta2, Rho3, Psi) ->
 	  substitute_term(P, Proc, B, B1),
 	  T1=sym(P, S, B1),
-	  replace_proc_id(S, Proc, Rho3, Rho1),
+	  replace_proc_id(S, Proc, Rho3, Rho4),
+	  substitute_term(P, Proc, Rho4, Rho1),
 	  Gamma1=Gamma,
 	  (   Delta2 == [] ->
 	      Delta1=Delta
@@ -245,16 +254,6 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      check_cond(NegCond, P, Rho) ->
 	      T1=B
 	  )->
-	  Gamma1=Gamma, Delta1=Delta,
-	  Rho1=Rho, Psi1=Psi
-	/*
-	cases(P, x, Cs, default) with Cs=[C_1,C_2,...] and C_i=case(p, val, A):
-	if x matches to some case C_i, rewrite to C_i. Ignores default case for the moment.
-	*/
-	; functor(T, cases, 4),
-	  T = cases(P, X, Cases, _),
-	  match_case(P, X, Cases, Rho, A) ->
-	  T1=A,
 	  Gamma1=Gamma, Delta1=Delta,
 	  Rho1=Rho, Psi1=Psi
 	/*
@@ -641,8 +640,12 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  rewrite(par([seq([A|C]),D]), Gamma, [], Rho, Psi, skip, Gamma2, DeltaA, _, Psi),
 	  rewrite(par([seq([B|C]),D]), Gamma, [], Rho, Psi, skip, Gamma2, DeltaB, _, Psi)->
 	  append(Delta, [ite(Cond, seq(DeltaA), seq(DeltaB))], Delta1),
-/* rewrite cases in context. */
-/* Reminder:
+          empty_avl(Rho1),
+	  Gamma1=Gamma2,
+	  T1=par(skip, skip),
+	  Psi1=Psi
+
+/* Rewrite cases in context. Syntax reminder:
  cases(p, x, C, d)   : proccess p performs a case switch on x with cases specified in
  | C=case(p, exp, A) : C and default case d.
 */
@@ -658,17 +661,16 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ),
           (   foreach(case(P, Exp, A), Cs),
 	      foreach(CDelta, CDeltas),
-	      param([X,Gamma,Rho,Psi,Gamma2])
-	  do  rewrite(par([seq([assign(P,X,Exp),A|C]),D]), Gamma, [], Rho, Psi, skip, Gamma2, CDelta, _, Psi)
+	      param([X,Gamma,Rho,Psi,Gamma2, Switched, Pair1])
+	  do  mk_pair(seq([assign(P,X,Exp),A|C]), D, Pair, Switched),
+	      unswitch_pair(Pair1, Switched, par(_,skip)),
+	      rewrite(Pair, Gamma, [], Rho, Psi, Pair1, Gamma2, CDelta, _, Psi)
 	  )->
-%          smaller_than(T2,par([seq([assign(P,X,Exp),A|C]),D]))->
           append(Delta, [cases(P, X, CDeltas)], Delta1),
 	  empty_avl(Rho1),
-%         Rho1=Rho2,
 	  Gamma1=Gamma2,
-	  T1=par(skip, skip),
+          unswitch_pair(Pair1, Switched, T1),
 	  Psi1=Psi
-
 	  /*
 	  par(A, B): rewrite ordered pairs.
 	  */
@@ -687,7 +689,6 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ; functor(A, seq, 1),
 	      (   cleanup_seq(A, A1)->
 		  T2=par(A1, B),
-		  %Gamma1=Gamma, Delta1=Delta, Rho1=Rho, Psi1=Psi
 		  rewrite_step(T2, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1)
 	      ;   A=seq([C|Cs]),
 		  rewrite_step(par(C, B), Gamma, Delta, Rho, Psi, par(C1, B1), Gamma1, Delta1, Rho1, Psi1)->
@@ -702,13 +703,11 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 
 rewrite(T, Gamma, Delta, Rho, Psi, T2, Gamma2, Delta2, Rho2, Psi2) :-
 	(   subsumed_by(T, T2),
-	    format("Matched: ~p to ~p ~n",[T,T2]),
 	    Gamma=Gamma2, Delta=Delta2, Rho=Rho2, Psi= Psi2
 	;   rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1)->
-	    format("Rewrote: ~p to ~p ~n",[T,T1]),
+	    update_max_delta(T1, Delta1),
 	    sanity_check([T1, Gamma1, Delta1, Rho1, Psi1]),
 	    rewrite(T1, Gamma1, Delta1, Rho1, Psi1, T2, Gamma2, Delta2, Rho2, Psi2)
-	;   format('Failed to rewrite term:~p~n' ,[T]), fail
 	).
 
 
@@ -732,7 +731,6 @@ cleanup_seq(T, T1) :-
 	    B\==[]->
 	    T1=seq(B)
 	).
-
 
 smaller_than(T, T1) :-
 	/* T is either a proper subterm of T1 or skip. */
@@ -813,9 +811,9 @@ update_constants(P, X, V, Rho, Rho1) :-
 	    V=pair(V1, V2) ->
 	    update_constants(P, X1, V1, Rho, Rho2),
 	    update_constants(P, X2, V2, Rho2, Rho1)
-	;   ground(V) ->
+	;   %ground(V) ->
 	    avl_store(P-X, Rho, V, Rho1)
-	;   throw(pair-matching-error(X,V))
+%	;   throw(pair-matching-error(X,V))
 	).
 
 substitute_constants(T, P, Rho, T1) :-
