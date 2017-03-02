@@ -24,7 +24,12 @@
 	   talkto/2,      /* talkto(p,q): p and q are communicating, all other procs are external. */
 	   symset/2,      /* symset(p, S): process p belongs to the set of symmetric processes S. */
 	   in_remove/0,
-	   is_valid/1.    /* is_valid(cons): cons is valid. */
+	   is_valid/1,    /* is_valid(cons): cons is valid. */
+	   max_delta/3.   /*
+	                     max_delta(Max, T, Delta): max is the length of delta,
+	                     the longest prefix that occurred in any rewrite-step so far.
+			  */
+	   
 
 /*==============================================================================
  Language:
@@ -344,9 +349,11 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	par([send(_, p, _, _), sym(Q, set_minus(s, p), A(Q)), A(p)])
 	*/
 	; functor(T, par, 2),
-	  arg(1, T, Send),
+	  mk_pair(Send, Sym, T, Switched),
 	  parse_send(Send, Rho, M, P, _, _),
-	  arg(2, T, Sym),
+%	  arg(1, T, Send),
+%	  parse_send(Send, Rho, M, P, _, _),
+%	  arg(2, T, Sym),
 	  functor(Sym, sym, 3),
 	  Sym=sym(Q, S, A),
 	  nonvar(P),
@@ -354,12 +361,13 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  copy_instantiate(A, Q, P, AP),
 	  set_talkto(M, P),
 	  Sym1=par(sym(Q, set_minus(S,P), A), AP),
-	  T1=par(Send, Sym1),
+	  mk_pair(Send, Sym1, T1, Switched),
+%	  T1=par(Send, Sym1),
 	  replace_proc_id(Proc, S, Rho, Rho1),
 	  Gamma1=Gamma,
 	  Delta1=Delta,
 	  Psi1=Psi
-
+	
 	/*
 	================
 	for-loop
@@ -499,7 +507,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  copy_instantiate(A, Q, Proc, AP),
 	  Sym1=par(sym(Q, set_minus(S1, Proc), A), AP),
 	  Recv1=recv(P, e_pid(Proc), Type, V),
-	  mk_pair(Recv1, Sym1, T1, Switched),
+          T1=par(Recv1, Sym1),
+%	  mk_pair(Recv1, Sym1, T1, Switched),
 	  replace_proc_id(Proc, S, Rho, Rho1),
 	  Gamma1=Gamma,
 	  Delta1=Delta,
@@ -632,7 +641,30 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  rewrite(par([seq([A|C]),D]), Gamma, [], Rho, Psi, skip, Gamma2, DeltaA, _, Psi),
 	  rewrite(par([seq([B|C]),D]), Gamma, [], Rho, Psi, skip, Gamma2, DeltaB, _, Psi)->
 	  append(Delta, [ite(Cond, seq(DeltaA), seq(DeltaB))], Delta1),
+/* rewrite cases in context. */
+/* Reminder:
+ cases(p, x, C, d)   : proccess p performs a case switch on x with cases specified in
+ | C=case(p, exp, A) : C and default case d.
+*/
+	; functor(T, par, 2),
+          T=par(TA, D),
+	  (   functor(TA, seq, 1)->
+	      TA=seq([Cases|C]),
+	      functor(Cases, cases, 4),
+	      Cases=cases(P, X, Cs, skip)
+	  ;   functor(TA, cases, 4),
+	      TA=cases(P, X, Cs, skip),
+	      C=[]
+	  ),
+          (   foreach(case(P, Exp, A), Cs),
+	      foreach(CDelta, CDeltas),
+	      param([X,Gamma,Rho,Psi,Gamma2])
+	  do  rewrite(par([seq([assign(P,X,Exp),A|C]),D]), Gamma, [], Rho, Psi, skip, Gamma2, CDelta, _, Psi)
+	  )->
+%          smaller_than(T2,par([seq([assign(P,X,Exp),A|C]),D]))->
+          append(Delta, [cases(P, X, CDeltas)], Delta1),
 	  empty_avl(Rho1),
+%         Rho1=Rho2,
 	  Gamma1=Gamma2,
 	  T1=par(skip, skip),
 	  Psi1=Psi
@@ -679,6 +711,17 @@ rewrite(T, Gamma, Delta, Rho, Psi, T2, Gamma2, Delta2, Rho2, Psi2) :-
 	;   format('Failed to rewrite term:~p~n' ,[T]), fail
 	).
 
+
+update_max_delta(T, Delta) :-
+	term_size(Delta, Size),
+	max_delta(Max, _, _),
+	(   Size>Max->
+	    retractall(max_delta(_,_,_)),
+	    assert(max_delta(Size, T, Delta))
+	;   true
+	).
+		       
+	
 
 cleanup_seq(T, T1) :-
 	functor(T, seq, 1),
@@ -751,8 +794,7 @@ unpack_par(T, L) :-
 	    F\==par->
 	    L=[T]
 	;   functor(T, par, 1)->
-	    arg(1, T, [T1]),
-	    unpack_par(T1, L)
+	    arg(1, T, L)
 	;   functor(T, par, 2)->
 	    arg(1, T, T1),
 	    arg(2, T, T2),
@@ -810,6 +852,7 @@ match_case(P, X, Cases, Rho, Res) :-
 	Cases=[C_1,C_2,...] with C_i=case(p, exp, A). Throws an exception if
 	multiple cases match.
 	*/
+	avl_member(P-X, Rho),
 	substitute_constants(X, P, Rho, X1),
 	(   foreach(case(P, Exp, A), Cases),
 	    fromto(none, In, Out, Res),
@@ -862,15 +905,22 @@ cleanup :-
 	retractall(talkto(_,_)),
 	retractall(symset(_,_)),
 	retractall(in_remove),
+	retractall(max_delta(_,_,_)),
 	reset_pred_sym.
 
 rewrite(T, Rem, Ind, Gamma1, seq(Delta1), Rho1) :-
 	init_independent(Ind),
+	assert(max_delta(0, T, Delta)),
 	empty_avl(Gamma),
 	empty_avl(Rho),
 	empty_avl(Psi),
 	Delta=[],
-	rewrite(T, Gamma, Delta, Rho, Psi, Rem, Gamma1, Delta1, Rho1, Psi).
+	(   rewrite(T, Gamma, Delta, Rho, Psi, Rem, Gamma1, Delta1, Rho1, Psi)->
+	    true
+	;   max_delta(_, TMax, DeltaMax),
+	    format('Max rewritten term:~n~p~n with prefix:~n~p~n' ,[TMax,DeltaMax]),
+	    fail
+	).
 
 format_result(Goal, Res) :-
 	(   Goal->
