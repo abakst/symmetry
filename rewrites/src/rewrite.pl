@@ -24,7 +24,7 @@
 	   talkto/2,      /* talkto(p,q): p and q are communicating, all other procs are external. */
 	   symset/2,      /* symset(p, S): process p belongs to the set of symmetric processes S. */
 	   in_remove/0,
-	   is_valid/1,    /* is_valid(cons): cons is valid. */
+	   asserted/1,    /* asserted(cons): cons is valid. */
 	   max_delta/3.   /*
 	                     max_delta(Max, T, Delta): max is the length of delta,
 	                     the longest prefix that occurred in any rewrite-step so far.
@@ -316,8 +316,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	; functor(T, nondet, 3) ->
 	  T = nondet(P, S, A),
 	  fresh_pred_sym(Proc),
-	  assert(is_valid(element(Proc, S))),
-	  assert(is_valid(fresh(Proc))),
+	  assert(asserted(element(Proc, S))),
+	  assert(asserted(fresh(Proc))),
 	  copy_instantiate(A, P, Proc, T1),
 	  Gamma1=Gamma,
 	  Delta1=Delta,
@@ -331,41 +331,13 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	/* assume */
 	; functor(T, assume, 1) ->
 	  arg(1, T, Cons),
-	  assert(is_valid(Cons)),
+	  assert(asserted(Cons)),
 	  T1=skip,
 	  Gamma1=Gamma,
 	  Delta1=Delta,
 	  Rho1=Rho,
 	  Psi1=Psi
 
-	/*
-	=============
-	unfold-send:
-	=============
-	p ∈ P
-	---------
-	par([send(_, p, _), sym(Q, s, A)]) ~~>
-	par([send(_, p, _, _), sym(Q, set_minus(s, p), A(Q)), A(p)])
-	*/
-	; functor(T, par, 2),
-	  mk_pair(Send, Sym, T, Switched),
-	  parse_send(Send, Rho, M, P, _, _),
-%	  arg(1, T, Send),
-%	  parse_send(Send, Rho, M, P, _, _),
-%	  arg(2, T, Sym),
-	  functor(Sym, sym, 3),
-	  Sym=sym(Q, S, A),
-	  nonvar(P),
-	  is_valid(element(P, S))->
-	  copy_instantiate(A, Q, P, AP),
-	  set_talkto(M, P),
-	  Sym1=par(sym(Q, set_minus(S,P), A), AP),
-	  mk_pair(Send, Sym1, T1, Switched),
-%	  T1=par(Send, Sym1),
-	  replace_proc_id(Proc, S, Rho, Rho1),
-	  Gamma1=Gamma,
-	  Delta1=Delta,
-	  Psi1=Psi
 	
 	/*
 	================
@@ -390,15 +362,17 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  fresh_pred_sym(S1),
 	  assert(symset(Proc, S)),
 	  copy_instantiate(A, P, Proc, A1),
-	  assert(is_valid(prop_subset(emp, S1))),
-	  assert(is_valid(subset(S1, S))),
-	  assert(is_valid(element(Proc, S1))),
+	  assert(asserted(prop_subset(emp, S1))),
+	  assert(asserted(subset(S1, S))),
+	  assert(asserted(element(Proc, S1))),
           TA=par([A1, sym(Q, S1, B)]),
 	  (   TB=par([sym(Q, set_minus(S1, Proc1), B), C])
 	  ;   TB=sym(Q, set_minus(S1, Proc1), B),
 	      C=skip
 	  ),
 	  rewrite(TA, Gamma, [], Rho, Psi, TB, Gamma, Delta2, Rho2, Psi2) ->
+%	  here(1),
+%	  Delta2=DEBUG,
 	  clear_talkto,
 	  substitute_term(Q, Proc1, C, C1),
           replace_proc_id(S, Proc1, Rho2, Rho1),
@@ -451,33 +425,66 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
         par(sym(P, s, A), B) ~~>
         sym(P, s, A)
         */
-        ;  functor(T, par, 2),
-           arg(1, T, B),
-	   arg(2, T, TA),
-           functor(TA, sym, 3),
-           TA=sym(P, S, A),
-           TA1=par(sym(P, set_minus(S, Proc), A), AProc),
-           \+in_remove,
-           assert(in_remove),
-           (   rewrite(par(B, TA), Gamma, [], Rho, Psi, par(skip, TA1), Gamma, Delta2, Rho2, Psi2)
-           ;   retractall(in_remove),
-	       fail
-	   ),
-           substitute_term(P, Proc, AProc, A)->
-           retractall(in_remove),
-           clear_talkto,
-           T1=par(skip, sym(P, S, A)),
-           Gamma1=Gamma,
-           Rho1=Rho,
-           substitute_term(Fresh1, Proc, Delta2, Delta3),
-	   append(Delta, [nondet(Fresh1, seq(Delta3))], Delta1),
+        ; functor(T, par, 2),
+	  %arg(1, T, B),
+	  %arg(2, T, TA),
+%	  Switched=false,
+	  mk_pair(B, TA, T, Switched),
+	  functor(TA, sym, 3),
+	  TA=sym(P, S, A),
+	  TA1=par(sym(P, set_minus(S, Proc), A), AProc),
+	  mk_pair(skip, TA1, T2, Switched),
+	  \+in_remove,
+	  assert(in_remove),
+	  ( %rewrite(par(B, TA), Gamma, [], Rho, Psi, par(skip, TA1), Gamma, Delta2, Rho2, Psi2)
+	      here(1),
+	      rewrite(T, Gamma, [], Rho, Psi, T2, Gamma, Delta2, Rho2, Psi2)
+	  ;   retractall(in_remove),
+	      fail
+	  ),
+	  substitute_term(P, Proc, AProc, A)->
+	  retractall(in_remove),
+	  clear_talkto,
+	  mk_pair(skip, sym(P, S, A), T1, Switched),
+%	  T1=par(skip, sym(P, S, A)),
+	  Gamma1=Gamma,
+	  Rho1=Rho,
+	  substitute_term(Fresh1, Proc, Delta2, Delta3),
+	  append(Delta, [nondet(Fresh1, S, seq(Delta3))], Delta1),
 	  (   avl_delete(Proc, Psi2, Ext0, Psi3) ->
 	      substitute_term(Fresh2, Proc, Ext0, Ext),
 	      add_external(Psi3, nondet(Fresh2, S, seq(Ext)), S, Psi1),
 	      assert(symset(Fresh2, S))
 	  ;   Psi1=Psi
 	  )
-
+	/*
+	=============
+	unfold-send:
+	=============
+	p ∈ P
+	---------
+	par([send(_, p, _), sym(Q, s, A)]) ~~>
+	par([send(_, p, _, _), sym(Q, set_minus(s, p), A(Q)), A(p)])
+	*/
+	; functor(T, par, 2),
+	  mk_pair(Send, Sym, T, Switched),
+	  parse_send(Send, Rho, M, P, _, _),
+%	  arg(1, T, Send),
+%	  parse_send(Send, Rho, M, P, _, _),
+%	  arg(2, T, Sym),
+	  functor(Sym, sym, 3),
+	  Sym=sym(Q, S, A),
+	  nonvar(P),
+	  is_valid(element(P, S))->
+	  copy_instantiate(A, Q, P, AP),
+	  set_talkto(M, P),
+	  Sym1=par(sym(Q, set_minus(S,P), A), AP),
+	  mk_pair(Send, Sym1, T1, Switched),
+%	  T1=par(Send, Sym1),
+	  replace_proc_id(Proc, S, Rho, Rho1),
+	  Gamma1=Gamma,
+	  Delta1=Delta,
+	  Psi1=Psi
 	/*
 	=============
 	unfold-recv:
@@ -502,7 +509,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
           is_valid(subset(S1,S)),
 	  set_talkto(P, Proc),
 	  assert(symset(Proc, S1)),
-	  assert(is_valid(element(Proc, S1))),
+	  assert(asserted(element(Proc, S1))),
 	  copy_instantiate(A, Q, Proc, AP),
 	  Sym1=par(sym(Q, set_minus(S1, Proc), A), AP),
 	  Recv1=recv(P, e_pid(Proc), Type, V),
@@ -663,7 +670,8 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	      foreach(CDelta, CDeltas),
 	      param([X,Gamma,Rho,Psi,Gamma2, Switched, Pair1])
 	  do  mk_pair(seq([assign(P,X,Exp),A|C]), D, Pair, Switched),
-	      unswitch_pair(Pair1, Switched, par(_,skip)),
+	      %unswitch_pair(Pair1, Switched, par(_,skip)),
+	      mk_pair(_, skip, Pair1, _),
 	      rewrite(Pair, Gamma, [], Rho, Psi, Pair1, Gamma2, CDelta, _, Psi)
 	  )->
           append(Delta, [cases(P, X, CDeltas)], Delta1),
@@ -771,6 +779,11 @@ mk_pair(A, B, Pair, Switched) :-
 mk_pair(A, B, Pair) :-
 	mk_pair(A, B, Pair, _).
 
+contains_skip(par(A,B)) :-
+	(   A=skip
+	;   B=skip
+	).
+
 unswitch_pair(par(A, B), Switched, Pair) :-
 	(   Switched->
 	    Pair=par(B, A)
@@ -866,10 +879,11 @@ match_case(P, X, Cases, Rho, Res) :-
 
 is_valid(T) :-
 	/*
-	Basic set axioms.
+	If it is in the basic set of axioms or was asserted.
 	*/
 	(  T=subset(S,S)
 	;  T=prop_subset(emp,_)
+	;  asserted(T)
 	).
 
 check_independent(P, Q) :-
@@ -903,6 +917,7 @@ cleanup :-
 	retractall(talkto(_,_)),
 	retractall(symset(_,_)),
 	retractall(in_remove),
+	retractall(asserted(_)),
 	retractall(max_delta(_,_,_)),
 	reset_pred_sym.
 
@@ -913,7 +928,7 @@ rewrite(T, Rem, Ind, Gamma1, seq(Delta1), Rho1) :-
 	empty_avl(Rho),
 	empty_avl(Psi),
 	Delta=[],
-	(   rewrite(T, Gamma, Delta, Rho, Psi, Rem, Gamma1, Delta1, Rho1, Psi)->
+	(   rewrite(T, Gamma, Delta, Rho, Psi, Rem, Gamma, Delta1, Rho1, Psi)->
 	    true
 	;   max_delta(_, TMax, DeltaMax),
 	    format('Max rewritten term:~n~p~n with prefix:~n~p~n' ,[TMax,DeltaMax]),
