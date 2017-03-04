@@ -437,7 +437,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  \+in_remove,
 	  assert(in_remove),
 	  ( %rewrite(par(B, TA), Gamma, [], Rho, Psi, par(skip, TA1), Gamma, Delta2, Rho2, Psi2)
-	      here(1),
+%	      here(1),
 	      rewrite(T, Gamma, [], Rho, Psi, T2, Gamma, Delta2, Rho2, Psi2)
 	  ;   retractall(in_remove),
 	      fail
