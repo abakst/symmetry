@@ -668,7 +668,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ),
           (   foreach(case(P, Exp, A), Cs),
 	      foreach(CDelta, CDeltas),
-	      param([X,Gamma,Rho,Psi,Gamma2, Switched, Pair1])
+	      param([X,D,Gamma,Rho,Psi,Gamma2, Switched, Pair1])
 	  do  mk_pair(seq([assign(P,X,Exp),A|C]), D, Pair, Switched),
 	      %unswitch_pair(Pair1, Switched, par(_,skip)),
 	      mk_pair(_, skip, Pair1, _),
