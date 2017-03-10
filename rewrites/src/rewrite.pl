@@ -442,15 +442,17 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ;   retractall(in_remove),
 	      fail
 	  ),
-	  substitute_term(P, Proc, AProc, A)->
+%	  substitute_term(Proc, P, A, AProc),
+	  substitute_term(Proc, P, A, A1),
+	  rewrite(A1, AProc, DeltaInt, _) ->
 	  retractall(in_remove),
 	  clear_talkto,
 	  mk_pair(skip, sym(P, S, A), T1, Switched),
 %	  T1=par(skip, sym(P, S, A)),
 	  Gamma1=Gamma,
 	  Rho1=Rho,
-	  substitute_term(Fresh1, Proc, Delta2, Delta3),
-	  append(Delta, [nondet(Fresh1, S, seq(Delta3))], Delta1),
+	  substitute_term(Fresh1, Proc, Delta2-DeltaInt, Delta3-DeltaInt1),
+	  append(Delta, [for(P, S, DeltaInt1),nondet(Fresh1, S, seq(Delta3))], Delta1),
 	  (   avl_delete(Proc, Psi2, Ext0, Psi3) ->
 	      substitute_term(Fresh2, Proc, Ext0, Ext),
 	      add_external(Psi3, nondet(Fresh2, S, seq(Ext)), S, Psi1),
