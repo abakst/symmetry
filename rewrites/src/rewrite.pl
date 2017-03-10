@@ -923,14 +923,17 @@ cleanup :-
 	retractall(max_delta(_,_,_)),
 	reset_pred_sym.
 
-rewrite(T, Rem, Ind, Gamma1, seq(Delta1), Rho1) :-
-	init_independent(Ind),
-	assert(max_delta(0, T, Delta)),
+rewrite(T, Rem, seq(Delta1), Rho1) :-
+%	assert(cache_stats(0)),
+	assert(max_delta(0, T, [])),
+	Delta=[],
 	empty_avl(Gamma),
 	empty_avl(Rho),
 	empty_avl(Psi),
-	Delta=[],
-	(   rewrite(T, Gamma, Delta, Rho, Psi, Rem, Gamma, Delta1, Rho1, Psi)->
+	rewrite(T, Gamma, Delta, Rho, Psi, Rem, Gamma, Delta1, Rho1, Psi).
+
+rewrite_debug(T, Rem, _, _, Delta1, Rho1) :-
+	(   rewrite(T, Rem, Delta1, Rho1) ->
 	    true
 	;   max_delta(_, TMax, DeltaMax),
 	    format('Max rewritten term:~n~p~n with prefix:~n~p~n' ,[TMax,DeltaMax]),
