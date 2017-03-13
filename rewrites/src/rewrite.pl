@@ -757,9 +757,14 @@ update_max_delta(T, Delta) :-
 	
 
 cleanup_seq(T, T1) :-
+	/*
+	Applies on of the transformations:
+	     seq([skip|As]) -->  seq([As]) and
+             seq([A])       -->  A
+	or fails, otherwise.
+	*/
 	functor(T, seq, 1),
-	(   T=seq([A]),
-	    A\==skip->
+	(   T=seq([A])->
 	    T1=A
 	;   T=seq([skip|B]),
 	    B\==[]->
