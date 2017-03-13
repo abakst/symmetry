@@ -837,6 +837,14 @@ sanity_check(L) :-
 	    true
 	;   throw(parameter_not_instantiated(X-L))
 	).
+match(X, Exp) :-
+	(   atomic(X),
+	    simple(Exp)
+	;   compound(X),
+	    compound(Exp)->
+	    functor(X, F, Arity),
+	    functor(Exp, F, Arity)
+	).
 update_const_match(P, X, Exp, Rho, Rho1) :-
 	(   atomic(X)->
 	    avl_store(P-X, Rho, Exp, Rho1)
