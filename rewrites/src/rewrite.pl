@@ -766,6 +766,16 @@ cleanup_seq(T, T1) :-
 	    T1=seq(B)
 	).
 
+normalize_seq(T, T1) :-
+	/*
+	Recursively cleans up a sequential composition.
+	*/
+	(   nonvar(T),
+	    cleanup_seq(T, T2) ->
+	    normalize_seq(T2, T1)
+	;   T1=T
+	).
+
 smaller_than(T, T1) :-
 	/* T is either a proper subterm of T1 or skip. */
 	(   T==skip
