@@ -864,7 +864,8 @@ propagate_const(P, X, Rho, X1) :-
         If x's value is a composite term, recursively substitute
 	assignments for its subterms.
 	*/
-	(   avl_member(P-X, Rho, X2)->
+	(   nonvar(X),
+	    avl_member(P-X, Rho, X2)->
 	    (   simple(X2) ->
 		X1=X2
 	    ;   compound(X2) ->
