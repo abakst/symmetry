@@ -450,17 +450,17 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
           atomic(X),
           (   foreach(case(P, Exp, A), Cs),
 	      foreach(case(P, Exp, CDelta), CDeltas),
+	      fromto(full_avl, In, Out, Rho1),
 	      param([X,D,C,Gamma,Rho,Psi,Gamma2, Switched, Pair1])
 	  do  T2=seq([assign(P,X,Exp),A|C]),
 	      mk_pair(T2, D, Pair, Switched),
-	      /* rewrite one component to skip */
 	      /* rewrite onge component to skip */
-	      %mk_pair(skip, _, Pair1, _),
-	      mk_pair(_, skip, Pair1, _),
-	      rewrite(Pair, Gamma, [], Rho, Psi, Pair1, Gamma2, CDelta, _, Psi)
+	      mk_pair(skip, _, Pair1, _),
+%	      mk_pair(_, skip, Pair1, _),
+	      rewrite(Pair, Gamma, [], Rho, Psi, Pair1, Gamma2, CDelta, Rho2, Psi),
+	      intersect_avl(In, Rho2, Out)
 	  )->
           append(Delta, [cases(P, X, CDeltas)], Delta1),
-	  empty_avl(Rho1),
 	  Gamma1=Gamma2,
           unswitch_pair(Pair1, Switched, T1),
 	  Psi1=Psi
@@ -897,6 +897,24 @@ unpack_par(T, L) :-
 	).
 
 
+intersect_avl(A, B, Res) :-
+	/*
+	Res contains all common assignments between A and B.
+        Intersecting with full_avl preserves all constants.
+	*/
+	(   A==full_avl->
+	    Res=B
+	;   avl_domain(A, Dom),
+	    (   foreach(Key, Dom),
+		fromto(empty, In, Out, Res),
+		param([A,B])
+	    do  (   avl_fetch(Key, A, Val),
+		    avl_fetch(Key, B, Val)->
+		    avl_store(Key, In, Val, Out)
+		;   In=Out
+		)
+	    )
+	).
 update_constants(P, X, V, Rho, Rho1) :-
 	(   var(V) ->
 	    Rho1=Rho
