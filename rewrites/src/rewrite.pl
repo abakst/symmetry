@@ -27,6 +27,7 @@
 	   in_remove/0,
 	   asserted/1,    /* asserted(cons): cons is valid. */
 	   max_delta/3.   /*
+	   in_for/0,
 	                     max_delta(Max, T, Delta): max is the length of delta,
 	                     the longest prefix that occurred in any rewrite-step so far.
 			  */
