@@ -264,7 +264,9 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  retractall(in_for),
 	  clear_talkto,
 	  substitute_term(Q, Proc1, C, C1),
-          replace_proc_id(S, Proc1, Rho3, Rho1),
+          replace_proc_id(S, Proc1, Rho3, Rho4),
+	  substitute_term(P, Proc, Rho4, Rho5),
+	  substitute_term(S, Proc1, Rho5, Rho1),
 	  mk_pair(skip, sym(Q,S,C1), T1, Switched),
 	  Gamma1=Gamma,
           substitute_term(P, Proc1, Delta2, Delta3),
@@ -723,7 +725,8 @@ cleanup_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  copy_instantiate(A, P, Proc, A1),
 	  assert(symset(Proc, S)),
 	  assert(asserted(element(Proc, S))),
-	  rewrite(A1, Gamma, [], Rho2, Psi, skip, Gamma, Delta2, Rho3, Psi2) ->
+	  empty_avl(Emp),
+	  rewrite(A1, Gamma, [], Rho2, Emp, skip, Gamma, Delta2, Rho3, PsiA) ->
 	  substitute_term(P, Proc, B, B1),
 	  T1=skip,
 	  replace_proc_id(S, Proc, Rho3, Rho4),
@@ -734,9 +737,9 @@ cleanup_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  ;   substitute_term(P, Proc, Delta2, Delta3),
 	      append(Delta, [for(P, S ,Delta3)], Delta1)
 	  ),
-	  (   avl_delete(M, Psi2, Ext0, Psi3) ->
+	  (   avl_delete(M, PsiA, Ext0, _) ->
 	      substitute_term(P, Proc, Ext0, Ext),
-	      add_external(Psi3, for(M, P, S, seq(Ext)), M, Psi1)
+	      add_external(Psi, for(M, P, S, seq(Ext)), M, Psi1)
 	  ;   Psi1=Psi
 	  )
 	/*
@@ -950,6 +953,8 @@ propagate_const(P, X, Rho, X1) :-
 	assignments for its subterms.
 	*/
 	(   nonvar(X),
+	    /*Process name can't occur as var.*/
+	    X\==P, 
 	    avl_member(P-X, Rho, X2)->
 	    (   simple(X2) ->
 		X1=X2
