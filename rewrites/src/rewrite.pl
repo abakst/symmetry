@@ -335,7 +335,7 @@ rewrite_step(T, Gamma, Delta, Rho, Psi, T1, Gamma1, Delta1, Rho1, Psi1) :-
 	  )->
           append(Delta, [cases(P, X, CDeltas)], Delta1),
 	  Gamma1=Gamma2,
-          unswitch_pair(Pair1, Switched, T1)%,
+	  T1=Pair1
 %	  Psi1=Psi
 	/*
 	================
