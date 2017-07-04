@@ -1004,3 +1004,22 @@ rewrite_query(T,skip,Ind,Name) :-
         Name=2-phase-commit.
 
 
+rewrite_query(T, Rem, Ind, Name) :-
+        T=par([ seq([ send(a, e_pid(b), tyCon(ty__ProcessId), a),
+            recv(a, e_pid(b), tyCon(ty__SelfSigned, tyCon(ty__ProcessId)), msg),
+            cases(a, msg, [ case(a, cstr__SelfSigned(_, Pay), assign(a, them_, Pay))], skip)]),
+      seq([ recv(b, type(tyCon(ty__ProcessId)), who),
+            assign(b, anf0, cstr__SelfSigned(b, b)) ])]),
+        Rem=skip,
+        Ind=[],
+        Name='psp'.
+
+rewrite_query(T,Rem,_,'thing') :- Rem=skip,
+        T=par([ seq([ recv(a, type(tyCon(ty__PingMessage)), msg),
+                      cases(a, msg, [ case(a, cstr__Ping(Whom), seq([ assign(a, anf0, cstr__Pong(a)),
+                                                                      send(a, e_pid(Whom), tyCon(ty__PingMessage), anf0)])),
+                                      case(a, cstr__Pong(X), seq([ assign(a, anf1, cstr__Ping(a)),
+                                                                   send(a, e_pid(X), tyCon(ty__PingMessage), anf1)]))], skip)]),
+                seq([ assign(b, anf0, cstr__Ping(b)),
+                      send(b, e_pid(a), tyCon(ty__PingMessage), anf0),
+                      recv(b, type(tyCon(ty__PingMessage)), zoog)])]).
